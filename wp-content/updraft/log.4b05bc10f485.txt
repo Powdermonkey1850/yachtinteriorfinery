@@ -1,0 +1,363 @@
+0000.000 (0) Opened log file at time: Mon, 22 Sep 2025 10:55:23 +0000 on https://candc.powdermonkey.co.uk
+0000.002 (0) UpdraftPlus WordPress backup plugin (https://updraftplus.com): 1.25.7 WP: 6.8.2 PHP: 8.1.33 (fpm-fcgi, Linux ip-172-31-36-218 6.14.0-1012-aws #12~24.04.1-Ubuntu SMP Fri Aug 15 00:16:05 UTC 2025 x86_64) MySQL: 10.11.13-MariaDB-0ubuntu0.24.04.1 (max packet size=16777216) WPLANG: en_GB Server: nginx/1.24.0 safe_mode: 0 max_execution_time: 900 memory_limit: 1024M (used: 71M | 74M) multisite: N openssl: OpenSSL 3.0.13 30 Jan 2024 mcrypt: N LANG:  WP Proxy: disabled ZipArchive::addFile: N
+0000.003 (0) Free space on disk containing Updraft's temporary directory: 53004.8 MB
+0000.187 (0) Tasks: Backup files: 1 (schedule: manual) Backup DB: 1 (schedule: manual)
+0000.192 (0) Requesting semaphore lock (fd) (apparently not via scheduler)
+0000.196 (0) Set semaphore last lock (fd) time to 2025-09-22 10:55:23
+0000.197 (0) Semaphore lock (fd) complete
+0000.203 (0) Backup run: resumption=0, nonce=4b05bc10f485, file_nonce=4b05bc10f485 begun at=1758538523 (0s ago), job type=backup
+0000.206 (0) Scheduling a resumption (1) after 300 seconds (1758538823) in case this run gets aborted
+0000.218 (0) Checking if we have a zip executable available
+0000.221 (0) Zip engine: ZipArchive (a.k.a. php-zip) is not available or is disabled (will use PclZip (much slower) if needed)
+0000.223 (0) Creation of backups of directories: beginning
+0000.227 (0) Beginning creation of dump of plugins (split every: 400 MB)
+0000.293 (0) Total entities for the zip file: 502 directories, 2870 files (0 skipped as non-modified), 53.7 MB
+0000.295 (0) Only one archive required (UpdraftPlus_PclZip) - will attempt to do in single operation (data: 54987.5 KB, split: 409600 KB)
+0000.302 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 100 files added (on-disk size: 0 KB)
+0000.304 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 200 files added (on-disk size: 0 KB)
+0000.306 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 300 files added (on-disk size: 0 KB)
+0000.308 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 400 files added (on-disk size: 0 KB)
+0000.310 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 500 files added (on-disk size: 0 KB)
+0000.313 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 600 files added (on-disk size: 0 KB)
+0000.315 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 700 files added (on-disk size: 0 KB)
+0000.317 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 800 files added (on-disk size: 0 KB)
+0000.319 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 900 files added (on-disk size: 0 KB)
+0000.321 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1000 files added (on-disk size: 0 KB)
+0000.324 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1100 files added (on-disk size: 0 KB)
+0000.326 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1200 files added (on-disk size: 0 KB)
+0000.328 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1300 files added (on-disk size: 0 KB)
+0000.330 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1400 files added (on-disk size: 0 KB)
+0000.333 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1500 files added (on-disk size: 0 KB)
+0000.335 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1600 files added (on-disk size: 0 KB)
+0000.337 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1700 files added (on-disk size: 0 KB)
+0000.340 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1800 files added (on-disk size: 0 KB)
+0000.342 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 1900 files added (on-disk size: 0 KB)
+0000.344 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2000 files added (on-disk size: 0 KB)
+0000.346 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2100 files added (on-disk size: 0 KB)
+0000.349 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2200 files added (on-disk size: 0 KB)
+0000.352 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2300 files added (on-disk size: 0 KB)
+0000.354 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2400 files added (on-disk size: 0 KB)
+0000.356 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2500 files added (on-disk size: 0 KB)
+0000.358 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2600 files added (on-disk size: 0 KB)
+0000.361 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2700 files added (on-disk size: 0 KB)
+0000.363 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.tmp: 2800 files added (on-disk size: 0 KB)
+0011.291 (0) Creating zip file manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.list-temp.tmp)
+0011.297 (0) Successfully created zip file manifest (size: 234622)
+0011.487 (0) Created plugins zip (0) - 18130.1 KB in 11.3 s (1610.6 KB/s) (sha1: c85055731ce15462fa1c8617fa9c74b98be42276, sha256: 94bd3bf45ad7f12e297dc28cc8138a3e0b3823b12846938f5ad9ac7f7f693d6c)
+0011.493 (0) Cloud backup selection (1/1): googledrive with instance (1/1) (last)
+0011.495 (0) Beginning dispatch of backup to remote (googledrive) (instance identifier s-21d97586f7ec7582d9d7dd83a6cd7951)
+0012.876 (0) Google Drive: quota usage: used=8098.7 MB, total=15360 MB, available=7261.3 MB
+0012.878 (0) Google Drive: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip: Attempting to upload to Google Drive (into folder id: 1KJEwAS5GWNATBpRaabg0gBIfnsPJGdsJ)
+0013.641 (0) Googledrive chunked upload: 5.6 % uploaded (1048576 - increasing chunk size to 2048 KB - memory usage: 74.8 / 80)
+0013.835 (0) Googledrive chunked upload: 16.9 % uploaded (3145728 - increasing chunk size to 4096 KB - memory usage: 74.8 / 80)
+0014.031 (0) Googledrive chunked upload: 39.5 % uploaded (7340032 - increasing chunk size to 8192 KB - memory usage: 74.8 / 80)
+0014.271 (0) Googledrive chunked upload: 84.7 % uploaded (15728640 - increasing chunk size to 16384 KB - memory usage: 74.8 / 80)
+0015.583 (0) Googledrive chunked upload: 100 % uploaded (15728640)
+0015.588 (0) Google Drive: OK: Archive backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip uploaded in 2.71 seconds
+0015.589 (0) Recording as successfully uploaded: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip
+0015.596 (0) Deleting local file: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip: OK
+0015.602 (0) Beginning creation of dump of themes (split every: 400 MB)
+0015.669 (0) Total entities for the zip file: 289 directories, 1930 files (0 skipped as non-modified), 74.5 MB
+0015.670 (0) Only one archive required (UpdraftPlus_PclZip) - will attempt to do in single operation (data: 76267.2 KB, split: 409600 KB)
+0015.673 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 100 files added (on-disk size: 0 KB)
+0015.675 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 200 files added (on-disk size: 0 KB)
+0015.678 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 300 files added (on-disk size: 0 KB)
+0015.680 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 400 files added (on-disk size: 0 KB)
+0015.682 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 500 files added (on-disk size: 0 KB)
+0015.684 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 600 files added (on-disk size: 0 KB)
+0015.686 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 700 files added (on-disk size: 0 KB)
+0015.688 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 800 files added (on-disk size: 0 KB)
+0015.691 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 900 files added (on-disk size: 0 KB)
+0015.693 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1000 files added (on-disk size: 0 KB)
+0015.695 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1100 files added (on-disk size: 0 KB)
+0015.698 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1200 files added (on-disk size: 0 KB)
+0015.700 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1300 files added (on-disk size: 0 KB)
+0015.702 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1400 files added (on-disk size: 0 KB)
+0015.705 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1500 files added (on-disk size: 0 KB)
+0015.707 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1600 files added (on-disk size: 0 KB)
+0015.710 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1700 files added (on-disk size: 0 KB)
+0015.712 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1800 files added (on-disk size: 0 KB)
+0015.714 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.tmp: 1900 files added (on-disk size: 0 KB)
+0026.157 (0) Creating zip file manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.list-temp.tmp)
+0026.162 (0) Successfully created zip file manifest (size: 148894)
+0026.472 (0) Created themes zip (0) - 30207.7 KB in 10.9 s (2780.1 KB/s) (sha1: 08f3c8af31730d955d3430726e6944170fea5016, sha256: 8b16779689248499d665466fd741c8a82a24ce20218bb1328eda93004a3ff0fa)
+0026.477 (0) Cloud backup selection (1/1): googledrive with instance (1/1) (last)
+0026.478 (0) Beginning dispatch of backup to remote (googledrive) (instance identifier s-21d97586f7ec7582d9d7dd83a6cd7951)
+0026.789 (0) Google Drive: quota usage: used=8116.4 MB, total=15360 MB, available=7243.6 MB
+0026.791 (0) Google Drive: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip: Attempting to upload to Google Drive (into folder id: 1KJEwAS5GWNATBpRaabg0gBIfnsPJGdsJ)
+0027.495 (0) Googledrive chunked upload: 3.4 % uploaded (1048576 - increasing chunk size to 2048 KB - memory usage: 74.6 / 80)
+0027.653 (0) Googledrive chunked upload: 10.2 % uploaded (3145728 - increasing chunk size to 4096 KB - memory usage: 74.6 / 80)
+0027.848 (0) Googledrive chunked upload: 23.7 % uploaded (7340032 - increasing chunk size to 8192 KB - memory usage: 74.6 / 80)
+0028.080 (0) Googledrive chunked upload: 50.8 % uploaded (15728640 - increasing chunk size to 16384 KB - memory usage: 74.6 / 80)
+0029.556 (0) Googledrive chunked upload: 100 % uploaded (15728640)
+0029.560 (0) Google Drive: OK: Archive backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip uploaded in 2.77 seconds
+0029.562 (0) Recording as successfully uploaded: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip
+0029.570 (0) Deleting local file: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip: OK
+0029.575 (0) Exclusion option setting (uploads): backup*,*backups,backwpup*,wp-clone,snapshots,wp-staging
+0029.576 (0) Looking for candidates to backup in: /var/www/prod-candc.powdermonkey.co.uk/wp-content/uploads
+0029.577 (0) finding files: et_temp: adding to list (1)
+0029.579 (0) finding files: wpcode: adding to list (2)
+0029.580 (0) finding files: et-fonts: adding to list (3)
+0029.582 (0) finding files: sb-instagram-feed-images: adding to list (4)
+0029.583 (0) finding files: 2025: adding to list (5)
+0029.584 (0) Beginning creation of dump of uploads (split every: 400 MB)
+0029.593 (0) Total entities for the zip file: 9 directories, 563 files (0 skipped as non-modified), 118 MB
+0029.594 (0) Only one archive required (UpdraftPlus_PclZip) - will attempt to do in single operation (data: 120807.6 KB, split: 409600 KB)
+0029.597 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip.tmp: 100 files added (on-disk size: 0 KB)
+0029.599 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip.tmp: 200 files added (on-disk size: 0 KB)
+0029.601 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip.tmp: 300 files added (on-disk size: 0 KB)
+0029.603 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip.tmp: 400 files added (on-disk size: 0 KB)
+0029.605 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip.tmp: 500 files added (on-disk size: 0 KB)
+0033.818 (0) Creating zip file manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip.list-temp.tmp)
+0033.820 (0) Successfully created zip file manifest (size: 34167)
+0035.025 (0) Created uploads zip (0) - 119419.1 KB in 5.4 s (21958.4 KB/s) (sha1: 3e30adfd731565b2c23e22656b1b36eec91d4342, sha256: 8fe4af2533f2af3ae5f3707a72c02097f068c0360843cefd87fe18f2d34cec95)
+0035.030 (0) Cloud backup selection (1/1): googledrive with instance (1/1) (last)
+0035.031 (0) Beginning dispatch of backup to remote (googledrive) (instance identifier s-21d97586f7ec7582d9d7dd83a6cd7951)
+0035.314 (0) Google Drive: quota usage: used=8145.9 MB, total=15360 MB, available=7214.1 MB
+0035.316 (0) Google Drive: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip: Attempting to upload to Google Drive (into folder id: 1KJEwAS5GWNATBpRaabg0gBIfnsPJGdsJ)
+0036.272 (0) Googledrive chunked upload: 0.9 % uploaded (1048576 - increasing chunk size to 2048 KB - memory usage: 74.4 / 82)
+0036.435 (0) Googledrive chunked upload: 2.6 % uploaded (3145728 - increasing chunk size to 4096 KB - memory usage: 74.4 / 82)
+0036.754 (0) Googledrive chunked upload: 6 % uploaded (7340032 - increasing chunk size to 8192 KB - memory usage: 74.4 / 82)
+0037.005 (0) Googledrive chunked upload: 12.9 % uploaded (15728640 - increasing chunk size to 16384 KB - memory usage: 74.4 / 82)
+0037.413 (0) Googledrive chunked upload: 26.6 % uploaded (32505856 - increasing chunk size to 32768 KB - memory usage: 74.4 / 82)
+0038.147 (0) Googledrive chunked upload: 54 % uploaded (66060288 - increasing chunk size to 65536 KB - memory usage: 74.4 / 82)
+0040.123 (0) Googledrive chunked upload: 100 % uploaded (66060288)
+0040.128 (0) Google Drive: OK: Archive backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip uploaded in 4.81 seconds
+0040.129 (0) Recording as successfully uploaded: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip
+0040.159 (0) Deleting local file: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip: OK
+0040.163 (0) No backup of mu-plugins: excluded by user's options
+0040.166 (0) Beginning backup of other directories found in the content directory (index: 0)
+0040.168 (0) Exclusion option setting (others): upgrade,cache,updraft,backup*,*backups,mysql.sql,debug.log
+0040.171 (0) Looking for candidates to backup in: /var/www/prod-candc.powdermonkey.co.uk/wp-content
+0040.172 (0) finding files: plugins: skipping: this is the plugins directory
+0040.173 (0) finding files: themes: skipping: this is the themes directory
+0040.174 (0) finding files: upgrade: skipping: excluded by options
+0040.176 (0) finding files: debug.log: skipping: excluded by options
+0040.177 (0) finding files: upgrade-temp-backup: adding to list (1)
+0040.178 (0) finding files: languages: adding to list (2)
+0040.180 (0) finding files: index.php: adding to list (3)
+0040.181 (0) finding files: uploads: skipping: this is the uploads directory
+0040.182 (0) finding files: updraft: skipping: this is the updraft directory
+0040.184 (0) finding files: et-cache: adding to list (4)
+0040.188 (0) Total entities for the zip file: 8 directories, 106 files (0 skipped as non-modified), 16.1 MB
+0040.189 (0) Only one archive required (UpdraftPlus_PclZip) - will attempt to do in single operation (data: 16460.1 KB, split: 409600 KB)
+0040.192 (0) Zip: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip.tmp: 100 files added (on-disk size: 0 KB)
+0040.925 (0) Creating zip file manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip.list-temp.tmp)
+0040.927 (0) Successfully created zip file manifest (size: 6238)
+0040.965 (0) Created others zip (0) - 3214.5 KB in 0.8 s (4129.3 KB/s) (sha1: 79f31f89ab900df403668faa1e05893492b48d15, sha256: 35422a547cfc2441fe4d76342246da3e47e05bbc46b8ac82e8a9e007962bc1aa)
+0040.970 (0) Cloud backup selection (1/1): googledrive with instance (1/1) (last)
+0040.971 (0) Beginning dispatch of backup to remote (googledrive) (instance identifier s-21d97586f7ec7582d9d7dd83a6cd7951)
+0041.277 (0) Google Drive: quota usage: used=8145.9 MB, total=15360 MB, available=7214.1 MB
+0041.279 (0) Google Drive: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip: Attempting to upload to Google Drive (into folder id: 1KJEwAS5GWNATBpRaabg0gBIfnsPJGdsJ)
+0041.910 (0) Googledrive chunked upload: 31.9 % uploaded (1048576 - increasing chunk size to 2048 KB - memory usage: 74.3 / 82)
+0042.123 (0) Googledrive chunked upload: 95.6 % uploaded (3145728 - increasing chunk size to 4096 KB - memory usage: 74.4 / 82)
+0043.313 (0) Googledrive chunked upload: 100 % uploaded (3145728)
+0043.318 (0) Google Drive: OK: Archive backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip uploaded in 2.04 seconds
+0043.319 (0) Recording as successfully uploaded: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip
+0043.322 (0) Deleting local file: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip: OK
+0043.330 (0) Saving backup status to database (elements: 8)
+0043.334 (0) Beginning creation of database dump (WordPress DB)
+0043.337 (0) SQL compatibility mode is: ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION
+0043.340 (0) Testing potential mysqldump binary: /usr/bin/mysqldump
+0043.354 (0) Output: /*M!999999\- enable the sandbox mode */ \n/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;\n/*!40103 SET TIME_ZONE='+00:00' */;\n/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;\n/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;\n/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;\n/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;\nDROP TABLE IF EXISTS `wp_options`;\n/*!40101 SET @saved_cs_client     = @@character_set_client */;\n/*!4010 (truncated - 1499 bytes total)
+0043.355 (0) Working binary mysqldump found: /usr/bin/mysqldump
+0043.365 (0) Table wp_options: Total expected rows (via COUNT): 355
+0043.366 (0) Table is relatively small; fetch_rows will thus be: 500 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0043.493 (0) Table wp_options: Rows added in this batch (next record: 3013): 351 (uncompressed bytes in this segment=4963959) in 0.13 seconds
+0043.500 (0) Table wp_options: finishing file(s) (2, 531.2 KB)
+0043.506 (0) Table wp_users: Total expected rows (via COUNT): 2
+0043.507 (0) Table is relatively small; fetch_rows will thus be: 20 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0043.511 (0) Table wp_users: Rows added in this batch (next record: 2): 2 (uncompressed bytes in this segment=1401) in 0.01 seconds
+0043.515 (0) Table wp_users: finishing file(s) (2, 0.7 KB)
+0043.522 (0) Table wp_usermeta: Total expected rows (via COUNT): 46
+0043.523 (0) Table is relatively small; fetch_rows will thus be: 50 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0043.526 (0) Table wp_usermeta: Rows added in this batch (next record: 49): 46 (uncompressed bytes in this segment=4127) in 0.01 seconds
+0043.532 (0) Table wp_usermeta: finishing file(s) (2, 1.7 KB)
+0043.540 (0) Table wp_commentmeta: Total expected rows (via COUNT): 0
+0043.543 (0) Table wp_commentmeta: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=634) in 0.01 seconds
+0043.548 (0) Table wp_commentmeta: finishing file(s) (2, 0.4 KB)
+0043.553 (0) Table wp_comments: Total expected rows (via COUNT): 1
+0043.554 (0) Table is relatively small; fetch_rows will thus be: 20 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0043.558 (0) Table wp_comments: Rows added in this batch (next record: 1): 1 (uncompressed bytes in this segment=1888) in 0.01 seconds
+0043.562 (0) Table wp_comments: finishing file(s) (2, 0.7 KB)
+0043.567 (0) Table wp_links: Total expected rows (via COUNT): 0
+0043.571 (0) Table wp_links: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=1027) in 0.01 seconds
+0043.575 (0) Table wp_links: finishing file(s) (2, 0.5 KB)
+0043.583 (0) Table wp_postmeta: Total expected rows (via COUNT): 979
+0043.585 (0) Table is relatively small; fetch_rows will thus be: 500 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0043.597 (0) Table wp_postmeta: Rows added in this batch (next record: 2111): 979 (uncompressed bytes in this segment=218460) in 0.02 seconds
+0043.603 (0) Table wp_postmeta: finishing file(s) (2, 28.7 KB)
+0044.382 (0) Table wp_posts: Total expected rows (via COUNT): 816
+0044.612 (0) Table wp_posts: Rows added in this batch (next record: 71584): 816 (uncompressed bytes in this segment=15566722) in 1.01 seconds
+0044.618 (0) Table wp_posts: finishing file(s) (2, 850.6 KB)
+0044.622 (0) Table wp_term_relationships: Total expected rows (approximate): 62
+0044.626 (0) Table wp_term_relationships: Rows added in this batch (next record: 100000): 71 (uncompressed bytes in this segment=1731) in 0.00 seconds
+0044.631 (0) Table wp_term_relationships: finishing file(s) (2, 0.6 KB)
+0044.637 (0) Table wp_term_taxonomy: Total expected rows (via COUNT): 18
+0044.639 (0) Table is relatively small; fetch_rows will thus be: 20 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0044.642 (0) Table wp_term_taxonomy: Rows added in this batch (next record: 19): 18 (uncompressed bytes in this segment=1451) in 0.01 seconds
+0044.648 (0) Table wp_term_taxonomy: finishing file(s) (2, 0.6 KB)
+0044.656 (0) Table wp_termmeta: Total expected rows (via COUNT): 0
+0044.659 (0) Table wp_termmeta: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=624) in 0.01 seconds
+0044.665 (0) Table wp_termmeta: finishing file(s) (2, 0.4 KB)
+0044.669 (0) Table wp_terms: Total expected rows (via COUNT): 18
+0044.671 (0) Table is relatively small; fetch_rows will thus be: 20 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0044.674 (0) Table wp_terms: Rows added in this batch (next record: 19): 18 (uncompressed bytes in this segment=1221) in 0.01 seconds
+0044.679 (0) Table wp_terms: finishing file(s) (2, 0.6 KB)
+0044.687 (0) Table wp_gf_draft_submissions: Total expected rows (approximate): 0
+0044.690 (0) Table wp_gf_draft_submissions: Rows added in this batch (next record: 0): 0 (uncompressed bytes in this segment=696) in 0.00 seconds
+0044.695 (0) Table wp_gf_draft_submissions: finishing file(s) (2, 0.4 KB)
+0044.699 (0) Table wp_gf_entry: Total expected rows (via COUNT): 0
+0044.701 (0) Table wp_gf_entry: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=1307) in 0.00 seconds
+0044.706 (0) Table wp_gf_entry: finishing file(s) (2, 0.5 KB)
+0044.712 (0) Table wp_gf_entry_meta: Total expected rows (via COUNT): 0
+0044.716 (0) Table wp_gf_entry_meta: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=756) in 0.01 seconds
+0044.722 (0) Table wp_gf_entry_meta: finishing file(s) (2, 0.4 KB)
+0044.730 (0) Table wp_gf_entry_notes: Total expected rows (via COUNT): 0
+0044.733 (0) Table wp_gf_entry_notes: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=779) in 0.01 seconds
+0044.739 (0) Table wp_gf_entry_notes: finishing file(s) (2, 0.4 KB)
+0044.743 (0) Table wp_gf_form: Total expected rows (via COUNT): 1
+0044.745 (0) Table is relatively small; fetch_rows will thus be: 20 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0044.748 (0) Table wp_gf_form: Rows added in this batch (next record: 1): 1 (uncompressed bytes in this segment=704) in 0.01 seconds
+0044.752 (0) Table wp_gf_form: finishing file(s) (2, 0.4 KB)
+0044.757 (0) Table wp_gf_form_meta: Total expected rows (via COUNT): 1
+0044.758 (0) Table is relatively small; fetch_rows will thus be: 20 (allow_further_reductions=1, is_first_fetch=1, known_bigger_than_table=1)
+0044.760 (0) Table wp_gf_form_meta: Rows added in this batch (next record: 1): 1 (uncompressed bytes in this segment=8338) in 0.01 seconds
+0044.766 (0) Table wp_gf_form_meta: finishing file(s) (2, 2.3 KB)
+0044.773 (0) Table wp_gf_form_revisions: Total expected rows (via COUNT): 0
+0044.776 (0) Table wp_gf_form_revisions: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=645) in 0.01 seconds
+0044.781 (0) Table wp_gf_form_revisions: finishing file(s) (2, 0.4 KB)
+0044.785 (0) Table wp_gf_form_view: Total expected rows (via COUNT): 0
+0044.788 (0) Table wp_gf_form_view: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=658) in 0.00 seconds
+0044.792 (0) Table wp_gf_form_view: finishing file(s) (2, 0.4 KB)
+0044.799 (0) Table wp_sbi_feed_caches: Total expected rows (via COUNT): 0
+0044.800 (0) Table wp_sbi_feed_caches: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=706) in 0.00 seconds
+0044.807 (0) Table wp_sbi_feed_caches: finishing file(s) (2, 0.4 KB)
+0044.813 (0) Table wp_sbi_feeds: Total expected rows (via COUNT): 0
+0044.815 (0) Table wp_sbi_feeds: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=692) in 0.00 seconds
+0044.821 (0) Table wp_sbi_feeds: finishing file(s) (2, 0.4 KB)
+0044.828 (0) Table wp_sbi_instagram_feed_locator: Total expected rows (via COUNT): 0
+0044.829 (0) Table wp_sbi_instagram_feed_locator: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=786) in 0.01 seconds
+0044.836 (0) Table wp_sbi_instagram_feed_locator: finishing file(s) (2, 0.4 KB)
+0044.840 (0) Table wp_sbi_instagram_feeds_posts: Total expected rows (via COUNT): 0
+0044.842 (0) Table wp_sbi_instagram_feeds_posts: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=763) in 0.00 seconds
+0044.847 (0) Table wp_sbi_instagram_feeds_posts: finishing file(s) (2, 0.4 KB)
+0044.853 (0) Table wp_sbi_instagram_posts: Total expected rows (via COUNT): 0
+0044.855 (0) Table wp_sbi_instagram_posts: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=958) in 0.01 seconds
+0044.861 (0) Table wp_sbi_instagram_posts: finishing file(s) (2, 0.5 KB)
+0044.866 (0) Table wp_sbi_sources: Total expected rows (via COUNT): 0
+0044.868 (0) Table wp_sbi_sources: Rows added in this batch (next record: -1): 0 (uncompressed bytes in this segment=978) in 0.00 seconds
+0044.872 (0) Table wp_sbi_sources: finishing file(s) (2, 0.5 KB)
+0044.873 (0) PHP event: code E_WARNING: filemtime(): stat failed for /var/www/prod-candc.powdermonkey.co.uk/wp-content/updraft/backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz (line 1923, wp-content/plugins/updraftplus/backup.php)
+0044.875 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_options.table.tmpr3014.gz (1/26/fopen): adding to final database dump
+0044.880 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_options.table.gz (2/26/fopen): adding to final database dump
+0044.881 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_users.table.tmpr3.gz (3/26/fopen): adding to final database dump
+0044.882 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_users.table.gz (4/26/fopen): adding to final database dump
+0044.883 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_usermeta.table.tmpr50.gz (5/26/fopen): adding to final database dump
+0044.884 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_usermeta.table.gz (6/26/fopen): adding to final database dump
+0044.886 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_commentmeta.table.tmpr0.gz (7/26/fopen): adding to final database dump
+0044.887 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_commentmeta.table.gz (8/26/fopen): adding to final database dump
+0044.888 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_comments.table.tmpr2.gz (9/26/fopen): adding to final database dump
+0044.890 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_comments.table.gz (10/26/fopen): adding to final database dump
+0044.891 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_links.table.tmpr0.gz (11/26/fopen): adding to final database dump
+0044.892 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_links.table.gz (12/26/fopen): adding to final database dump
+0044.893 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_postmeta.table.tmpr2112.gz (13/26/fopen): adding to final database dump
+0044.894 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_postmeta.table.gz (14/26/fopen): adding to final database dump
+0044.895 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_posts.table.tmpr71585.gz (15/26/fopen): adding to final database dump
+0044.902 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_posts.table.gz (16/26/fopen): adding to final database dump
+0044.903 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_term_relationships.table.tmpr100001.gz (17/26/fopen): adding to final database dump
+0044.905 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_term_relationships.table.gz (18/26/fopen): adding to final database dump
+0044.906 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_term_taxonomy.table.tmpr20.gz (19/26/fopen): adding to final database dump
+0044.907 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_term_taxonomy.table.gz (20/26/fopen): adding to final database dump
+0044.908 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_termmeta.table.tmpr0.gz (21/26/fopen): adding to final database dump
+0044.910 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_termmeta.table.gz (22/26/fopen): adding to final database dump
+0044.911 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_terms.table.tmpr20.gz (23/26/fopen): adding to final database dump
+0044.912 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_terms.table.gz (24/26/fopen): adding to final database dump
+0044.914 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_draft_submissions.table.tmpr1.gz (25/26/fopen): adding to final database dump
+0044.915 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_draft_submissions.table.gz (26/26/fopen): adding to final database dump
+0044.916 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_entry.table.tmpr0.gz (27/26/fopen): adding to final database dump
+0044.918 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_entry.table.gz (28/26/fopen): adding to final database dump
+0044.919 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_entry_meta.table.tmpr0.gz (29/26/fopen): adding to final database dump
+0044.920 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_entry_meta.table.gz (30/26/fopen): adding to final database dump
+0044.921 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_entry_notes.table.tmpr0.gz (31/26/fopen): adding to final database dump
+0044.922 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_entry_notes.table.gz (32/26/fopen): adding to final database dump
+0044.924 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form.table.tmpr2.gz (33/26/fopen): adding to final database dump
+0044.925 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form.table.gz (34/26/fopen): adding to final database dump
+0044.926 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form_meta.table.tmpr2.gz (35/26/fopen): adding to final database dump
+0044.928 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form_meta.table.gz (36/26/fopen): adding to final database dump
+0044.929 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form_revisions.table.tmpr0.gz (37/26/fopen): adding to final database dump
+0044.930 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form_revisions.table.gz (38/26/fopen): adding to final database dump
+0044.931 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form_view.table.tmpr0.gz (39/26/fopen): adding to final database dump
+0044.933 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_gf_form_view.table.gz (40/26/fopen): adding to final database dump
+0044.934 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_feed_caches.table.tmpr0.gz (41/26/fopen): adding to final database dump
+0044.935 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_feed_caches.table.gz (42/26/fopen): adding to final database dump
+0044.936 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_feeds.table.tmpr0.gz (43/26/fopen): adding to final database dump
+0044.937 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_feeds.table.gz (44/26/fopen): adding to final database dump
+0044.939 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_instagram_feed_locator.table.tmpr0.gz (45/26/fopen): adding to final database dump
+0044.940 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_instagram_feed_locator.table.gz (46/26/fopen): adding to final database dump
+0044.941 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_instagram_feeds_posts.table.tmpr0.gz (47/26/fopen): adding to final database dump
+0044.942 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_instagram_feeds_posts.table.gz (48/26/fopen): adding to final database dump
+0044.943 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_instagram_posts.table.tmpr0.gz (49/26/fopen): adding to final database dump
+0044.944 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_instagram_posts.table.gz (50/26/fopen): adding to final database dump
+0044.945 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_sources.table.tmpr0.gz (51/26/fopen): adding to final database dump
+0044.946 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db-table-wp_sbi_sources.table.gz (52/26/fopen): adding to final database dump
+0044.950 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz: finished writing out complete database file (1424.5 KB)
+0044.971 (0) Total database tables backed up: 26 (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz, size: 1458829, sha1: aed9546621720de1ced5c30c26db8893ee5f7f48, sha256: 0bd02d8f422a5a5e8747734659290964011dfe930e89e4d4e9eecd130d264d48)
+0044.979 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip: plugins: This file has already been successfully uploaded
+0044.980 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip: themes: This file has already been successfully uploaded
+0044.981 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip: uploads: This file has already been successfully uploaded
+0044.983 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip: others: This file has already been successfully uploaded
+0044.984 (0) backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz: db: This file has not yet been successfully uploaded: will queue
+0044.985 (0) Saving backup history. Total backup size: 168.4 MB
+0044.989 (0) Requesting upload of the files that have not yet been successfully uploaded (1)
+0044.993 (0) Cloud backup selection (1/1): googledrive with instance (1/1) (last)
+0044.994 (0) Beginning dispatch of backup to remote (googledrive) (instance identifier s-21d97586f7ec7582d9d7dd83a6cd7951)
+0045.273 (0) Google Drive: quota usage: used=8262.6 MB, total=15360 MB, available=7097.4 MB
+0045.274 (0) Google Drive: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz: Attempting to upload to Google Drive (into folder id: 1KJEwAS5GWNATBpRaabg0gBIfnsPJGdsJ)
+0046.010 (0) Googledrive chunked upload: 71.9 % uploaded (1048576 - increasing chunk size to 2048 KB - memory usage: 74.4 / 104)
+0047.055 (0) Googledrive chunked upload: 100 % uploaded (1048576)
+0047.059 (0) Google Drive: OK: Archive backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz uploaded in 1.78 seconds
+0047.060 (0) Recording as successfully uploaded: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz
+0047.064 (0) Deleting local file: backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-db.gz: OK
+0047.067 (0) Retain: beginning examination of existing backup sets; user setting: retain_files=2, retain_db=2
+0047.069 (0) Number of backup sets in history: 3; groups (db): 1
+0047.070 (0) Examining (for databases) backup set with group_id=0, nonce=4b05bc10f485, datestamp=1758538523 (Sep 22 2025 10:55:23)
+0047.072 (0) This backup set is the backup set just made, so will not be deleted.
+0047.072 (0) Examining (for databases) backup set with group_id=0, nonce=4dae633fa6c4, datestamp=1758283238 (Sep 19 2025 12:00:38)
+0047.072 (0) This backup set remains non-empty (f=1/d=1); will retain in history
+0047.073 (0) Examining (for databases) backup set with group_id=0, nonce=1822689ab688, datestamp=1758195535 (Sep 18 2025 11:38:55)
+0047.073 (0) 1758195535: db: this set includes a database (backup_2025-09-18-1238_Yacht_Interior_Finery_1822689ab688-db.gz); db count is now 2
+0047.073 (0) 1758195535: db: over retain limit (2); will delete this database
+0050.742 (0) Google Drive: backup_2025-09-18-1238_Yacht_Interior_Finery_1822689ab688-db.gz: Deletion successful
+0050.747 (0) This backup set remains non-empty (f=1/d=0); will retain in history
+0050.748 (0) Number of backup sets in history: 3; groups (files): 1
+0050.750 (0) Examining (for files) backup set with nonce=4b05bc10f485, datestamp=1758538523 (Sep 22 2025 10:55:23)
+0050.751 (0) This backup set is the backup set just made, so will not be deleted.
+0050.752 (0) This backup set is the backup set just made, so will not be deleted.
+0050.752 (0) This backup set is the backup set just made, so will not be deleted.
+0050.752 (0) This backup set is the backup set just made, so will not be deleted.
+0050.753 (0) This backup set remains non-empty (f=1/d=1); will retain in history
+0050.754 (0) Examining (for files) backup set with nonce=4dae633fa6c4, datestamp=1758283238 (Sep 19 2025 12:00:38)
+0050.754 (0) This backup set remains non-empty (f=1/d=1); will retain in history
+0050.754 (0) Examining (for files) backup set with nonce=1822689ab688, datestamp=1758195535 (Sep 18 2025 11:38:55)
+0050.754 (0) plugins: over retain limit (2); will delete this file entity
+0050.754 (0) themes: over retain limit (2); will delete this file entity
+0050.754 (0) uploads: over retain limit (2); will delete this file entity
+0050.754 (0) others: over retain limit (2); will delete this file entity
+0053.711 (0) Google Drive: backup_2025-09-18-1238_Yacht_Interior_Finery_1822689ab688-others.zip: Deletion successful
+0054.218 (0) Google Drive: backup_2025-09-18-1238_Yacht_Interior_Finery_1822689ab688-uploads.zip: Deletion successful
+0054.960 (0) Google Drive: backup_2025-09-18-1238_Yacht_Interior_Finery_1822689ab688-themes.zip: Deletion successful
+0055.965 (0) Google Drive: backup_2025-09-18-1238_Yacht_Interior_Finery_1822689ab688-plugins.zip: Deletion successful
+0055.971 (0) This backup set is now empty; will remove from history
+0055.972 (0) Deleting log file (log.1822689ab688.txt)
+0055.973 (0) Retain: saving new backup history (sets now: 2) and finishing retain operation
+0055.979 (0) Resume backup (4b05bc10f485, 0): finish run
+0055.983 (0) Decremented the semaphore (fd) by 1
+0055.985 (0) Semaphore (fd) unlocked
+0055.986 (0) There were no errors in the uploads, so the 'resume' event (1) is being unscheduled
+0055.991 (0) Deleting zip manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-plugins.zip.list.tmp)
+0055.992 (0) Deleting zip manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-themes.zip.list.tmp)
+0055.994 (0) Deleting zip manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-uploads.zip.list.tmp)
+0055.995 (0) Deleting zip manifest (backup_2025-09-22-1155_Yacht_Interior_Finery_4b05bc10f485-others.zip.list.tmp)
+0055.996 (0) No email will/can be sent - the user has not configured an email address.
+0055.997 (0) The backup succeeded and is now complete
