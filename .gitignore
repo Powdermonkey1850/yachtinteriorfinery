@@ -1,3 +1,5 @@
 *.sql
 *.tar.gz
+# Ignore WordPress debug log
+wp-content/debug.log
 ~                                                                                                                                                                                                                ~                  
