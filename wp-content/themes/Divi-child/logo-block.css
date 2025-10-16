@@ -1,0 +1,22 @@
+/* The logo soup bloack */
+
+.logo-row {
+        display:flex;
+        flex-wrap:wrap;
+        gap:3%;
+        justify-content:center;
+
+}
+
+.logo-row > div {
+        flex:0 0 18%;
+}
+
+.section-boy-girl {
+        display:flex;
+        flex-direction:column;
+
+}
+.section-boy-girl > :nth-child(even) {
+flex-direction:row-reverse;
+}
