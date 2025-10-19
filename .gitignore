@@ -2,4 +2,4 @@
 *.tar.gz
 # Ignore WordPress debug log
 wp-content/debug.log
-~                                                                                                                                                                                                                ~                  
+wp-config.php
