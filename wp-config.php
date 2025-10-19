@@ -2,7 +2,7 @@
 
 define( 'WP_DEBUG', FALSE );
 define( 'WP_DEBUG_LOG', FALSE );
-define( 'WP_DEBUG_DISPLAY', false );
+define( 'WP_DEBUG_DISPLAY', FALSE );
 
 /**
  * The base configuration for WordPress
