@@ -4,11 +4,14 @@
 .custom-popup {
   position: fixed;
   inset: 0;
-  display: none; /* hidden by default */
+  display: none;
+  /* hidden by default */
   justify-content: center;
   align-items: center;
-  background: rgba(0, 0, 0, 0.45); /* slightly darker backdrop */
-  backdrop-filter: blur(6px); /* modern blur effect */
+  background: rgba(0, 0, 0, 0.45);
+  /* slightly darker backdrop */
+  backdrop-filter: blur(6px);
+  /* modern blur effect */
   z-index: 9999;
   transition: opacity 0.3s ease;
   overflow-y: auto;
@@ -23,9 +26,9 @@
 /* === 2. Popup Box === */
 html body .custom-popup .popup-content {
   background: rgba(255, 255, 255, 0.98);
-  background-image:url('/wp-content/uploads/2025/10/Form-Image.webp');
-  background-size:cover;
-  background-repeat:no-repeat;
+  background-image: url('/wp-content/uploads/2025/10/Form-Image.webp');
+  background-size: cover;
+  background-repeat: no-repeat;
   max-width: 900px;
   width: 100%;
   padding: 2rem;
@@ -35,33 +38,32 @@ html body .custom-popup .popup-content {
   transform-origin: center;
 }
 
-html body #gform_fields_2 > * {
-	background-color:rgba(255,255,255,0.8);
-	padding:5px 10px 5px 10px;
+html body #gform_fields_2>* {
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 5px 10px 5px 10px;
 }
 
 html body #gform_fields_2 input {
-border:0px;
-font-weight:300;
+  border: 0px;
+  font-weight: 300;
 }
 
 html body #gform_fields_2 inputxxxxx {
-border:0px;
+  border: 0px;
 }
 
 
 html body .pop-up-form-header {
-color:white;
-font-family:'Poppins',Helvetica,Arial,Lucida,sans-serif;
-margin-bottom:15px;
-padding-bottom:15px;
-letter-spacing:1px;
-font-weight:200;
+  color: white;
+  font-family: 'Poppins', Helvetica, Arial, Lucida, sans-serif;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  letter-spacing: 1px;
+  font-weight: 200;
 }
 
 
-.pop-up-form-header {
-}
+.pop-up-form-header {}
 
 
 /* === 3. Text Styling === */
@@ -69,10 +71,10 @@ font-weight:200;
   font-size: 1.8rem;
   margin-top: 0;
   margin-bottom: 0.75rem;
-  text-align:left;
-  color:#ffffff;
-  font-family: 'Poppins',Helvetica,Arial,Lucida,sans-serif;
-  text-transform:uppercase;
+  text-align: left;
+  color: #ffffff;
+  font-family: 'Poppins', Helvetica, Arial, Lucida, sans-serif;
+  text-transform: uppercase;
 }
 
 .custom-popup .popup-content p {
@@ -91,8 +93,8 @@ font-weight:200;
   text-align: center;
 }
 
- html body .custom-popup .gform_wrapper #gform_2 .gform_footer input[type="submit"] {
-  background-color: rgba(255,255,255,0.8) !important;
+html body .custom-popup .gform_wrapper #gform_2 .gform_footer input[type="submit"] {
+  background-color: rgba(255, 255, 255, 0.8) !important;
   color: #6b6b6b;
   border: none;
   padding: 12px 28px;
@@ -100,16 +102,16 @@ font-weight:200;
   font-size: 1rem;
   letter-spacing: 0.5px;
   transition: background 0.25s ease, transform 0.15s ease;
-  font-family: 'Poppins',Helvetica,Arial,Lucida,sans-serif;
+  font-family: 'Poppins', Helvetica, Arial, Lucida, sans-serif;
   border-radius: 0px;
-  text-transform:uppercase;
-  font-size:12px;
-  letter-spacing:2px;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 2px;
 }
 
 .custom-popup .gform_wrapper .gform_footer input[type="submit"]:hover {
   background: #001ab3;
-/*  transform: translateY(-2px); */
+  /*  transform: translateY(-2px); */
 }
 
 /* === 5. Close Button (X) === */
@@ -137,7 +139,7 @@ font-weight:200;
 
 /* Style your ENQUIRE buttons */
 .custom-popup-button-column .open-popup {
-/*
+  /*
   background: #333;
   color: #fff;
   border: none;
@@ -151,7 +153,7 @@ font-weight:200;
 }
 
 .custom-popup-button-column .open-popup:hover {
- /* background: #555; 
+  /* background: #555; 
   transform: translateY(-2px);
   */
 }
@@ -159,7 +161,15 @@ font-weight:200;
 
 
 div.thank-you {
-position:relative;
+  position: relative;
+  display: flex;
+  justify-content: end;
+  overflow: visible;
+}
+
+div.thank-you img {
+  position: relative;
+  top: -25px
 }
 
 /* === 7. Simple Animation for Popup === */
@@ -168,6 +178,7 @@ position:relative;
     transform: scale(0.9);
     opacity: 0;
   }
+
   to {
     transform: scale(1);
     opacity: 1;
@@ -188,4 +199,3 @@ position:relative;
     font-size: 0.95rem;
   }
 }
-
