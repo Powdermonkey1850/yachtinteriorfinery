@@ -1,0 +1,158 @@
+/* Reset Divi’s column padding */
+.et_pb_column {
+/*  padding: 0 !important; */
+}
+
+/* Card container */
+.hover-card {
+  position: relative;
+  width: 100%;
+  height: 700px; /* fixed height – change as you like */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 6s ease;
+}
+
+.hover-card:hover {
+  transform: scale(1.08);
+}
+
+/* Overlay */
+.hover-card .hover-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(100, 100, 100, 0.5);
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.hover-card:hover .hover-bg {
+  opacity: 1;
+}
+
+/* Text overlay */
+.hover-card .hover-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  opacity: 1;
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+
+
+.hover-card .hover-text a {
+  font-family: 'Poppins', sans-serif;
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: grey;
+  text-decoration: none;
+  text-transform: uppercase;
+  display: inline-block;  /* helps smooth the effect */
+  transition: 
+    letter-spacing 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
+    transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), 
+    color 0.3s ease;
+  
+
+}
+
+.hover-card .hover-text a:hover {
+  letter-spacing: 3px; 
+  transform: scale(1.02);
+}
+  
+#next-section .et_pb_column {
+ overflow:hidden; 
+}
+
+
+.hover-text a {background-color: rgba(255, 255, 255, 0.8);
+padding: 10px 30px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== Section Header Titles Styling ===== */
+.section-header-title {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+  text-align: center;
+  width: 100%;
+  aspect-ratio: 1 / 1; /* ensures perfect square */
+  padding: 70px;
+  box-sizing: border-box;
+  overflow: hidden; /* keeps overlay contained */
+
+}
+
+/* Multiply overlay */
+.section-header-title::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: #82657c;
+  opacity: 0.7;
+  mix-blend-mode: multiply;
+  z-index: 0;
+}
+
+/* Keep text above overlay */
+.section-header-title * {
+  position: relative;
+  z-index: 1;
+}
+
+/* H1 styling */
+.section-header-title h1 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  font-size: 60px;
+  letter-spacing: 11px;
+  text-transform: uppercase;
+  margin: 0 0 20px 0;
+  color: #fff;
+}
+
+/* H2 paragraph styling */
+.section-header-title h2 {
+  font-family: 'Literata', serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.8em;
+  max-width: 700px;
+  margin: 0 0 30px 0;
+  color: #fff;
+  margin: 0 0 40px 0;
+}
+
+/* Script title styling */
+.section-header-title .script-title {
+  font-family: 'Script', cursive;
+  font-size: 30px;
+  margin: 0 0 20px 0;
+  color: #fff;
+}
+

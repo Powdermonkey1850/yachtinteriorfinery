@@ -1,12 +1,12 @@
-# Copyright (C) 2023 Elicus
+# Copyright (C) 2024 Elicus
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Gravity Forms Styler For Divi 1.0.2\n"
+"Project-Id-Version: Gravity Forms Styler For Divi 1.0.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/divi-extended-"
 "gravity-forms-styler\n"
-"POT-Creation-Date: 2023-09-25 05:40:02+00:00\n"
-"PO-Revision-Date: 2023-MO-DA HO:MI+ZONE\n"
+"POT-Creation-Date: 2024-08-16 06:38:22+00:00\n"
+"PO-Revision-Date: 2024-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "Language: en\n"
@@ -459,8 +459,8 @@ msgstr ""
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1638
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1660
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1682
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1746
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1768
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1757
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1779
 msgid "Padding"
 msgstr ""
 
@@ -469,10 +469,10 @@ msgstr ""
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1646
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1668
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1690
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1755
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1777
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1798
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1766
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1788
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1809
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1820
 msgid ""
 "Padding adds extra space to the inside of the element, increasing the "
 "distance between the edge of the element and its inner contents."
@@ -511,9 +511,9 @@ msgstr ""
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1571
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1693
 #: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1707
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1732
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1758
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1780
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1743
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1769
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1791
 msgid "Background"
 msgstr ""
 
@@ -614,25 +614,33 @@ msgstr ""
 msgid "Here you can define a custom color for your icon."
 msgstr ""
 
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1743
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1732
+msgid "Submit Button Alignment"
+msgstr ""
+
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1739
+msgid "Here you can choose the submit button alignment."
+msgstr ""
+
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1754
 msgid ""
 "Adjust the background style of the submit button by customizing the "
 "background color, gradient, and image."
 msgstr ""
 
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1765
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1776
 msgid "Here you can select a background color to be used for success message."
 msgstr ""
 
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1787
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1798
 msgid "Here you can select a background color to be used for error message."
 msgstr ""
 
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1790
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1801
 msgid "Form Description Padding"
 msgstr ""
 
-#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1801
+#: includes/modules/GravityFormsStyler/GravityFormsStyler.php:1812
 msgid "Fieldset Padding"
 msgstr ""
 

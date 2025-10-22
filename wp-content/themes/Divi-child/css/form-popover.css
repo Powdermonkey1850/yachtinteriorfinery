@@ -1,0 +1,216 @@
+/* === YIF Custom Popup Styles === */
+
+/* === 1. Overlay Container === */
+.custom-popup {
+  position: fixed;
+  inset: 0;
+  display: none;
+  /* hidden by default */
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  /* slightly darker backdrop */
+  backdrop-filter: blur(6px);
+  /* modern blur effect */
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+/* Active state (shown when .active is added by JS) */
+.custom-popup.active {
+  display: flex;
+}
+
+/* === 2. Popup Box === */
+html body .custom-popup .popup-content {
+  background: rgba(255, 255, 255, 0.98);
+  background-image: url('/wp-content/uploads/2025/10/Form-Image.webp');
+  background-size: cover;
+  background-repeat: no-repeat;
+  max-width: 900px;
+  width: 100%;
+  padding: 2rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  position: relative;
+  animation: popIn 0.3s ease forwards;
+  transform-origin: center;
+  background-position:bottom;
+    padding-left:50px;
+    padding-right:50px;
+}
+
+html body #gform_fields_2>* {
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 5px 10px 5px 10px;
+}
+
+html body #gform_fields_2 input,
+html body .gform-theme--foundation .gfield textarea.medium,
+html body .custom-popup .gform_wrapper #gform_2 .gform_footer input[type="submit"] {
+  border: 0px;
+  font-weight: 300;
+  color:#333
+}
+
+
+
+html body #gform_fields_2 inputxxxxx {
+  border: 0px;
+}
+
+
+html body .pop-up-form-header {
+  color: white;
+  font-family: 'Poppins', Helvetica, Arial, Lucida, sans-serif;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  letter-spacing: 2px;
+  font-weight: 400;
+}
+
+
+.pop-up-form-header span {
+letter-spacing:1px;
+}
+
+
+/* === 3. Text Styling === */
+.custom-popup .popup-content h2 {
+  font-size: 1.8rem;
+  font-weight:500;
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  text-align: left;
+  color: #ffffff;
+  font-family: 'Poppins', Helvetica, Arial, Lucida, sans-serif;
+  text-transform: uppercase;
+  padding-top:50px;
+}
+
+.custom-popup .popup-content p {
+  text-align: center;
+  font-size: 1rem;
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+/* === 4. Gravity Form Styling (inside popup) === */
+.custom-popup .gform_wrapper form {
+  margin: 0;
+}
+
+.custom-popup .gform_wrapper .gform_footer {
+  text-align: center;
+}
+
+html body .custom-popup .gform_wrapper #gform_2 .gform_footer input[type="submit"] {
+  background-color: rgba(255, 255, 255, 0.8) !important;  
+  border: none;
+  padding: 12px 28px;
+  cursor: pointer;
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+  transition: background 0.25s ease, transform 0.15s ease;
+  font-family: 'Poppins', Helvetica, Arial, Lucida, sans-serif;
+  border-radius: 0px;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.custom-popup .gform_wrapper .gform_footer input[type="submit"]:hover {
+  background: #001ab3;
+  /*  transform: translateY(-2px); */
+}
+
+/* === 5. Close Button (X) === */
+.custom-popup .close-popup {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 28px;
+  color: #444;
+  cursor: pointer;
+  transition: transform 0.2s ease, color 0.2s ease;
+  z-index: 10;
+}
+
+.custom-popup .close-popup:hover {
+  transform: scale(1.2);
+  color: #000;
+}
+
+/* === 6. Trigger Buttons === */
+.custom-popup-button-column {
+  text-align: center;
+  margin-top: 2rem;
+}
+
+.custom-popup .gform-theme--foundation .gform_fields {
+row-gap:10px;
+}
+
+/* Style your ENQUIRE buttons */
+.custom-popup-button-column .open-popup {
+  /*
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+  transition: background 0.25s ease, transform 0.15s ease;
+  */
+}
+
+.custom-popup-button-column .open-popup:hover {
+  /* background: #555; 
+  transform: translateY(-2px);
+  */
+}
+
+
+
+div.thank-you {
+  position: relative;
+  display: flex;
+  justify-content: end;
+  overflow: visible;
+}
+
+div.thank-you img {
+  position: relative;
+  /* top: -25px; */
+}
+
+/* === 7. Simple Animation for Popup === */
+@keyframes popIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* === 8. Responsive Tweaks === */
+@media (max-width: 600px) {
+  .custom-popup .popup-content {
+    padding: 1.5rem;
+  }
+
+  .custom-popup .popup-content h2 {
+    font-size: 1.4rem;
+  }
+
+  .custom-popup .popup-content p {
+    font-size: 0.95rem;
+  }
+}

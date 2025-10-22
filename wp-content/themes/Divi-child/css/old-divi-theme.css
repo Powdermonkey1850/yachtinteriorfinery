@@ -1,0 +1,149 @@
+/* Hide the toggle icon but leave in DOM */
+.et_pb_toggle_title .et_pb_toggle_icon {
+    display: none !important; /* keeps DOM for Divi JS */
+}
+
+/* Main menu title — flex centering */
+.vertical-menu-item .et_pb_toggle_title {
+    display: flex !important;
+    justify-content: center !important; /* horizontal centering */
+    align-items: center !important;     /* vertical centering */
+    width: 100%;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    font-size: clamp(12px, 1rem + 1vw, 15px) !important;	
+    font-weight: 600;
+    letter-spacing: 3px !important;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* Accordion content */
+.vertical-menu-item .et_pb_toggle_content {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    padding: 0;
+    text-align: center;
+    font-size: clamp(11px, 1.5vw, 13px) !important;	
+    line-height: 1.3em;
+    letter-spacing: 1px;
+    transition: max-height 0.4s ease, opacity 0.4s ease, padding 0.3s ease;
+}
+
+/* Paragraph spacing inside accordion */
+.vertical-menu-item .et_pb_toggle_content p {
+    margin: 0;
+    padding: 3px 0;
+}
+
+/* Only H4 links inside accordion content */
+.vertical-menu-item .et_pb_toggle_content h4 a {
+    color: #ffffff; /* default colour */
+    transition: color 0.3s ease;
+}
+
+.vertical-menu-item .et_pb_toggle_content h4 a:hover {
+    color: rgba(255, 255, 255, 0.72); /* hover colour with slight transparency */
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@font-face {
+  font-family: "Thursday Morning";
+  src: url("/wp-content/uploads/et-fonts/ThursdayMorningRegular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "script";
+  src: url("/wp-content/uploads/et-fonts/script.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+.testimonial-name {
+  font-family: "Thursday Morning", cursive !important;
+	color: red !important;
+  font-weight: 400 !important;
+  font-size: 50px !important;
+  color: #81697e !important;
+  margin: 0 !important;
+}
+
+.arrow-link {
+  display: block;
+  text-align: center;
+  margin-top: 20px; /* adjust spacing as needed */
+}
+
+.arrow {
+  display: inline-block;
+  width: 20px;
+  cursor: pointer;
+  transition: transform 0.3s ease-in-out;
+  animation: pivot-shake 2.5s ease-in-out 1s; /* runs once after a short delay */
+}
+
+.arrow:hover {
+  transform: scale(1.2);
+}
+
+/* Keyframes for pivot shake */
+@keyframes pivot-shake {
+  0%   { transform: rotate(0deg); }
+  15%  { transform: rotate(-8deg); }
+  30%  { transform: rotate(8deg); }
+  45%  { transform: rotate(-6deg); }
+  60%  { transform: rotate(6deg); }
+  75%  { transform: rotate(-3deg); }
+  100% { transform: rotate(0deg); }
+}
+
+
+
+/* Contain flex inside its own section to avoid affecting Divi’s row/column grid */
+.logo-section {
+  width: 100%;
+  display: block;
+  overflow: hidden; /* isolates the flex layout */
+}
+
+/* Only target the logo layout inside .logo-section */
+.logo-section .logo-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  margin: 40px auto 0; /* neutral margins to avoid Divi conflicts */
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.logo-section .logo-box {
+  flex: 0 1 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.logo-section .logo-box img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}

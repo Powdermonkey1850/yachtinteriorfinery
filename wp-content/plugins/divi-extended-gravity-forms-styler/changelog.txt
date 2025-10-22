@@ -1,5 +1,10 @@
 == Changelog ==
 
+= 1.0.3 =
+Release date: 16th August 2024
+* Added: Control for Submit button alignment.
+* FIXED: PHP 8 depreciation error.
+
 = 1.0.2 =
 Release date: 25th September 2023
 * FIXED: Random string coming on the page where gravity form styler module is used.

@@ -3,7 +3,7 @@
  * @author      Elicus <hello@elicus.com>
  * @link        https://www.elicus.com/
  * @copyright   2023 Elicus Technologies Private Limited
- * @version     1.0.2
+ * @version     1.0.3
  */
 class EL_GravityFormsStyler extends ET_Builder_Module {
 
@@ -1728,6 +1728,17 @@ class EL_GravityFormsStyler extends ET_Builder_Module {
 					'toggle_slug'     	=> 'save_continue_button',
 					'description'     	=> esc_html__( 'Here you can define a custom color for your icon.', 'divi-extended-gravity-forms-styler' ),
 				),
+				'submit_align'          => array(
+					'label'            => esc_html__( 'Submit Button Alignment', 'divi-extended-gravity-forms-styler' ),
+					'type'             => 'text_align',
+					'option_category'  => 'layout',
+					'options'          => et_builder_get_text_orientation_options( array( 'justified' ) ),
+					'default_on_front' => 'left',
+					'tab_slug'       	=> 'advanced',
+					'toggle_slug'    	=> 'submit_button',
+					'description'      => esc_html__( 'Here you can choose the submit button alignment.', 'divi-extended-gravity-forms-styler' ),
+					'options_icon'     => 'module_align',
+				),
 				'submit_bg_color'              => array(
 					'label'          	=> esc_html__( 'Background', 'divi-extended-gravity-forms-styler' ),
 					'type'              => 'background-field',
@@ -1867,7 +1878,7 @@ class EL_GravityFormsStyler extends ET_Builder_Module {
 		return $output;
 	}
 
-	public function render( $attrs, $content = null, $render_slug ) {
+	public function render( $attrs, $content, $render_slug ) {
 		
 		if( 'off' === $this->props['show_title'] ){
 			$this->props['show_title'] = 'false';
@@ -1981,7 +1992,7 @@ class EL_GravityFormsStyler extends ET_Builder_Module {
 			$input_fields_focus_hover_placeholder
 		);
 
-		$textarea = "{$this->main_css_element} .el_gravity_forms_styler_wrapper form .gfield textarea.large, {$this->main_css_element} .el_gravity_forms_styler_wrapper form .gfield textarea.medium, {$this->main_css_element} .el_gravity_forms_styler_wrapper form .gfield textarea.small";
+		$textarea = "{$this->main_css_element} .el_gravity_forms_styler_wrapper form .gfield textarea.large, {$this->main_css_element} .el_gravity_forms_styler_wrapper form .gfield textarea.medium, {$this->main_css_element} .el_gravity_forms_styler_wrapper form .gfield textarea.small";	
 		$fieldset = "{$this->main_css_element} .el_gravity_forms_styler_wrapper form .gfield";
 
 		/* Input Field Text Color */
@@ -2207,7 +2218,7 @@ class EL_GravityFormsStyler extends ET_Builder_Module {
 				);
 			}
 		}
-
+			
 		/* Upload Button */
 		$upload_bg_colors = et_pb_responsive_options()->get_property_values( $this->props, 'upload_bg_color' );
 		et_pb_responsive_options()->generate_responsive_css( $upload_bg_colors, $upload_field, 'background-color', $render_slug, ' !important;', 'color' );
@@ -2239,9 +2250,39 @@ class EL_GravityFormsStyler extends ET_Builder_Module {
             ) );
         }
 
+		/* Submit Button Alignment */
+		if ( 'left' === $this->props['submit_align'] ) {
+			self::set_style(
+				$render_slug,
+				array(
+					'selector'    => "{$this->main_css_element} .el_gravity_forms_styler_wrapper form .gform_footer",
+					'declaration' => 'display: flex; justify-content: flex-start;',
+				)
+			);
+		}
+		if ( 'center' === $this->props['submit_align'] ) {
+			self::set_style(
+				$render_slug,
+				array(
+					'selector'    => "{$this->main_css_element} .el_gravity_forms_styler_wrapper form .gform_footer",
+					'declaration' => 'display: flex; justify-content: center;',
+				)
+			);
+		}
+		if ( 'right' === $this->props['submit_align'] ) {
+			self::set_style(
+				$render_slug,
+				array(
+					'selector'    => "{$this->main_css_element} .el_gravity_forms_styler_wrapper form .gform_footer",
+					'declaration' => 'display: flex; justify-content: flex-end;',
+				)
+			);
+		}
+
 		/* Success Background Color */
 		$success_colors = et_pb_responsive_options()->get_property_values( $this->props, 'success_bg_color' );
 		et_pb_responsive_options()->generate_responsive_css( $success_colors, $success, 'background-color', $render_slug, ' !important;', 'color' );
+
 		/* Error Background Color */
 		$error_colors = et_pb_responsive_options()->get_property_values( $this->props, 'error_bg_color' );
 		et_pb_responsive_options()->generate_responsive_css( $error_colors, $error, 'background-color', $render_slug, ' !important;', 'color' );

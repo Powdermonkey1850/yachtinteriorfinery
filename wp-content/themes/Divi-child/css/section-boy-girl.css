@@ -1,0 +1,18 @@
+@media (max-width: 980px) {
+  /* CSS rules for screens smaller than 981px */
+
+  .section-boy-girl {
+	  display:block;
+
+  }
+
+  .section-boy-girl > div {
+	width:80%
+  }
+
+  html body   .section-boy-girl h2 {
+        margin-top:46px;
+  }
+
+}
+

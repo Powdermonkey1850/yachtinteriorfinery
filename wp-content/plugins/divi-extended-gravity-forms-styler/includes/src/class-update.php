@@ -65,6 +65,15 @@ if ( ! class_exists( 'El_Gravity_Forms_Styler_Update' ) ) {
 		private $last_checked_option;
 
 		/**
+	     * Plugin Basename.
+	     *
+	     * @since 	 1.0.0
+	     * @access   private
+	     * @var 	 string
+	     */
+		private $plugin_basename;
+
+		/**
 		 * Initialize the class and set its properties.
 		 *
 		 * @since    1.0.0

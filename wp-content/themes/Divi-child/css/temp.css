@@ -1,0 +1,592 @@
+/* Hide the toggle icon but leave in DOM */
+.et_pb_toggle_title .et_pb_toggle_icon {
+    display: none !important; /* keeps DOM for Divi JS */
+}
+
+/* Main menu title — flex centering */
+.vertical-menu-item .et_pb_toggle_title {
+    display: flex !important;
+    justify-content: center !important; /* horizontal centering */
+    align-items: center !important;     /* vertical centering */
+    width: 100%;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    font-size: clamp(12px, 1rem + 1vw, 15px) !important;	
+    font-weight: 600;
+    letter-spacing: 3px !important;
+    text-align: center;
+    cursor: pointer;
+}
+
+/* Accordion content */
+.vertical-menu-item .et_pb_toggle_content {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    padding: 0;
+    text-align: center;
+    font-size: clamp(11px, 1.5vw, 13px) !important;	
+    line-height: 1.3em;
+    letter-spacing: 1px;
+    transition: max-height 0.4s ease, opacity 0.4s ease, padding 0.3s ease;
+}
+
+/* Paragraph spacing inside accordion */
+.vertical-menu-item .et_pb_toggle_content p {
+    margin: 0;
+    padding: 3px 0;
+}
+
+/* Only H4 links inside accordion content */
+.vertical-menu-item .et_pb_toggle_content h4 a {
+    color: #ffffff; /* default colour */
+    transition: color 0.3s ease;
+}
+
+.vertical-menu-item .et_pb_toggle_content h4 a:hover {
+    color: rgba(255, 255, 255, 0.72); /* hover colour with slight transparency */
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@font-face {
+  font-family: "Thursday Morning";
+  src: url("/wp-content/uploads/et-fonts/ThursdayMorningRegular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "script";
+  src: url("/wp-content/uploads/et-fonts/script.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+.testimonial-name {
+  font-family: "Thursday Morning", cursive !important;
+	color: red !important;
+  font-weight: 400 !important;
+  font-size: 50px !important;
+  color: #81697e !important;
+  margin: 0 !important;
+}
+
+.arrow-link {
+  display: block;
+  text-align: center;
+  margin-top: 20px; /* adjust spacing as needed */
+}
+
+.arrow {
+  display: inline-block;
+  width: 20px;
+  cursor: pointer;
+  transition: transform 0.3s ease-in-out;
+  animation: pivot-shake 2.5s ease-in-out 1s; /* runs once after a short delay */
+}
+
+.arrow:hover {
+  transform: scale(1.2);
+}
+
+/* Keyframes for pivot shake */
+@keyframes pivot-shake {
+  0%   { transform: rotate(0deg); }
+  15%  { transform: rotate(-8deg); }
+  30%  { transform: rotate(8deg); }
+  45%  { transform: rotate(-6deg); }
+  60%  { transform: rotate(6deg); }
+  75%  { transform: rotate(-3deg); }
+  100% { transform: rotate(0deg); }
+}
+
+
+
+/* Contain flex inside its own section to avoid affecting Divi’s row/column grid */
+.logo-section {
+  width: 100%;
+  display: block;
+  overflow: hidden; /* isolates the flex layout */
+}
+
+/* Only target the logo layout inside .logo-section */
+.logo-section .logo-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  margin: 40px auto 0; /* neutral margins to avoid Divi conflicts */
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.logo-section .logo-box {
+  flex: 0 1 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.logo-section .logo-box img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+} 
+
+
+
+
+
+/*migrated CSS*/
+
+.fade-slideshow {
+  position: relative;
+  width: 100%;            /* responsive */
+  max-width: 1000px;       /* optional fixed size */
+  aspect-ratio: 1 / 1;    /* keeps a neat proportion */
+  overflow: hidden;
+}
+
+.fade-slideshow img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  animation: fade 16s infinite;
+}
+
+/* Image timing */
+.fade-slideshow img:nth-child(1) { animation-delay: 0s; }
+.fade-slideshow img:nth-child(2) { animation-delay: 4s; }
+.fade-slideshow img:nth-child(3) { animation-delay: 8s; }
+.fade-slideshow img:nth-child(4) { animation-delay: 12s; }
+
+@keyframes fade {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  25%  { opacity: 1; }
+  35%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Column flex container to centre the button */
+.custom-popup-button-column {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+/* Popup Trigger Button - Divi Style */
+.open-popup {
+  background-color: white;
+  color: #6b6b6b;
+  padding: 10px 20px;
+  border: 1px solid #6b6b6b;
+  letter-spacing: 2px;
+  font-family: "Inter", sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.25s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Right-hand arrow */
+.open-popup::after {
+  content: "\1F852";
+  font-size: 10px;
+  margin-left: 8px;
+  display: inline-block;
+  vertical-align: middle;
+  transition: transform 0.25s ease-in-out;
+}
+
+/* Hover effect */
+.open-popup:hover {
+  background-color: #f7f7f7;
+  border-color: #f7f7f7;
+}
+
+.open-popup:hover::after {
+  transform: translateX(4px);
+}
+
+/* Popup overlay */
+.custom-popup {
+  display: none; 
+  position: fixed;
+  z-index: 9999;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0,0,0,0.6);
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* Popup box */
+.custom-popup .popup-content {
+  background: #ffffff;
+  padding: 40px 30px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  position: relative;
+  animation: fadeIn 0.35s ease-in-out;
+  font-family: "Literata", serif;
+}
+
+/* Close button */
+.close-popup {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  font-size: 28px;
+  font-weight: bold;
+  color: #333;
+  cursor: pointer;
+}
+
+/* Headings inside popup */
+.custom-popup h2 {
+  font-size: 24px;
+  margin-bottom: 10px;
+  color: #555;
+  text-align: center;
+  font-family: "Literata", serif;
+}
+
+/* Paragraph inside popup */
+.custom-popup p {
+  font-size: 16px;
+  color: #555;
+  text-align: center;
+  margin-bottom: 25px;
+  font-family: "Inter", sans-serif;
+}
+
+/* Simple fade-in animation */
+@keyframes fadeIn {
+  from {opacity: 0; transform: translateY(-20px);}
+  to {opacity: 1; transform: translateY(0);}
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .custom-popup .popup-content {
+    padding: 30px 20px;
+  }
+  .custom-popup h2 {
+    font-size: 20px;
+  }
+  .custom-popup p {
+    font-size: 14px;
+  }
+}
+
+/* Gravity Form labels */
+body .gform_wrapper .gfield label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  color: #222;
+  margin-bottom: 8px;
+  font-family: "Inter", sans-serif;
+}
+
+/* Gravity Form fields - all types */
+body .gform_wrapper .gfield input,
+body .gform_wrapper .gfield textarea,
+body .gform_wrapper .gfield select {
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  border-bottom: 1px solid #ccc;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none !important;
+  background: transparent;
+  font-family: "Inter", sans-serif;
+  font-size: 14px;
+  transition: border-color 0.25s ease-in-out;
+}
+
+/* Specific fix for phone fields */
+body .gform_wrapper .gfield input[type="tel"] {
+  border: none;
+  border-bottom: 1px solid #ccc;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none !important;
+  background: transparent;
+}
+
+/* Focus underline color */
+body .gform_wrapper .gfield input:focus,
+body .gform_wrapper .gfield textarea:focus,
+body .gform_wrapper .gfield select:focus {
+  border-bottom: 1px solid #6b6b6b;
+}
+
+/* Remove Chrome autofill yellow */
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  box-shadow: 0 0 0px 1000px white inset !important;
+  -webkit-box-shadow: 0 0 0px 1000px white inset !important;
+  -webkit-text-fill-color: #222 !important;
+}
+
+/* Gravity Form submit button */
+body .gform_wrapper .gform_footer input[type="submit"] {
+  font-family: "Inter", sans-serif; !important;
+  font-weight: 700;
+  font-size: 14px;
+  color: #000; !important;
+  background-color: transparent;
+  border: 1px solid #000;
+  padding: 10px 25px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.25s ease-in-out;
+}
+
+/* Hover effect for submit */
+body .gform_wrapper .gform_footer input[type="submit"]:hover {
+  background-color: #f7f7f7;
+  border-color: #000;
+}
+
+
+
+
+/* =====================================================
+   CUSTOM HEADER & MENU STYLING
+   Applies only to rows with .custom-header-row
+   ===================================================== */
+
+/* ===== Header layout (vertical centring) ===== */
+.custom-header-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;  /* vertical centring */
+  align-items: center;      /* horizontal centring */
+  text-align: center;
+  min-height: 60vh;         /* optional, adjust if you want taller header */
+  margin: auto;
+}
+
+/* ===== H1 styling ===== */
+.custom-header-row h1 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  line-height: 0.3;
+  margin: 0;
+  text-align: center;
+}
+
+/* Top line – YIF */
+.custom-header-row h1 .yif {
+  display: block;
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: clamp(20px, 2vw, 25px);
+  letter-spacing: clamp(10px, 1.5vw, 15px);
+	  line-height: 1.7;
+}
+
+/* Second line – page title */
+.custom-header-row h1 .title {
+  display: block;
+  font-weight: 400;
+  text-transform: none;
+  font-size: clamp(32px, 5vw, 60px);
+  letter-spacing: clamp(15px, 2vw, 20px);
+  margin-top: 0;
+	margin-bottom: 25px;
+}
+
+/* H2 styling */
+.custom-header-row h2 {
+  font-family: 'Literata', serif;
+  font-weight: 400;
+  font-size: clamp(15px, 1.5vw, 18px);
+  line-height: 1.6;
+  margin-top: 1em;
+  margin-bottom: 30px;
+  text-align: center;
+  
+}
+
+.custom-header-row h2 {
+/*	padding-inline: clamp(10%, 1.5vw, 50%); */
+}
+
+
+/* =====================================================
+   MENU BEHAVIOUR: Keep full text menu visible at all sizes
+   ===================================================== */
+
+/* Always show desktop menu, even below Divi's breakpoint */
+@media (max-width: 980px) {
+  .et_mobile_nav_menu {
+    display: none !important; /* hide hamburger */
+  }
+
+  #et-top-navigation {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100%;
+    text-align: center;
+	
+  }
+
+  #et-top-navigation ul#top-menu {
+    display: flex !important;
+    flex-wrap: wrap; /* allow wrapping onto multiple lines */
+    justify-content: center;
+    gap: 1.2rem; /* spacing between links */
+    padding: 0;
+	  margin: 10;
+  }
+
+  #et-top-navigation ul#top-menu li {
+    display: inline-block !important;
+    float: none !important;
+  }
+
+  #et-top-navigation ul#top-menu li a {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 500;
+    font-size: 16px;
+    letter-spacing: 1px;
+    padding: 5px 8px;
+  }
+}
+
+/* Optional: fine-tune on very small screens */
+@media (max-width: 480px) {
+  #et-top-navigation ul#top-menu {
+    gap: 0.2rem;
+  }
+
+  #et-top-navigation ul#top-menu li a {
+    font-size: 15px;
+    letter-spacing: 0.5px;
+  }
+}
+/* ---- KEEP DESKTOP MENU ON TABLET & MOBILE ---- */
+@media (max-width: 980px) {
+  .et_pb_menu__wrap,
+  .et_pb_menu__menu {
+    display: flex !important;
+  }
+
+  .et_mobile_nav_menu {
+    display: none !important; /* hides the hamburger */
+  }
+}
+
+/* ---- ALLOW MENU ITEMS TO WRAP ON MULTIPLE LINES ---- */
+.et_pb_menu__menu nav ul {
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  text-align: center;
+  padding: 0 20px; /* adds spacing either side */
+}
+
+/* ---- STYLE MENU LINKS ---- */
+.et_pb_menu__menu nav ul li a {
+  font-size: clamp(13px, 1.1vw, 14px); /* scales smoothly between 13–14px */
+  line-height: 1em; /* roughly 2px spacing between lines visually */
+  letter-spacing: 1px;
+}
+
+/* ---- SLIGHTLY SMALLER TEXT ON TABLET/MOBILE ---- */
+@media (max-width: 980px) {
+  .et_pb_menu__menu nav ul li a {
+    font-size: 13px !important;
+    letter-spacing: 1px;
+  }
+
+  .et_pb_menu__menu nav ul {
+    padding: 0 15px; /* more breathing room at smaller sizes */
+  }
+}
+
+/* ---- CENTRE ALL CONTENT VERTICALLY IN ROW ---- */
+.et_pb_row.align-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.et_pb_menu__wrap {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100%;
+}
+
+.et_pb_menu__menu nav {
+  display: flex !important;
+  justify-content: center !important;
+  width: 100%;
+
+}
+
+.et_pb_menu__menu nav ul {
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  text-align: center;
+  gap: 0.1rem !important;
+
+}
+
+@media (max-width: 980px) {
+  .custom-header-row {
+    justify-content: flex-end; /* pushes content to bottom */
+    margin: 0;                /* removes auto vertical centring */
+    padding-bottom: 150px;     /* adds 30px breathing room */
+  }
+}
