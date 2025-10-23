@@ -12,3 +12,7 @@ wp-content/plugins/divi-extended-gravity-forms-styler/*
 # wp-content/plugins/*
 !wp-content/plugins/your-custom-plugin-folder/
 
+# ddev
+.ddev
+wp-config-ddev.php
+
