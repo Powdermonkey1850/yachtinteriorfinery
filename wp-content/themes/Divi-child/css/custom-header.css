@@ -4,7 +4,12 @@ html body .custom-header-row {
 		max-width:100%;
 	}
 
-	h2 {
+	h1 {
+		text-transform:uppercase;
+		line-height:normal;
+	}
+
+	h2, p {
 		max-width:800px;
 		padding:0px 20px 0px 20px;
 		font-size: clamp(14px, 1.5vw, 18px);
@@ -13,10 +18,17 @@ html body .custom-header-row {
 	.header-sub-title .et_pb_text_inner {
 		display:flex;
 		justify-content: center;
+		padding-bottom:50px;
 	}
 }
 
 @media only screen and (max-width: 767px) {
-    html body .et_pb_text_1 h2 {
-        font-size: 14px;
-    }
+	html body .et_pb_text_1 h2 {
+		font-size: 14px;
+	}
+	.y-logo {
+		padding-top:15px;
+	}
+
+
+}

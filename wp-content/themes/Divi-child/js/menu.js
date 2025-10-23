@@ -52,3 +52,15 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 });
+
+
+
+
+
+
+jQuery(function($){
+$('#slide-in-open').click(function(){
+$(this).toggleClass('open');
+$('.slide-in-menu-container').toggleClass('slide-in-menu');
+});
+});
