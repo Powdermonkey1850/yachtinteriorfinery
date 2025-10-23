@@ -3,3 +3,12 @@
 # Ignore WordPress debug log
 wp-content/debug.log
 wp-config.php
+
+wp-content/languages/*
+wp-content/plugins/gravityforms/*
+wp-content/plugins/divi-extended-gravity-forms-styler/*
+
+# Ignore all plugins except custom
+# wp-content/plugins/*
+!wp-content/plugins/your-custom-plugin-folder/
+
