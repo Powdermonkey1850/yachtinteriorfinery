@@ -383,17 +383,6 @@ div.top-toggle-content-link {
 
 
 
-@media (max-width: 980px) {
-  .custom-header-row {
-    border: 1px solid red;
-    justify-content: normal;
-    margin: 0;
-    /* removes auto vertical centring */
-    padding-bottom: 150px;
-    /* adds 30px breathing room */
-    padding-top: 150px;
-  }
-}
 
 
 /* ---- SLIGHTLY SMALLER TEXT ON TABLET/MOBILE ---- */
