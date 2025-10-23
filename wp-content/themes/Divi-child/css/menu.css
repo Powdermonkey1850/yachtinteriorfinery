@@ -284,16 +284,17 @@ div.top-toggle-content-link {
   text-transform: uppercase;
   font-size: clamp(20px, 2vw, 25px);
   letter-spacing: clamp(10px, 1.5vw, 15px);
-  line-height: 4;
+  line-height: 2.5;
 }
 
 /* Second line – page title */
 .custom-header-row h1 .title {
   display: block;
   font-weight: 400;
-  font-size: clamp(32px, 5vw, 60px);
-  letter-spacing: clamp(15px, 2vw, 20px);
+  font-size: clamp(32px, 5vw, 50px);
+  letter-spacing: clamp(8px, 2vw, 15px);
   margin-top: 0;
+  line-height:1.2;
 }
 
 /* H2 styling */
