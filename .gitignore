@@ -16,3 +16,4 @@ wp-content/plugins/divi-extended-gravity-forms-styler/*
 .ddev
 wp-config-ddev.php
 
+wp-content/et-cache/
