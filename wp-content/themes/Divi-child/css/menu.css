@@ -1,4 +1,48 @@
 /* ===== Top-level toggle ===== */
+
+.int-des .top-level-menu-link a {
+ font-family: 'Opensans', Arial, sans-serif;
+ font-weight:400;
+ font-size:13px;
+ text-transform:none;;
+ letter-spacing:1px;
+ color:#84667c;
+}
+
+.int-des .top-level-menu-link a:hover {
+color:#fff;
+}
+
+div.poppins a {
+font-family:"Poppins", Helvetica, Arial, Lucida, sans-serif !important;
+letter-spacing:1px;
+}
+
+.slide-in-menu-container .top-level-title-link a {
+font-size:16px;
+font-family:"Poppins", Helvetica, Arial, Lucida, sans-serif;
+color:#fff;
+font-weight:400;
+letter-spacing:2px;
+width:100%;
+transition:opacity 0.3s;
+
+}
+
+.slide-in-menu-container .top-level-title-link a:hover {
+opacity:0.72;
+}
+
+.slide-in-menu-container .top-level-title-link {
+text-align:center;
+padding:10px 0;
+}
+
+.slide-in-menu-container .et_pb_column_1_tb_header {
+padding-top:190px;
+}
+
+
 .top-toggle {
   text-align: center;
   margin-bottom: 8px;
@@ -215,8 +259,6 @@ div.top-toggle-content-link {
   width: 120px;
   /* keep your custom size */
   height: 170px;
-
-
   background: rgba(106, 80, 103, 0.85);
   background: rgba(182, 162, 180, 0.9);
 
@@ -278,7 +320,8 @@ div.top-toggle-content-link {
 }
 
 /* Top line – YIF */
-.custom-header-row h1 .yif {
+.custom-header-row h1 .yif,
+span.yif {
   display: block;
   font-weight: 500;
   text-transform: uppercase;
@@ -303,8 +346,6 @@ div.top-toggle-content-link {
   font-weight: 400;
   font-size: clamp(15px, 1.5vw, 18px);
   line-height: 1.6;
-  margin-top: 1em;
-  margin-bottom: 30px;
   text-align: center;
 
 }
@@ -410,6 +451,17 @@ div.top-toggle-content-link {
     display: none !important;
     /* hide hamburger */
   }
+
+
+.slide-in-menu-container .et_pb_column_1_tb_header {
+padding-top:100px;
+}
+
+
+.my-header-row .colour-block {
+	height:160px;
+}
+
 
   #et-top-navigation {
     display: flex !important;

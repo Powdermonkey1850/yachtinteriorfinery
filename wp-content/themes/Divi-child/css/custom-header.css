@@ -9,18 +9,23 @@ html body .custom-header-row {
 		line-height: normal;
 	}
 
-	h2,
+
 	p,
 	p:not(.has-background):last-of-type {
 		max-width: 800px;
 		padding: 20px 20px 20px 20px;
-		font-size: clamp(14px, 1.5vw, 18px);
+		font-size: clamp(14px, 1.5vw, 16px);
 	}
 
 	.header-sub-title .et_pb_text_inner {
 		display: flex;
 		justify-content: center;
 		padding-bottom: 25px;
+	}
+
+
+	.section-header-title p.script-title {
+		font-size:27px;
 	}
 }
 

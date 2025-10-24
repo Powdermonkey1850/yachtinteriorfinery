@@ -108,6 +108,16 @@
 
 }
 
+
+.section-header-title h2 {
+	letter-spacing:1px;
+	text-transform:uppercase;
+	font-family:"Poppins";
+	font-weight:400;
+}
+
+
+
 /* Multiply overlay */
 .section-header-title::before {
 	content: "";
@@ -129,7 +139,7 @@
 .section-header-title h1 {
 	font-family: 'Poppins', sans-serif;
 	font-weight: 500;
-	font-size: 60px;
+	font-size: clamp(40px, 5vw, 60px);
 	letter-spacing: 11px;
 	text-transform: uppercase;
 	margin: 0 0 20px 0;
@@ -138,15 +148,23 @@
 
 /* H2 paragraph styling */
 .section-header-title h2 {
-	font-family: 'Literata', serif;
+	font-family: "Poppins";;
 	font-weight: 400;
-	font-size: 16px;
+	font-size: 18px;
 	line-height: 1.8em;
 	max-width: 700px;
-	margin: 0 0 30px 0;
 	color: #fff;
-	margin: 0 0 40px 0;
+	/*	margin: 0 0 40px 0;   removed to make explore p[ages work */
+	letter-spacing:4px;
+	text-transform:uppercase;
 }
+
+.section-header-title span.section-header-subtitle {
+	font-size:13px;
+	letter-spacing:4px;
+	line-height:1;
+}
+
 
 /* Script title styling */
 .section-header-title .script-title {
@@ -156,61 +174,69 @@
 	color: #fff;
 }
 
+
+.section-header-title p {
+font-family:'Literata';
+font-size:15px;;
+line-height:1.7;
+}
+
 @media (max-width: 1400px) {
 
 	html body .explore-row-header>div {
-	border:1px solid red;
 	}
 
-  html body .explore-row-header {
-    display: flex;
-    flex-wrap: wrap; /* Helps columns stack nicely if needed */
+	html body .explore-row-header {
+		display: flex;
+		flex-wrap: wrap; /* Helps columns stack nicely if needed */
 
-    /* Column 1 */
-    > .et_pb_column:nth-child(1) {
-      flex: 0 0 15%;
-    }
+		/* Column 1 */
+		> .et_pb_column:nth-child(1) {
+			flex: 0 0 15%;
+		}
 
-    /* Column 2 */
-    > .et_pb_column:nth-child(2) {
-      flex: 0 0 70%;
-    }
+		/* Column 2 */
+		> .et_pb_column:nth-child(2) {
+			flex: 0 0 70%;
+		}
 
-    /* Column 3 */
-    > .et_pb_column:nth-child(3) {
-      flex: 0 0 15%;
-    }
-  }
+		/* Column 3 */
+		> .et_pb_column:nth-child(3) {
+			flex: 0 0 15%;
+		}
+	}
 }
 
 
 
 @media (max-width: 980px) {
-  html body .explore-row-header {
-    display: flex;
-    flex-wrap: wrap;
-    height: 100%; /* ensure the row itself can define height context */
-  }
+	html body .explore-row-header {
+		display: flex;
+		flex-wrap: wrap;
+		height: 100%; /* ensure the row itself can define height context */
+	}
 
-  /* Hide side columns */
-  html body .explore-row-header {
-    > .et_pb_column:nth-child(1),
-    > .et_pb_column:nth-child(3) {
-      display: none !important;
-    }
+	/* Hide side columns */
+	html body .explore-row-header {
+		> .et_pb_column:nth-child(1),
+		> .et_pb_column:nth-child(3) {
+			display: none !important;
+		}
 
-    /* Middle column full width + full height */
-    > .et_pb_column:nth-child(2) {
-      flex: 0 0 100%;
-      max-width: 100%;
-      height: 100%;
-      display: flex;          /* ensures inner content stretches too */
-      flex-direction: column; /* keeps inner stacking consistent */
-    }
+		/* Middle column full width + full height */
+		> .et_pb_column:nth-child(2) {
+			flex: 0 0 100%;
+			max-width: 100%;
+			height: 100%;
+			display: flex;          /* ensures inner content stretches too */
+			flex-direction: column; /* keeps inner stacking consistent */
+		}
 
-    .section-header-title {
-	padding-top:150px;
-    }
-  }
+		.section-header-title {
+			padding-top:170px;
+			padding-left:15px;
+			padding-right:15px;
+		}
+	}
 
 }
