@@ -48,12 +48,11 @@
 
 
 html body .logo-gallery .et_post_gallery {
-  border: 1px solid red;
   padding-left: 10% !important;
   padding-right: 10% !important;
   display: flex;
   flex-wrap: wrap;
-  gap: 3%;
+  gap: 4%;
   justify-content: center;
 }
 
