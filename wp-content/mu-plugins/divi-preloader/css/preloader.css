@@ -1,0 +1,40 @@
+/* =========================
+   Divi Preloader Styling
+   ========================= */
+
+#page-preloader {
+  position: fixed;
+  z-index: 99999;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #ffffff; /* match your site’s background */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 1s ease, visibility 1s ease;
+}
+
+/* Spinner */
+#page-preloader .spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #cccccc;
+  border-top-color: #007aff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Fade out when loaded */
+body.loaded #page-preloader {
+  opacity: 0;
+  visibility: hidden;
+}
+

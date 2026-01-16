@@ -57,7 +57,7 @@ function yif_enqueue_custom_assets() {
   wp_enqueue_style('custom-header', $theme_uri . '/css/custom-header.css', array(), $version);
   wp_enqueue_style('explore-section-pages', $theme_uri . '/css/explore-section-pages.css', array(), $version);
   wp_enqueue_style('logo-gallery', $theme_uri . '/css/logo-gallery.css', array(), $version);
-
+wp_enqueue_style('exterior', $theme_uri . '/css/exterior.css', array(), $version);
 
 
 

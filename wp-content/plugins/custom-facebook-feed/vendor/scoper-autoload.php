@@ -29,10 +29,10 @@ if (!function_exists('humbug_phpscoper_expose_class')) {
         }
     }
 }
-humbug_phpscoper_expose_class('ComposerAutoloaderInitdb613e9b29976c646f6cbc4ae6642d38', 'FacebookFeed\Vendor\ComposerAutoloaderInitdb613e9b29976c646f6cbc4ae6642d38');
+humbug_phpscoper_expose_class('ComposerAutoloaderInit40ad8b28a0d7e9077513d432cf22f105', 'FacebookFeed\Vendor\ComposerAutoloaderInit40ad8b28a0d7e9077513d432cf22f105');
 
 // Function aliases. For more information see:
 // https://github.com/humbug/php-scoper/blob/master/docs/further-reading.md#function-aliases
-if (!function_exists('composerRequiredb613e9b29976c646f6cbc4ae6642d38')) { function composerRequiredb613e9b29976c646f6cbc4ae6642d38() { return \FacebookFeed\Vendor\composerRequiredb613e9b29976c646f6cbc4ae6642d38(...func_get_args()); } }
+if (!function_exists('composerRequire40ad8b28a0d7e9077513d432cf22f105')) { function composerRequire40ad8b28a0d7e9077513d432cf22f105() { return \FacebookFeed\Vendor\composerRequire40ad8b28a0d7e9077513d432cf22f105(...func_get_args()); } }
 
 return $loader;

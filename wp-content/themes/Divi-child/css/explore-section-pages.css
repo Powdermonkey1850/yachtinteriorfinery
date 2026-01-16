@@ -118,15 +118,20 @@
 
 
 
+.explore-overlay {
+/* background-color:rgba(0,0,0,0.7); */
+}
+
+
 /* Multiply overlay */
 .section-header-title::before {
-	content: "";
+/*	content: "";
 	position: absolute;
 	inset: 0;
 	background-color: #82657c;
 	opacity: 0.7;
 	mix-blend-mode: multiply;
-	z-index: 0;
+	z-index: 0; */
 }
 
 /* Keep text above overlay */
@@ -139,7 +144,7 @@
 .section-header-title h1 {
 	font-family: 'Poppins', sans-serif;
 	font-weight: 500;
-	font-size: clamp(40px, 5vw, 60px);
+	font-size: clamp(40px, 5vw, 45px);
 	letter-spacing: 11px;
 	text-transform: uppercase;
 	margin: 0 0 20px 0;

@@ -59,3 +59,7 @@ html body .logo-gallery .et_post_gallery {
 html body .logo-gallery .et_post_gallery>div {
   flex: 0 0 18%;
 }
+
+html body .logo-gallery.logo-gallery-landscape .et_post_gallery>div {
+  flex: 0 0 8%;
+}
