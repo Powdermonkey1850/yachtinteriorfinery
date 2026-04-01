@@ -2,13 +2,13 @@
 Contributors: WPbeginner, smub, gripgrip, wpcodeteam
 Tags: consent, cookie, cookie notice, cookie consent, gdpr
 Requires at least: 5.6
-Tested up to: 6.8
+Tested up to: 6.9
 Requires PHP: 7.0
-Stable tag: 1.1.0
+Stable tag: 1.1.4
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
-Improve WordPress privacy compliance. Custom GDPR / CCPA cookie consent banner, full site cookie scanner, automatic script blocking, & easy cookie policy setup.
+Improve WordPress privacy compliance. Custom GDPR / CCPA cookie consent banner, full site cookie scanner, automatic script blocking and cookie policy
 
 == Description ==
 
@@ -23,7 +23,7 @@ With the automatic script blocking feature, WPConsent will detect and block comm
 All cookie consent data is self-hosted on your website like it should be, making WPConsent the most privacy conscious solution.
 
 > <strong>WPConsent Pro</strong><br />
-> This plugin is the Lite version of WPConsent Pro, which comes with geolocation options, modal layout, records of consent, multilanguage and more plugins automatically detected. [Click here to purchase the best premium WordPress consent plugin now!](https://wpconsent.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteplugin)
+> This plugin is the Lite version of WPConsent Pro, which comes with geolocation options, records of consent, multilanguage, IAB TCF v2.2 integration, and more plugins automatically detected. [Click here to purchase the best premium WordPress consent plugin now!](https://wpconsent.com/?utm_source=wprepo&utm_medium=link&utm_campaign=liteplugin)
 
 https://www.youtube.com/watch?v=7fcP9QO8bKQ&rel=0
 
@@ -135,6 +135,30 @@ After activating the WPConsent plugin, you can scan your website for cookies by 
 
 
 == Changelog ==
+
+= 1.1.4 =
+* New: Added compatibility with Avada Live Builder to prevent script blocking in the editor.
+* Tweak: Improved the way banner styles are loaded for better compatibility with different site configurations.
+
+= 1.1.3.1 =
+* Fix: Admin page footer was overlapping content in some browsers.
+* Fix: Removed trailing commas in function calls for improved PHP compatibility.
+
+= 1.1.3 =
+* New: We added an easier way to open the Settings/Preferences panel using the .wpconsent-open-preferences on any link/button on the page.
+* New: When Global Privacy Control (GPC) is used to set consent preferences automatically, a message is displayed to comply with updates to CCPA regulations.
+* Tweak: Cookie policy page table headers are now translatable from the admin using the values of the preferences panel headers.
+* Tweak: We improved the accessibility of our banner.
+
+= 1.1.2 =
+* Tweak: We adjusted our Google Consent Mode v2 implementation for better default consent handling.
+* Tweak: We added an extra check in our script blocking functionality to avoid conflicts with other plugins that use output buffering in WP 6.9.
+* Fix: Empty categories are no longer displayed in the preferences panel.
+
+= 1.1.1 =
+* New: We added a new Tools page to the admin to streamline the admin pages for more clarity.
+* Tweak: Improved accessibility of the preferences panel.
+* Fix: We fixed an issue with the subdomain cookie sharing TLDs with two parts.
 
 = 1.1.0 =
 * New: We added a custom event for Google Tag Manager to give more control over when GTM tags are loaded based on consent.

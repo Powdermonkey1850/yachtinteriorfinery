@@ -1,4 +1,18 @@
+
+html body .exterior-hero-row-1.custom-header-row  {
+        padding:0px !important;
+}
+
+
+
+.exterior-hero-row-1.custom-header-row > div {
+flex-direction:column;
+}
+
+
+
 .exterior-hero-row-1  {
+	padding:0px !important;
 	a {
 		font-size:50px;
 		color:white;

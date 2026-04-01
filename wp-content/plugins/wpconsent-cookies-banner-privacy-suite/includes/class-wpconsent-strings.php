@@ -35,6 +35,8 @@ class WPConsent_Strings {
 			'save_preferences_button_text'      => __( 'Save and Close', 'wpconsent-cookies-banner-privacy-suite' ),
 			'close_button_text'                 => __( 'Close', 'wpconsent-cookies-banner-privacy-suite' ),
 			'content_blocking_placeholder_text' => __( 'Click here to accept {category} cookies and load this content', 'wpconsent-cookies-banner-privacy-suite' ),
+			'gpc_toast_message'                 => __( 'GPC Signal Honored', 'wpconsent-cookies-banner-privacy-suite' ),
+			'gpc_override_message'              => __( 'I understand GPC will be overwritten and want to allow this site to sell or share my personal information anyway', 'wpconsent-cookies-banner-privacy-suite' ),
 			'cookie_table_header_name'          => __( 'Name', 'wpconsent-cookies-banner-privacy-suite' ),
 			'cookie_table_header_description'   => __( 'Description', 'wpconsent-cookies-banner-privacy-suite' ),
 			'cookie_table_header_duration'      => __( 'Duration', 'wpconsent-cookies-banner-privacy-suite' ),

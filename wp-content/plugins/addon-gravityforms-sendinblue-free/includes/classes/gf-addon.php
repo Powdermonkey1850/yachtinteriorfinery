@@ -242,8 +242,8 @@ class GF_Addon extends GFFeedAddOn
 			
 			Options\update_plugin_option('sib_api_error', [
 				'code' => $result->get_error_code(),
-				/* translators: 1: Error message details, 2: Error code */
 				'message' => sprintf(
+					/* translators: 1: Error message details, 2: Error code */
 					__('The Brevo API returned an error: %1$s (Code: %2$s)', 'addon-gravityforms-sendinblue-free'),
 					esc_html($message_details),
 					esc_html($result->get_error_code())

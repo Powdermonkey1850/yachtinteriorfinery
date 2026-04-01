@@ -2,13 +2,13 @@
 /**
  * Plugin Name: WPConsent
  * Description: Improve your WordPress website privacy compliance. Custom cookie banner, website scanner, automatic script blocking, and easy cookie configuration.
- * Version:     1.1.0
+ * Version:     1.1.4
  * Author:      WPConsent
  * Author URI:  https://wpconsent.com
  * License:     GPL v2 or later
  * Requires at least: 5.6
  * Requires PHP: 7.0
- * Tested up to: 6.8
+ * Tested up to: 6.9
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wpconsent-cookies-banner-privacy-suite
  * Domain Path: /languages
@@ -311,6 +311,7 @@ class WPConsent {
 		require_once WPCONSENT_PLUGIN_PATH . 'includes/frontend-scripts.php';
 		require_once WPCONSENT_PLUGIN_PATH . 'includes/class-wpconsent-script-blocker.php';
 		require_once WPCONSENT_PLUGIN_PATH . 'includes/cookie-policy-shortcode.php';
+		require_once WPCONSENT_PLUGIN_PATH . 'includes/preferences-button-shortcode.php';
 		require_once WPCONSENT_PLUGIN_PATH . 'includes/helpers.php';
 
 		require_once WPCONSENT_PLUGIN_PATH . 'includes/lite/loader.php';
@@ -325,7 +326,7 @@ class WPConsent {
 	 */
 	public function load_components() {
 		if ( is_admin() || wp_doing_ajax() || defined( 'DOING_CRON' ) && DOING_CRON ) {
-			$this->admin_page_loader   = new WPConsent_Admin_Page_Loader();
+			$this->admin_page_loader   = new WPConsent_Admin_Page_Loader_Lite();
 			$this->services            = WPConsent_Services::get_instance();
 			$this->scanner             = WPConsent_Scanner::get_instance();
 			$this->notice              = new WPConsent_Notice();
@@ -334,6 +335,7 @@ class WPConsent {
 
 			// Load the reminders.
 			new WPConsent_Reminders();
+			new WPConsent_Usage_Tracking_Lite();
 		}
 		$this->file_cache = new WPConsent_File_Cache();
 		$this->strings    = new WPConsent_Strings();

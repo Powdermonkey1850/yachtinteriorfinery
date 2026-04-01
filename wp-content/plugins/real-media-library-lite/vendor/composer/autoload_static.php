@@ -13,7 +13,7 @@ class ComposerStaticInit9c45d73de7f1c22d3e50a90ec1d683c3
     );
 
     public static $prefixLengthsPsr4 = array (
-        'M' => 
+        'M' =>
         array (
             'MatthiasWeb\\RealMediaLibrary\\Vendor\\MatthiasWeb\\Utils\\' => 54,
             'MatthiasWeb\\RealMediaLibrary\\Vendor\\DevOwl\\RealUtils\\' => 53,
@@ -25,27 +25,27 @@ class ComposerStaticInit9c45d73de7f1c22d3e50a90ec1d683c3
     );
 
     public static $prefixDirsPsr4 = array (
-        'MatthiasWeb\\RealMediaLibrary\\Vendor\\MatthiasWeb\\Utils\\' => 
+        'MatthiasWeb\\RealMediaLibrary\\Vendor\\MatthiasWeb\\Utils\\' =>
         array (
             0 => __DIR__ . '/..' . '/devowl-wp/utils/src',
         ),
-        'MatthiasWeb\\RealMediaLibrary\\Vendor\\DevOwl\\RealUtils\\' => 
+        'MatthiasWeb\\RealMediaLibrary\\Vendor\\DevOwl\\RealUtils\\' =>
         array (
             0 => __DIR__ . '/..' . '/devowl-wp/real-utils/src',
         ),
-        'MatthiasWeb\\RealMediaLibrary\\Vendor\\DevOwl\\RealProductManagerWpClient\\' => 
+        'MatthiasWeb\\RealMediaLibrary\\Vendor\\DevOwl\\RealProductManagerWpClient\\' =>
         array (
             0 => __DIR__ . '/..' . '/devowl-wp/real-product-manager-wp-client/src',
         ),
-        'MatthiasWeb\\RealMediaLibrary\\Vendor\\DevOwl\\Freemium\\' => 
+        'MatthiasWeb\\RealMediaLibrary\\Vendor\\DevOwl\\Freemium\\' =>
         array (
             0 => __DIR__ . '/..' . '/devowl-wp/freemium/src',
         ),
-        'MatthiasWeb\\RealMediaLibrary\\Vendor\\ColinODell\\Json5\\' => 
+        'MatthiasWeb\\RealMediaLibrary\\Vendor\\ColinODell\\Json5\\' =>
         array (
             0 => __DIR__ . '/..' . '/colinodell/json5/src',
         ),
-        'MatthiasWeb\\RealMediaLibrary\\' => 
+        'MatthiasWeb\\RealMediaLibrary\\' =>
         array (
             0 => __DIR__ . '/../..' . '/inc',
             1 => __DIR__ . '/../..' . '/src/inc',

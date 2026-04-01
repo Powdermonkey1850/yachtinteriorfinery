@@ -1,0 +1,14 @@
+
+#testimonials.testi-row {
+	min-height:700px;
+	height:auto;
+}
+
+#testimonials.testi-row .et_pb_column {
+	display:flex;
+}
+
+#testimonials.testi-row .et_pb_column .et_pb_code  {
+	display:flex;
+	justify-content:center;
+}

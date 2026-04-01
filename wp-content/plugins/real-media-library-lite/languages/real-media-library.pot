@@ -1,4 +1,4 @@
-# Copyright (C) 2025 devowl.io
+# Copyright (C) 2026 devowl.io
 # This file is distributed under the same license as the Real Media Library plugin.
 msgid ""
 msgstr ""
@@ -234,11 +234,11 @@ msgid "PolyLang: Automatically move translations"
 msgstr ""
 
 #: inc/comp/PolyLang.php:76
-#: inc/comp/WPML.php:332
+#: inc/comp/WPML.php:330
 msgid "If you move a file, the corresponding translated file will also be moved."
 msgstr ""
 
-#: inc/comp/WPML.php:315
+#: inc/comp/WPML.php:313
 msgid "WPML: Automatically move translations"
 msgstr ""
 

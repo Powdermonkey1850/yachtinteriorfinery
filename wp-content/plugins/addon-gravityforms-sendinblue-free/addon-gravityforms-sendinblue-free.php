@@ -7,7 +7,7 @@
  * Author URI: https://wpconnect.co/
  * Text Domain: addon-gravityforms-sendinblue-free
  * Domain Path: /languages/
- * Version: 2.5.0
+ * Version: 2.6.0
  */
 
 namespace DK_GF_SIB_FREE;
@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Define plugin constants
  */
-define( 'DKGFSIB_FREE_VERSION', '2.5.0' );
+define( 'DKGFSIB_FREE_VERSION', '2.6.0' );
 define( 'DKGFSIB_FREE_URL', plugin_dir_url( __FILE__ ) );
 define( 'DKGFSIB_FREE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'DKGFSIB_FREE_PLUGIN_DIRNAME', basename( rtrim( dirname( __FILE__ ), '/' ) ) );

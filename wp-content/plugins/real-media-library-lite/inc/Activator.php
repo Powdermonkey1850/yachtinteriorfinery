@@ -59,7 +59,7 @@ class Activator
         $max_index_length = $this->getMaxIndexLength();
         // wp_realmedialibrary
         $table_name = $this->getTableName();
-        $sql = "CREATE TABLE {$table_name} (\n            id mediumint(9) NOT NULL AUTO_INCREMENT,\n            parent mediumint(9) DEFAULT '-1' NOT NULL,\n            name tinytext NOT NULL,\n            slug text DEFAULT '' NOT NULL,\n            absolute text DEFAULT '' NOT NULL,\n            owner bigint(20) NOT NULL,\n            ord mediumint(10) DEFAULT 0 NOT NULL,\n            oldCustomOrder mediumint(10) DEFAULT NULL,\n            contentCustomOrder tinyint(1) DEFAULT 0 NOT NULL,\n            type varchar(10) DEFAULT '0' NOT NULL,\n            restrictions varchar(255) DEFAULT '' NOT NULL,\n            cnt mediumint(10) DEFAULT NULL,\n            importId bigint(20) DEFAULT NULL,\n            PRIMARY KEY  (id)\n        ) {$charset_collate};";
+        $sql = "CREATE TABLE {$table_name} (\n            id mediumint(9) NOT NULL AUTO_INCREMENT,\n            parent mediumint(9) DEFAULT '-1' NOT NULL,\n            name tinytext NOT NULL,\n            slug text NOT NULL,\n            absolute text NOT NULL,\n            owner bigint(20) NOT NULL,\n            ord mediumint(10) DEFAULT 0 NOT NULL,\n            oldCustomOrder mediumint(10) DEFAULT NULL,\n            contentCustomOrder tinyint(1) DEFAULT 0 NOT NULL,\n            type varchar(10) DEFAULT '0' NOT NULL,\n            restrictions varchar(255) DEFAULT '' NOT NULL,\n            cnt mediumint(10) DEFAULT NULL,\n            importId bigint(20) DEFAULT NULL,\n            PRIMARY KEY  (id)\n        ) {$charset_collate};";
         \dbDelta($sql);
         if ($errorlevel) {
             $wpdb->print_error();
@@ -179,6 +179,6 @@ class Activator
     public function checkDirtyFunction($function_name)
     {
         global $wpdb;
-        return $wpdb->get_var($wpdb->prepare('SHOW FUNCTION STATUS LIKE %s', $function_name), 1) === $function_name;
+        return $wpdb->get_var($wpdb->prepare('SHOW FUNCTION STATUS WHERE Name = %s AND Db = %s', $function_name, $wpdb->dbname), 1) === $function_name;
     }
 }

@@ -1,5 +1,8 @@
 <?php
 
+// phpcs:disable WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL, Generic.Metrics.CyclomaticComplexity, WordPress.Security.EscapeOutput.OutputNotEscaped
+// Note: Legacy file with complex feed saving logic. Direct DB queries and JSON output required for AJAX handlers.
+
 /**
  * Reviews Feed Saver Manager
  *
@@ -7,6 +10,10 @@
  */
 
 namespace SmashBalloon\Reviews\Common\Builder;
+
+if (! defined('ABSPATH')) {
+	exit;
+}
 
 use SmashBalloon\Reviews\Common\BusinessDataCache;
 use SmashBalloon\Reviews\Common\Customizer\DB;
@@ -20,6 +27,8 @@ use SmashBalloon\Reviews\Common\Traits\SBR_Feed_Templates_Settings;
 use SmashBalloon\Reviews\Common\Util;
 use SmashBalloon\Reviews\Common\FeedCache;
 use SmashBalloon\Reviews\Common\Helpers\Data_Encryption;
+use SmashBalloon\Reviews\Pro\Services\BulkUpdate\Bulk_External_Reviews_Update;
+use SmashBalloon\Reviews\Pro\Services\BulkUpdate\Bulk_WooCommerce_Reviews_Update;
 
 class SBR_Feed_Saver_Manager
 {
@@ -43,6 +52,7 @@ class SBR_Feed_Saver_Manager
 		add_action('wp_ajax_sbr_feed_saver_manager_add_facebook_souce', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_facebook_souce'));
 		add_action('wp_ajax_sbr_feed_saver_manager_connect_manual_facebook', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_manual_facebook_souce'));
 		add_action('wp_ajax_sbr_feed_saver_manager_delete_source', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'delete_souce'));
+		add_action('wp_ajax_sbr_feed_saver_manager_get_source_impact', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'get_source_impact'));
 		add_action('wp_ajax_sbr_feed_saver_manager_update_api_key', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'update_api_key'));
 		add_action('wp_ajax_sbr_import_feed_settings', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'import_feed_settings'));
 		add_action('wp_ajax_sbr_clear_all_caches', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'clear_all_caches'));
@@ -64,8 +74,6 @@ class SBR_Feed_Saver_Manager
 
 
 		add_action('wp_ajax_sbr_clear_error_logs', array('SmashBalloon\Reviews\Common\Helpers\SBR_Error_Handler', 'clear_all_error_ajax'));
-
-
 	}
 
 	/**
@@ -340,11 +348,17 @@ class SBR_Feed_Saver_Manager
 		$return = [];
 
 		if (isset($_POST['provider']) && isset($_POST['providerIdUrl'])) {
-			if (isset($_POST['apiKey']) && !empty($_POST['apiKey']) && $_POST['apiKey'] !== null) {
+			$provider = sanitize_text_field($_POST['provider']);
+			$api_keys = get_option('sbr_apikeys', []);
+			$has_api_key_in_post = isset($_POST['apiKey']) && !empty($_POST['apiKey']) && $_POST['apiKey'] !== null;
+			$has_stored_api_key = isset($api_keys[$provider]) && !empty($api_keys[$provider]);
+
+			// Process if API key is provided in POST OR if one is already stored for this provider
+			if ($has_api_key_in_post || $has_stored_api_key) {
 				$data = array(
-					'provider' => sanitize_text_field($_POST['provider']),
-					'providerIdUrl' => sanitize_text_field($_POST['providerIdUrl']),
-					'apiKey' => sanitize_text_field($_POST['apiKey']),
+					'provider' => $provider,
+					'providerIdUrl' => esc_url_raw($_POST['providerIdUrl']),
+					'apiKey' => $has_api_key_in_post ? sanitize_text_field($_POST['apiKey']) : null,
 				);
 				$return = self::process_source_apikey($data);
 			}
@@ -440,37 +454,86 @@ class SBR_Feed_Saver_Manager
 			$source_account_id = sanitize_text_field($_POST['sourceAccountID']);
 			$provider = sanitize_text_field($_POST['sourceProvider']);
 
-			SBR_Sources::delete_source($source_id);
+			// Get source info before deletion to extract relay_source_id if available
+			$source_record = SBR_Sources::get_single_source_info([
+				'id' => $source_account_id,
+				'provider' => $provider
+			]);
+			$source_info = !empty($source_record['info']) ? json_decode($source_record['info'], true) : [];
 
+			// For collections, just delete locally
 			if (isset($_POST['isCollection']) && $_POST['isCollection']) {
+				SBR_Sources::delete_source($source_id);
 				PostAggregator::delete_reviews_by_provide_id($source_account_id);
 			} else {
+				// For relay-synced sources: delete from relay FIRST, then locally
+				// This prevents orphaned sources if relay deletion fails
 				$relay = new SBRelay(new SettingsManagerService());
-				$relay_args = [
-					'place_id' => $source_account_id
-				];
+
+				// Use source_id if available (preferred - eliminates URL encoding issues)
+				// Otherwise fall back to place_id for backward compatibility
+				if (!empty($source_info['relay_source_id'])) {
+					$relay_args = [
+						'source_id' => (int) $source_info['relay_source_id']
+					];
+				} else {
+					$relay_args = [
+						'place_id' => $source_account_id
+					];
+				}
+
+				$relay_response = null;
 				switch ($provider) {
 					case 'google':
 						$google = new Google($relay);
-						$info = $google->removeSource($relay_args);
+						$relay_response = $google->removeSource($relay_args);
 						break;
 					case 'yelp':
 						$yelp = new Yelp($relay);
-						$info = $yelp->removeSource($relay_args);
+						$relay_response = $yelp->removeSource($relay_args);
 						break;
 					case 'tripadvisor':
 						$tripadvisor = new \SmashBalloon\Reviews\Pro\Integrations\Providers\TripAdvisor($relay);
-						$info = $tripadvisor->removeSource($relay_args);
+						$relay_response = $tripadvisor->removeSource($relay_args);
 						break;
 					case 'trustpilot':
 						$trustpilot = new \SmashBalloon\Reviews\Pro\Integrations\Providers\TrustPilot($relay);
-						$info = $trustpilot->removeSource($relay_args);
+						$relay_response = $trustpilot->removeSource($relay_args);
 						break;
 					case 'wordpress.org':
 						$WordpressOrg = new \SmashBalloon\Reviews\Pro\Integrations\Providers\WordpressOrg($relay);
-						$info = $WordpressOrg->removeSource($relay_args);
+						$relay_response = $WordpressOrg->removeSource($relay_args);
 						break;
 				}
+
+				// Check relay response - only delete locally if relay succeeded or source doesn't exist
+				// Allow deletion if: success, source not found (already deleted), or no relay_source_id (local-only)
+				$relay_success = true;
+				if (is_array($relay_response)) {
+					// Check for error responses - but "not found" is OK (source already deleted from relay)
+					if (isset($relay_response['error']) && !empty($relay_response['error'])) {
+						$error_msg = is_string($relay_response['error']) ? $relay_response['error'] : '';
+						$is_not_found = stripos($error_msg, 'not found') !== false
+							|| stripos($error_msg, 'does not exist') !== false
+							|| (isset($relay_response['code']) && $relay_response['code'] === 404);
+
+						if (!$is_not_found) {
+							$relay_success = false;
+						}
+					}
+				}
+
+				if (!$relay_success) {
+					// Relay deletion failed - don't delete locally to prevent orphaned state
+					// Note: wp_send_json_error() terminates execution, no return needed
+					wp_send_json_error([
+						'message' => __('Failed to delete source from server. Please try again.', 'reviews-feed'),
+						'relay_error' => isset($relay_response['error']) ? $relay_response['error'] : 'Unknown error'
+					]);
+				}
+
+				// Relay deletion succeeded (or source wasn't on relay) - safe to delete locally
+				SBR_Sources::delete_source($source_id);
 			}
 		}
 		echo sbr_json_encode([
@@ -481,7 +544,57 @@ class SBR_Feed_Saver_Manager
 		wp_die();
 	}
 
+	/**
+	 * Get impact data for deleting a source
+	 * Returns the count and names of feeds using this source
+	 *
+	 * @since 1.0
+	 */
+	public static function get_source_impact()
+	{
+		check_ajax_referer('sbr-admin', 'nonce');
 
+		if (! sbr_current_user_can('manage_reviews_feed_options')) {
+			wp_send_json_error();
+		}
+
+		if (! isset($_POST['sourceAccountID'])) {
+			wp_send_json_error([ 'message' => __('Source account ID is required', 'reviews-feed') ]);
+		}
+
+		$source_account_id = sanitize_text_field($_POST['sourceAccountID']);
+
+		global $wpdb;
+		$feeds_table = $wpdb->prefix . SBR_FEEDS_TABLE;
+
+		// Get all feeds that use this source (by account_id in settings JSON)
+		$feeds = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, feed_name FROM $feeds_table WHERE settings LIKE %s ORDER BY feed_name ASC",
+				'%' . $wpdb->esc_like($source_account_id) . '%'
+			),
+			ARRAY_A
+		);
+
+		$feeds_count = count($feeds);
+		$max_display = 5;
+		$has_more    = $feeds_count > $max_display;
+
+		// Only return first 5 feed names
+		$feeds_to_return = array_slice($feeds, 0, $max_display);
+		$feeds_list      = array_map(function ($feed) {
+			return [
+				'id'   => $feed['id'],
+				'name' => $feed['feed_name'],
+			];
+		}, $feeds_to_return);
+
+		wp_send_json_success([
+			'feeds_count' => $feeds_count,
+			'feeds'       => $feeds_list,
+			'has_more'    => $has_more,
+		]);
+	}
 
 	/**
 	 * import feed Settings
@@ -510,9 +623,8 @@ class SBR_Feed_Saver_Manager
 		}
 
 		$feed_return = SBR_Feed_Saver_Manager::import_feed($imported_settings);
+		// Note: wp_send_json() terminates execution, no wp_die() needed
 		wp_send_json($feed_return, 200);
-
-		wp_die();
 	}
 
 	public static function check_api_limit($provider)
@@ -590,6 +702,17 @@ class SBR_Feed_Saver_Manager
 						$relay_args['type'] = $wordpressorg_args['type'];
 						$relay_args['slug'] = $wordpressorg_args['slug'];
 					break;
+				case 'woocommerce':
+				case 'airbnb':
+				case 'booking':
+				case 'aliexpress':
+					// These providers use dedicated AJAX endpoints
+					// Return early with instruction to use specific endpoint
+					return [
+						'useSpecificEndpoint' => true,
+						'provider' => $provider,
+						'message' => 'Use provider-specific AJAX endpoint'
+					];
 				default:
 					$relay_args['place_id'] = isset($data['providerIdUrl']) ? self::get_place_id($data['providerIdUrl']) : 'XXX';
 					$relay_args['check_api_key'] = true;
@@ -609,7 +732,7 @@ class SBR_Feed_Saver_Manager
 
 			//This Means that the users tries to get a new source
 			//else tries to add API Key to be checked
-			if (SBR_Feed_Saver_Manager::check_api_limit($provider) && $relay_args['place_id'] !== 'XXX' && (empty($relay_args['api_key']) || is_null($relay_args['api_key']))) {
+			if (SBR_Feed_Saver_Manager::check_api_limit($provider) && !empty($relay_args['place_id']) && (empty($relay_args['api_key']) || is_null($relay_args['api_key']))) {
 				return [
 					'apiKeyLimits' => get_option('sbr_apikeys_limit', []),
 					'pluginNotices' => Util::get_plugin_notices(),
@@ -645,10 +768,12 @@ class SBR_Feed_Saver_Manager
 			if ($info !== false) {
 				$info = json_decode($info, true);
 				//Checks if there is an error
-				if (!empty($info['error'])
+				if (
+					!empty($info['error'])
 					|| (isset($info['success']) && false === $info['success'])
 				) {
-					if (!empty($info['error'])
+					if (
+						!empty($info['error'])
 						&& $info['error'] === 'sourceLimitExceeded'
 					) {
 						SBR_Feed_Saver_Manager::update_api_limit($provider, 'add');
@@ -691,17 +816,30 @@ class SBR_Feed_Saver_Manager
 				if (isset($info['info']['id'])) {
 					$info['info']['provider'] = $provider;
 
-					$info['info']['name'] = htmlspecialchars_decode(html_entity_decode($info['info']['name'], ENT_QUOTES | ENT_HTML5), ENT_QUOTES | ENT_HTML5);
+					// Decode HTML entities in name and id/URL (fixes Danish characters like æ, ø, å)
+					$info['info']['name'] = htmlspecialchars_decode(html_entity_decode($info['info']['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES);
+					$info['info']['id'] = html_entity_decode($info['info']['id'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+					if (isset($info['info']['url'])) {
+						$info['info']['url'] = html_entity_decode($info['info']['url'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+					}
+
+					// Capture relay_source_id for future API calls (eliminates URL encoding issues)
+					if (isset($info['source_id'])) {
+						$info['info']['relay_source_id'] = $info['source_id'];
+					}
 
 					if (isset($info['info']['reviews'])) {
 						$reviews_list = $info['info']['reviews'];
 						unset($info['info']['reviews']);
 						self::cache_single_posts_from_set($reviews_list, $info['info']);
 					}
+
+
 					SBR_Sources::update_or_insert($info['info']);
 					$return['message'] = 'addedSource';
 					$return['newAddedSource'] = $info['info'];
 					SBR_Feed_Saver_Manager::update_api_limit($provider, 'delete');
+
 
 					if (
 						Util::sbr_is_pro()
@@ -744,16 +882,23 @@ class SBR_Feed_Saver_Manager
 			$provider = sanitize_text_field($_POST['provider']);
 			$apiKey = sanitize_text_field($_POST['apiKey']);
 
-			//Delete API Key from Plugin
-			if (!empty($_POST['removeApiKey'])
-				&& $_POST['removeApiKey'] === "true"
-			) {
+			// External providers (airbnb, booking, aliexpress) don't require API keys
+			// Keys are stored securely on the relay server
+			$external_providers = ['airbnb', 'booking', 'aliexpress'];
+			if (in_array($provider, $external_providers)) {
+				$return = [
+					'apiKeys' => get_option('sbr_apikeys', []),
+					'apikey'  => 'not_required'
+				];
+			} elseif (!empty($_POST['removeApiKey']) && $_POST['removeApiKey'] === "true") {
+				// Delete API Key from Plugin
 				self::update_provider_apikey($provider, null);
 				$return = [
 					'apiKeys' => get_option('sbr_apikeys', []),
 					'apikey'  => 'deleted'
 				];
 			} else {
+				// Use existing logic for other providers
 				$data = array(
 					'provider' => $provider,
 					'apiKey' => $apiKey
@@ -1020,11 +1165,42 @@ class SBR_Feed_Saver_Manager
 
 		self::clear_plugin_cache();
 
+		// Reset bulk update states to allow re-fetching of new reviews
+		self::reset_bulk_update_states();
+
 		echo wp_json_encode([
 			'success' => true
 		]);
 
 		wp_die();
+	}
+
+	/**
+	 * Reset bulk update states for all providers
+	 *
+	 * This triggers a full resync of reviews from all sources:
+	 * - External providers (Airbnb, Booking, AliExpress): Re-fetch from relay API
+	 * - WooCommerce: Resync from wp_comments table
+	 *
+	 * WooCommerce is included to provide users a "nuclear option" for full refresh.
+	 * For ongoing changes, event-driven hooks handle individual review updates.
+	 *
+	 * @see documentation/WOOCOMMERCE_EVENT_DRIVEN_CACHE_ARCHITECTURE.md
+	 *
+	 * @since 2.3.0
+	 */
+	private static function reset_bulk_update_states(): void
+	{
+		// External providers (Airbnb, Booking, AliExpress): Reset and schedule background fetch
+		if (Util::sbr_is_pro() && class_exists(Bulk_External_Reviews_Update::class)) {
+			Bulk_External_Reviews_Update::reset_all_sources(true);
+		}
+
+		// WooCommerce: Resync all reviews from wp_comments table
+		// This provides users a way to force a full refresh if needed
+		if (Util::sbr_is_pro() && class_exists(Bulk_WooCommerce_Reviews_Update::class)) {
+			Bulk_WooCommerce_Reviews_Update::reset_all_sources(true);
+		}
 	}
 
 	/**
@@ -1107,7 +1283,6 @@ class SBR_Feed_Saver_Manager
 		if (has_action('litespeed_purge_all')) {
 			do_action('litespeed_purge_all');
 		}
-
 	}
 
 	public static function sanitize_settings($raw_settings)
@@ -1148,7 +1323,7 @@ class SBR_Feed_Saver_Manager
 	/**
 	 * Get a list of feeds with a limit and offset like a page
 	 *
-	 * @since 1..1
+	 * @since 1.1
 	 */
 	public static function get_feed_list_page()
 	{
@@ -1158,10 +1333,26 @@ class SBR_Feed_Saver_Manager
 			wp_send_json_error();
 		}
 
-		$args = array('page' => (int)sanitize_text_field(wp_unslash($_POST['page'])));
-		$feeds_data = DB::get_feeds_list($args);
+		$args = array(
+			'page' => isset($_POST['page']) ? (int) sanitize_text_field(wp_unslash($_POST['page'])) : 1
+		);
 
-		echo wp_json_encode($feeds_data);
+		// Add search parameter if provided
+		if (!empty($_POST['search'])) {
+			$args['search'] = sanitize_text_field(wp_unslash($_POST['search']));
+		}
+
+		$feeds_data = DB::get_feeds_list($args);
+		$total_count = DB::feeds_list_count($args);
+		$per_page = DB::RESULTS_PER_PAGE;
+
+		echo wp_json_encode([
+			'feeds' => $feeds_data,
+			'total' => $total_count,
+			'page' => $args['page'],
+			'perPage' => $per_page,
+			'totalPages' => ceil($total_count / $per_page)
+		]);
 		wp_die();
 	}
 
@@ -1179,32 +1370,60 @@ class SBR_Feed_Saver_Manager
 
 
 		foreach ($posts as $single_review) {
-			$single_review['source'] = $provider;
-			$single_post_cache = Util::sbr_is_pro() ?
-								new \SmashBalloon\Reviews\Pro\SinglePostCache($single_review, new \SmashBalloon\Reviews\Pro\MediaFinder($single_review['source'])) :
-								new \SmashBalloon\Reviews\Common\SinglePostCache($single_review);
-
-			$single_post_cache->set_provider_id($provider['id']);
-
-			if (in_array($provider['provider'], $providers_lang, true)) {
-				$single_post_cache->set_lang($lang);
-			}
-
-			$single_post_cache->check_api_media();
-
-			if (! $single_post_cache->db_record_exists()) {
-				$single_post_cache->resize_avatar(150);
-				if (in_array($provider['provider'], $providers_no_media, true)) {
-					$single_post_cache->set_storage_data('images_done', 1);
-				}
-				$single_post_cache->store();
-			} else {
-				$single_post_cache->update_single();
-			}
+			self::cache_single_review(
+				$single_review,
+				$provider,
+				$lang,
+				$providers_no_media,
+				$providers_lang
+			);
 		}
 	}
 
 
+	public static function cache_single_review(
+		$single_review,
+		$provider,
+		$lang,
+		$providers_no_media,
+		$providers_lang
+	) {
+		// Decode HTML entities in review text and reviewer name (fixes Danish characters, emojis, etc.)
+		if (isset($single_review['text'])) {
+			$single_review['text'] = html_entity_decode($single_review['text'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		}
+		if (isset($single_review['reviewer']['name'])) {
+			$single_review['reviewer']['name'] = html_entity_decode($single_review['reviewer']['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+		}
+
+		$single_review['source'] = $provider;
+		$single_post_cache = Util::sbr_is_pro() ?
+							new \SmashBalloon\Reviews\Pro\SinglePostCache($single_review, new \SmashBalloon\Reviews\Pro\MediaFinder($single_review['source'])) :
+							new \SmashBalloon\Reviews\Common\SinglePostCache($single_review);
+
+		$single_post_cache->set_provider_id($provider['id']);
+
+		if (in_array($provider['provider'], $providers_lang, true)) {
+			$single_post_cache->set_lang($lang);
+		}
+
+		if (
+			Util::sbr_is_pro()
+			&& method_exists($single_post_cache, 'check_api_media')
+		) {
+			$single_post_cache->check_api_media();
+		}
+
+		if (! $single_post_cache->db_record_exists()) {
+			$single_post_cache->resize_avatar(150);
+			if (in_array($provider['provider'], $providers_no_media, true)) {
+				$single_post_cache->set_storage_data('images_done', 1);
+			}
+			$single_post_cache->store();
+		} else {
+			$single_post_cache->update_single();
+		}
+	}
 
 
 	/**
@@ -1309,7 +1528,7 @@ class SBR_Feed_Saver_Manager
 			$single_post_cache->update_single();
 		}
 
-		if (isset($sanitized_review['media'])) {
+		if (isset($sanitized_review['media']) && Util::should_store_local_images()) {
 			$aggregator = new PostAggregator();
 			$single_post_cache->resize_images(array(640, 150));
 			$single_post_data = $single_post_cache->get_post_data();
@@ -1374,6 +1593,7 @@ class SBR_Feed_Saver_Manager
 			}
 			$collection_db = $results[0];
 			$collection_db['name'] = $collection_name;
+			/** @phpstan-ignore-next-line info key exists in database results */
 			unset($collection_db['info']);
 			$collection_db['last_updated'] = date('Y-m-d H:i:s');
 			$collection_db['id'] = $provider_id;
@@ -1596,7 +1816,8 @@ class SBR_Feed_Saver_Manager
 				$single_post_cache = new \SmashBalloon\Reviews\Pro\SinglePostCache($sanitized_review, new \SmashBalloon\Reviews\Pro\MediaFinder($sanitized_review['source']));
 				$single_post_cache->set_provider_id($id);
 				$single_post_cache->store();
-				if (isset($sanitized_review['media'])) {
+				/** @phpstan-ignore-next-line media key may or may not exist depending on review data */
+				if (isset($sanitized_review['media']) && Util::should_store_local_images()) {
 					$aggregator = new PostAggregator();
 					$single_post_cache->resize_images(array(640, 150));
 					$single_post_data = $single_post_cache->get_post_data();
@@ -1632,18 +1853,26 @@ class SBR_Feed_Saver_Manager
 			wp_send_json_error();
 		}
 
-		if (isset($_POST['sources_page']) && !empty($_POST['sources_page'])) {
-			echo sbr_json_encode(
-				[
-					'sourcesCount' => SBR_Sources::get_sources_count(),
-					'sourcesList' => SBR_Sources::get_sources_list(
-						[
-							'page' => absint($_POST['sources_page'])
-						]
-					)
-				]
-			);
+		$args = array(
+			'page' => isset($_POST['sources_page']) ? absint($_POST['sources_page']) : 1
+		);
+
+		// Add search parameter if provided
+		if (!empty($_POST['search'])) {
+			$args['search'] = sanitize_text_field(wp_unslash($_POST['search']));
 		}
+
+		$sources_list = SBR_Sources::get_sources_list($args);
+		$total_count = SBR_Sources::get_sources_count($args);
+		$per_page = DB::SOURCES_PER_PAGE;
+
+		echo sbr_json_encode([
+			'sourcesList' => $sources_list,
+			'sourcesCount' => $total_count,
+			'page' => $args['page'],
+			'perPage' => $per_page,
+			'totalPages' => ceil($total_count / $per_page)
+		]);
 		wp_die();
 	}
 
@@ -1752,7 +1981,7 @@ class SBR_Feed_Saver_Manager
 					$single_post_cache = new \SmashBalloon\Reviews\Pro\SinglePostCache($review_store, new \SmashBalloon\Reviews\Pro\MediaFinder($review_store['source']));
 					$single_post_cache->set_provider_id($collection_id);
 					$single_post_cache->store();
-					if (isset($sanitized_review['media'])) {
+					if (isset($sanitized_review['media']) && Util::should_store_local_images()) {
 						$aggregator = new PostAggregator();
 						$single_post_cache->resize_images(array(640, 150));
 						$single_post_data = $single_post_cache->get_post_data();

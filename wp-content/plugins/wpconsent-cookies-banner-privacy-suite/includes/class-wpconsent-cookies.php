@@ -5,6 +5,10 @@
  * @package WPConsent
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Class WPConsent_Cookies.
  */
@@ -171,7 +175,7 @@ class WPConsent_Cookies {
 			}
 		}
 
-		return $category_array;
+		return apply_filters( 'wpconsent_get_categories', $category_array );
 	}
 
 	/**
@@ -389,7 +393,7 @@ class WPConsent_Cookies {
 			}
 		}
 
-		return $cookie_array;
+		return apply_filters( 'wpconsent_get_cookies_by_category', $cookie_array, $category );
 	}
 
 	/**
@@ -554,7 +558,7 @@ class WPConsent_Cookies {
 			$service_array[] = apply_filters( 'wpconsent_service_data', $service_data, $service->term_id );
 		}
 
-		return $service_array;
+		return apply_filters( 'wpconsent_get_services_by_category', $service_array, $category_id );
 	}
 
 	/**
@@ -637,6 +641,12 @@ class WPConsent_Cookies {
 	 */
 	public function needs_google_consent() {
 		if ( ! wpconsent()->cookie_blocking->get_google_consent_mode() ) {
+			return false;
+		}
+
+		// If SiteKit plugin has the consent mode enabled we don't need to add the default state script.
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Hook defined by Google Site Kit plugin.
+		if ( 'enabled' === apply_filters( 'googlesitekit_consent_mode_status', 'disabled' ) ) {
 			return false;
 		}
 
@@ -731,8 +741,7 @@ class WPConsent_Cookies {
 	 * @return array
 	 */
 	public function get_preference_slugs() {
-		$slugs              = array();
-		$default_categories = array( 'essential', 'statistics', 'marketing' );
+		$slugs = array();
 
 		// Try to get from cache first.
 		$cached_slugs = get_transient( 'wpconsent_preference_slugs' );
@@ -740,18 +749,20 @@ class WPConsent_Cookies {
 			return $cached_slugs;
 		}
 
-		$categories = $this->get_categories();
+		$categories    = $this->get_categories();
+		$manual_toggle = wpconsent()->settings->get_option( 'manual_toggle_services', 0 );
 
 		foreach ( $categories as $category_slug => $category ) {
-			if ( in_array( $category_slug, $default_categories, true ) ) {
-				$slugs[] = $category_slug;
+			$slugs[] = $category_slug;
 
-				$services = $this->get_services_by_category( $category['id'] );
-				if ( ! empty( $services ) ) {
-					foreach ( $services as $service ) {
-						$service_slug = sanitize_title( $service['name'] );
-						$slugs[]      = $service_slug;
-					}
+			if ( ! $manual_toggle ) {
+				continue;
+			}
+			$services = $this->get_services_by_category( $category['id'] );
+			if ( ! empty( $services ) ) {
+				foreach ( $services as $service ) {
+					$service_slug = sanitize_title( $service['name'] );
+					$slugs[]      = $service_slug;
 				}
 			}
 		}

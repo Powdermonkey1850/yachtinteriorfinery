@@ -6,6 +6,10 @@
  * @package WPConsent
  */
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 /**
  * Class Admin_Page
  */
@@ -108,6 +112,7 @@ abstract class WPConsent_Admin_Page {
 		add_action( 'wpconsent_admin_page', array( $this, 'output_footer' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'page_scripts' ) );
 		add_filter( 'admin_body_class', array( $this, 'page_specific_body_class' ) );
+		add_action( 'in_admin_footer', array( $this, 'wpconsent_footer' ) );
 
 		$this->setup_views();
 		$this->page_hooks();
@@ -394,6 +399,72 @@ abstract class WPConsent_Admin_Page {
 	}
 
 	/**
+	 * Output of the footer markup for admin pages (credits + links).
+	 *
+	 * @return void
+	 */
+	public function wpconsent_footer() {
+
+		$links = array(
+			array(
+				'url'    => class_exists( 'WPConsent_Premium' ) ? wpconsent_utm_url( 'https://wpconsent.com/my-account/support/', 'plugin-footer', 'contact-support' ) : 'https://wordpress.org/support/plugin/wpconsent-cookies-banner-privacy-suite/',
+				'text'   => __( 'Support', 'wpconsent-cookies-banner-privacy-suite' ),
+				'target' => '_blank',
+			),
+			array(
+				'url'    => function_exists( 'wpconsent_utm_url' ) ? wpconsent_utm_url( 'https://wpconsent.com/docs/', 'plugin-footer', 'documentation' ) : 'https://wpconsent.com/docs/',
+				'text'   => __( 'Docs', 'wpconsent-cookies-banner-privacy-suite' ),
+				'target' => '_blank',
+			),
+		);
+
+		$heart = '♥';
+		$team  = 'WPConsent';
+		?>
+
+		<div class="wpconsent-footer">
+
+			<p>
+			<?php
+			printf(
+				// Translators: %1$s - love symbol (e.g., heart), %2$s - team name.
+				esc_html__( 'Made with %1$s by the %2$s team', 'wpconsent-cookies-banner-privacy-suite' ),
+				esc_html( $heart ),
+				esc_html( $team )
+			);
+			?>
+			</p>
+
+			<ul class="wpconsent-footer-links">
+				<?php foreach ( $links as $index => $item ) : ?>
+					<li>
+						<a href="<?php echo esc_url( $item['url'] ); ?>" target="<?php echo esc_attr( $item['target'] ); ?>" rel="noopener noreferrer"><?php echo esc_html( $item['text'] ); ?></a>
+						<?php if ( $index + 1 < count( $links ) ) : ?>
+							<span>/</span>
+						<?php endif; ?>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+			<ul class="wpconsent-footer-social">
+				<li>
+					<a href="https://www.facebook.com/groups/wpbeginner" target="_blank" rel="noopener noreferrer">
+						<?php wpconsent_icon( 'facebook', 17, 16 ); ?>
+						<span class="screen-reader-text">Facebook</span>
+					</a>
+				</li>
+				<li>
+					<a href="https://x.com/wpconsent" target="_blank" rel="noopener noreferrer">
+						<?php wpconsent_icon( 'x', 17, 16, '0 0 512 512' ); ?>
+						<span class="screen-reader-text">X</span>
+					</a>
+				</li>
+			</ul>
+		</div>
+
+		<?php
+	}
+
+	/**
 	 * Get the notification HTML markup for displaying in a list.
 	 *
 	 * @param array $notification The notification array.
@@ -540,7 +611,7 @@ abstract class WPConsent_Admin_Page {
 				</div>
 			</div>
 			<div class="wpconsent-metabox-content">
-				<?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				<?php echo $content; // phpcs:ignore
 				?>
 			</div>
 		</div>
@@ -584,10 +655,11 @@ abstract class WPConsent_Admin_Page {
 	 * @param string $description Description to show under the input.
 	 * @param bool   $is_pro Whether this is a pro feature and the pro indicator should be shown next to the label.
 	 * @param string $id The id of the metabox row.
+	 * @param bool   $locked Whether the field is locked (e.g. enforced by IAB TCF) and should render as non-editable.
 	 *
 	 * @return void
 	 */
-	public function metabox_row( $label, $input, $input_id = '', $show_if_id = '', $show_if_value = '', $description = '', $is_pro = false, $id = '' ) {
+	public function metabox_row( $label, $input, $input_id = '', $show_if_id = '', $show_if_value = '', $description = '', $is_pro = false, $id = '', $locked = false ) {
 		$show_if_rules = '';
 		if ( ! empty( $show_if_id ) ) {
 			$show_if_rules = sprintf( 'data-show-if-id="%1$s" data-show-if-value="%2$s"', esc_attr( $show_if_id ), esc_attr( $show_if_value ) );
@@ -597,10 +669,24 @@ abstract class WPConsent_Admin_Page {
 		if ( $is_pro ) {
 			$class .= ' wpconsent-form-row-pro';
 		}
+		if ( $locked ) {
+			$class .= ' wpconsent-field-tcf-locked';
+		}
 		?>
-		<div class="<?php echo esc_attr( $class ); ?>" <?php echo $show_if_rules; ?> <?php echo $id; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		?>>
+		<div class="<?php echo esc_attr( $class ); ?>"
+			<?php
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Built with esc_attr().
+			echo $show_if_rules;
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+			echo $id;
+			?>
+		>
 			<div class="wpconsent-metabox-form-row-label">
+				<?php
+				if ( $locked ) {
+					echo '<span class="wpconsent-tcf-lock-icon" aria-hidden="true"><span class="dashicons dashicons-lock"></span></span>';
+				}
+				?>
 				<label for="<?php echo esc_attr( $input_id ); ?>">
 					<?php echo esc_html( $label ); ?>
 					<?php
@@ -611,7 +697,8 @@ abstract class WPConsent_Admin_Page {
 				</label>
 			</div>
 			<div class="wpconsent-metabox-form-row-input">
-				<?php echo $input; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				<?php
+				echo $input; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 				?>
 				<?php if ( ! empty( $description ) ) { ?>
 					<p><?php echo wp_kses_post( $description ); ?></p>
@@ -619,6 +706,44 @@ abstract class WPConsent_Admin_Page {
 			</div>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Check whether a specific field is locked by IAB TCF enforcement.
+	 *
+	 * Returns false by default; Pro classes override this when IAB TCF is enabled.
+	 *
+	 * @param string $field The option/field name to check.
+	 *
+	 * @return bool
+	 */
+	protected function is_tcf_field_locked( $field ) {
+		return false;
+	}
+
+	/**
+	 * Get the HTML for a TCF enforcement notice.
+	 *
+	 * @param string $message The notice message (may contain HTML links).
+	 * @param string $link_url URL for the "Manage TCF settings" link.
+	 * @param string $link_text Link text for the settings link.
+	 *
+	 * @return string
+	 */
+	protected function get_tcf_notice( $message, $link_url = '', $link_text = '' ) {
+		$link = '';
+		if ( ! empty( $link_url ) ) {
+			$link = sprintf(
+				' <a href="%1$s">%2$s &rarr;</a>',
+				esc_url( $link_url ),
+				esc_html( $link_text )
+			);
+		}
+		return sprintf(
+			'<div class="wpconsent-tcf-notice" role="status"><span class="dashicons dashicons-info-outline" aria-hidden="true"></span><span>%1$s%2$s</span></div>',
+			wp_kses_post( $message ),
+			$link // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		);
 	}
 
 	/**

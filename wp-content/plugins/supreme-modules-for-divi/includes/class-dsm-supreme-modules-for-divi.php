@@ -82,7 +82,6 @@ class Dsm_Supreme_Modules_For_Divi {
 		$this->set_locale();
 		$this->define_admin_hooks();
 		$this->define_public_hooks();
-
 	}
 
 	/**
@@ -107,37 +106,36 @@ class Dsm_Supreme_Modules_For_Divi {
 		 * The class responsible for orchestrating the actions and filters of the
 		 * core plugin.
 		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-dsm-supreme-modules-for-divi-loader.php';
+		require_once plugin_dir_path( __DIR__ ) . 'includes/class-dsm-supreme-modules-for-divi-loader.php';
 
 		/**
 		 * The class responsible for defining internationalization functionality
 		 * of the plugin.
 		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-dsm-supreme-modules-for-divi-i18n.php';
+		require_once plugin_dir_path( __DIR__ ) . 'includes/class-dsm-supreme-modules-for-divi-i18n.php';
 
 		/**
 		 * The class responsible for defining all actions that occur in the admin area.
 		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'admin/class-dsm-supreme-modules-for-divi-admin.php';
+		require_once plugin_dir_path( __DIR__ ) . 'admin/class-dsm-supreme-modules-for-divi-admin.php';
 
 		/**
 		 * The class responsible for defining all actions that occur in the public-facing
 		 * side of the site.
 		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-dsm-supreme-modules-for-divi-public.php';
+		require_once plugin_dir_path( __DIR__ ) . 'public/class-dsm-supreme-modules-for-divi-public.php';
 
 		/**
 		 * The class responsible for defining all actions that occur in Divi Supreme
 		 * side of the site.
 		 */
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class.settings-api.php';
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class.page-settings.php';
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-dsm-supreme-modules-for-divi-review.php';
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/SupremeModulesLoader.php';
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/class-dsm-json-handler.php';
+		require_once plugin_dir_path( __DIR__ ) . 'includes/class.settings-api.php';
+		require_once plugin_dir_path( __DIR__ ) . 'includes/class.page-settings.php';
+		require_once plugin_dir_path( __DIR__ ) . 'includes/class-dsm-supreme-modules-for-divi-review.php';
+		require_once plugin_dir_path( __DIR__ ) . 'includes/SupremeModulesLoader.php';
+		require_once plugin_dir_path( __DIR__ ) . 'includes/class-dsm-json-handler.php';
 
 		$this->loader = new Dsm_Supreme_Modules_For_Divi_Loader();
-
 	}
 
 	/**
@@ -177,11 +175,16 @@ class Dsm_Supreme_Modules_For_Divi {
 		add_filter( 'admin_footer_text', array( $this, 'dsm_admin_footer_text' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'dsm_admin_load_enqueue' ) );
 
-
 		// JSON Handler.
-		if ( $this->settings_api->get_option( 'dsm_allow_mime_json_upload', 'dsm_settings_misc' ) === 'on' || $this->settings_api->get_option( 'dsm_allow_mime_json_upload', 'dsm_settings_misc' ) === '' ) {
+		$allow_json_upload = $this->settings_api->get_option(
+			'dsm_allow_mime_json_upload',
+			'dsm_settings_misc'
+		);
+
+		if ( 'on' === $allow_json_upload || '' === $allow_json_upload ) {
 			new DSM_JSON_Handler();
 		}
+
 		// Plugin links
 		add_filter( 'plugin_action_links_supreme-modules-for-divi/supreme-modules-for-divi.php', array( $this, 'dsm_plugin_action_links' ), 10, 5 );
 		add_filter( 'plugin_action_links', array( $this, 'dsm_add_action_plugin' ), 10, 5 );
@@ -293,7 +296,6 @@ class Dsm_Supreme_Modules_For_Divi {
 
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
-
 	}
 
 	/**
@@ -448,7 +450,7 @@ class Dsm_Supreme_Modules_For_Divi {
 			$screen = get_current_screen();
 
 			if ( is_object( $screen ) && 'dsm_header_footer' == $screen->post_type ) {
-				wp_enqueue_script( 'dsm-admin-js', plugins_url( 'admin/js/dsm-admin.js', dirname( __FILE__ ) ) );
+				wp_enqueue_script( 'dsm-admin-js', plugins_url( 'admin/js/dsm-admin.js', __DIR__ ) );
 			}
 		}
 	}
@@ -758,13 +760,19 @@ class Dsm_Supreme_Modules_For_Divi {
 			?>
 			<div class="notice notice-info">
 				
-				<p><?php /* Translators: %1$s: Permalink settings URL, %2$s: Divi options URL */
-			_e( sprintf(
-        'Notice: For first time user, please re-save your <a href="%1$s" target="_blank">Permalinks</a> again to flush the rewrite rules in order to view them in Visual Builder. This will only work for the Divi Theme. Once ElegantThemes updates their Template Hook on Extra Theme, this feature will also be available. Currently, only the footer and 404 template is available to you. Please create one template and assign it to the footer or 404. If you do not see Divi Builder here, remember to <a href="%2$s" target="_blank">Enable Divi Builder On Post Types</a> in the Divi Options.',
-        esc_url( get_admin_url() . 'options-permalink.php' ),
-        esc_url( get_admin_url() . 'admin.php?page=et_divi_options#wrap-builder' )
-    ),
-    'supreme-modules-for-divi'); ?></p>
+				<p>
+				<?php
+				/* Translators: %1$s: Permalink settings URL, %2$s: Divi options URL */
+				_e(
+					sprintf(
+						'Notice: For first time user, please re-save your <a href="%1$s" target="_blank">Permalinks</a> again to flush the rewrite rules in order to view them in Visual Builder. This will only work for the Divi Theme. Once ElegantThemes updates their Template Hook on Extra Theme, this feature will also be available. Currently, only the footer and 404 template is available to you. Please create one template and assign it to the footer or 404. If you do not see Divi Builder here, remember to <a href="%2$s" target="_blank">Enable Divi Builder On Post Types</a> in the Divi Options.',
+						esc_url( get_admin_url() . 'options-permalink.php' ),
+						esc_url( get_admin_url() . 'admin.php?page=et_divi_options#wrap-builder' )
+					),
+					'supreme-modules-for-divi'
+				);
+				?>
+	</p>
 			</div>
 			<?php
 		}
@@ -821,30 +829,26 @@ class Dsm_Supreme_Modules_For_Divi {
 	public function output_section( $output, $render_slug, $module ) {
 		if ( 'et_pb_section' !== $render_slug ) {
 			return $output;
-		} else {
-			if ( isset( $module->props['dsm_section_schedule_visibility'] ) && $module->props['dsm_section_schedule_visibility'] === 'on' ) {
-				if ( is_array( $output ) ) {
-					return $output;
-				}
+		} elseif ( isset( $module->props['dsm_section_schedule_visibility'] ) && $module->props['dsm_section_schedule_visibility'] === 'on' ) {
+			if ( is_array( $output ) ) {
+				return $output;
+			}
 
 				$dsm_section_schedule_visibility     = $module->props['dsm_section_schedule_visibility'];
 				$dsm_section_schedule_show_hide      = $module->props['dsm_section_schedule_show_hide'];
 				$dsm_section_schedule_after_datetime = $module->props['dsm_section_schedule_after_datetime'];
 				$dsm_section_current_wp_date         = wp_date( 'Y-m-d H:i:s', null );
 
-				if ( $dsm_section_schedule_show_hide === 'start' ) {
-					if ( $dsm_section_schedule_after_datetime >= $dsm_section_current_wp_date ) {
-						return;
-					} else {
-						$output;
-					}
+			if ( $dsm_section_schedule_show_hide === 'start' ) {
+				if ( $dsm_section_schedule_after_datetime >= $dsm_section_current_wp_date ) {
+					return;
 				} else {
-					if ( $dsm_section_schedule_after_datetime <= $dsm_section_current_wp_date ) {
-						return;
-					} else {
-						$output;
-					}
+					$output;
 				}
+			} elseif ( $dsm_section_schedule_after_datetime <= $dsm_section_current_wp_date ) {
+					return;
+			} else {
+				$output;
 			}
 		}
 		return $output;
@@ -896,30 +900,26 @@ class Dsm_Supreme_Modules_For_Divi {
 	public function output_row( $output, $render_slug, $module ) {
 		if ( 'et_pb_row' !== $render_slug ) {
 			return $output;
-		} else {
-			if ( isset( $module->props['dsm_row_schedule_visibility'] ) && $module->props['dsm_row_schedule_visibility'] === 'on' ) {
-				if ( is_array( $output ) ) {
-					return $output;
-				}
+		} elseif ( isset( $module->props['dsm_row_schedule_visibility'] ) && $module->props['dsm_row_schedule_visibility'] === 'on' ) {
+			if ( is_array( $output ) ) {
+				return $output;
+			}
 
 				$dsm_row_schedule_visibility     = $module->props['dsm_row_schedule_visibility'];
 				$dsm_row_schedule_show_hide      = $module->props['dsm_row_schedule_show_hide'];
 				$dsm_row_schedule_after_datetime = $module->props['dsm_row_schedule_after_datetime'];
 				$dsm_row_current_wp_date         = wp_date( 'Y-m-d H:i:s', null );
 
-				if ( $dsm_row_schedule_show_hide === 'start' ) {
-					if ( $dsm_row_schedule_after_datetime >= $dsm_row_current_wp_date ) {
-						return;
-					} else {
-						$output;
-					}
+			if ( $dsm_row_schedule_show_hide === 'start' ) {
+				if ( $dsm_row_schedule_after_datetime >= $dsm_row_current_wp_date ) {
+					return;
 				} else {
-					if ( $dsm_row_schedule_after_datetime <= $dsm_row_current_wp_date ) {
-						return;
-					} else {
-						$output;
-					}
+					$output;
 				}
+			} elseif ( $dsm_row_schedule_after_datetime <= $dsm_row_current_wp_date ) {
+					return;
+			} else {
+				$output;
 			}
 		}
 		return $output;
@@ -1257,24 +1257,24 @@ class Dsm_Supreme_Modules_For_Divi {
 		if ( class_exists( 'Caldera_Forms' ) ) {
 			add_filter(
 				'caldera_forms_render_field_file',
-				function( $field_file, $field_type ) {
+				function ( $field_file, $field_type ) {
 					if ( 'dropdown' === $field_type ) {
-						return dirname( __FILE__ ) . '/modules/CalderaForms/includes/dropdown/field.php';
+						return __DIR__ . '/modules/CalderaForms/includes/dropdown/field.php';
 					}
 					if ( 'button' === $field_type ) {
-						return dirname( __FILE__ ) . '/modules/CalderaForms/includes/button/field.php';
+						return __DIR__ . '/modules/CalderaForms/includes/button/field.php';
 					}
 					if ( 'radio' === $field_type ) {
-						return dirname( __FILE__ ) . '/modules/CalderaForms/includes/radio/field.php';
+						return __DIR__ . '/modules/CalderaForms/includes/radio/field.php';
 					}
 					if ( 'checkbox' === $field_type ) {
-						return dirname( __FILE__ ) . '/modules/CalderaForms/includes/checkbox/field.php';
+						return __DIR__ . '/modules/CalderaForms/includes/checkbox/field.php';
 					}
 					if ( 'html' === $field_type ) {
-						return dirname( __FILE__ ) . '/modules/CalderaForms/includes/html/field.php';
+						return __DIR__ . '/modules/CalderaForms/includes/html/field.php';
 					}
 					if ( 'advanced_file' === $field_type ) {
-						return dirname( __FILE__ ) . '/modules/CalderaForms/includes/advanced_file/field.php';
+						return __DIR__ . '/modules/CalderaForms/includes/advanced_file/field.php';
 					}
 					return $field_file;
 				},

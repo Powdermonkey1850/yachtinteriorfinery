@@ -1,4 +1,50 @@
+.ext-title-row > .et_pb_column {
+	display:flex;
+	flex-direction:column;
+}
+
+
+@media (max-width: 99999px) {
+
+	.yif-menu-cont {
+/*		width:100% !important; */
+		i/* background-color:transparent !important;*/
+
+	}
+
+
+
+	.yif-menu-cont-col {
+	/*	border:1px solid black !important;*/
+	}
+
+
+	.y-logo {
+	/* width:42px !important;
+	border:1px solid red; */
+	}
+
+}
+
 html body .custom-header-row {
+
+	a.covers-link {
+		text-transform:uppercase;
+		font-weight:400;
+		letter-spacing:4px;
+		color:white;
+		transition: all 0.7s ease;
+
+		font-size:1.2rem;
+	}
+
+	a.covers-link:hover {
+		color:#82657c;
+	}
+
+
+	min-height:100vh;
+	height:auto;
 
 	.et_pb_menu ul {
 		max-width: 100%;

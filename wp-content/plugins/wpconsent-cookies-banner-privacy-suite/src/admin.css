@@ -12,14 +12,18 @@
 @import './admin/jconfirm.css';
 @import './admin/spinner.css';
 @import './admin/pro-indicators.css';
+@import './admin/tcf-locked.css';
 @import './admin/upsells.css';
 @import './admin/notifications.css';
+@import './admin/notices.css';
 @import './admin/export.css';
 @import './admin/script-blocking.css';
 @import './admin/tooltips.css';
 @import './admin/languages.css';
 @import './admin/language-picker.css';
 @import './admin/geolocation-groups.css';
+@import './admin/tools.css';
+@import './admin/footer.css';
 
 /** Import for preview **/
 @import './frontend/banner.css';

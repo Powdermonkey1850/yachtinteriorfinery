@@ -126,7 +126,7 @@ html body .custom-popup .gform_wrapper #gform_2 .gform_footer input[type="submit
 }
 
 /* === 5. Close Button (X) === */
-.custom-popup .close-popup {
+.custom-popup .close-popup.top-close {
 	position: absolute;
 	top: 12px;
 	right: 16px;
@@ -200,6 +200,22 @@ div.thank-you img {
 	}
 }
 
+
+.close-popup.mobile-close {
+	position:relative;
+	top:0px;
+	right:0px;
+	text-align:center;
+	display:none;
+}
+
+
+.mobile-close-cont span {
+	font-size:40px;
+	font-weight:normal;
+	color:white;
+}
+
 /* === 8. Responsive Tweaks === */
 
 
@@ -213,19 +229,41 @@ div.thank-you img {
 
 }
 
-@media (max-width: 980px) {
-        .custom-popup .popup-content {
-                .pop-up-form-header {
-                        padding-top: 300px;
-			text-align:center;
-                }
-		.pop-up-form-header h2 {
-		text-align:center;
-		}
-        }
+
+@media (max-height: 850px) {
+
+	html body .custom-popup {
+		align-items: flex-start;
+	}
 
 }
 
+
+@media (max-width: 980px) {
+	.custom-popup .popup-content {
+		.pop-up-form-header {
+			padding-top: 150px;
+			text-align:center;
+		}
+		.pop-up-form-header h2 {
+			text-align:center;
+		}
+
+	}
+
+}
+
+@media (max-width: 768px) {
+
+	.close-popup.top-close {
+		display:none;
+	}
+
+	.close-popup.mobile-close {
+		display:block;
+	}
+
+}
 
 
 @media (max-width: 600px) {

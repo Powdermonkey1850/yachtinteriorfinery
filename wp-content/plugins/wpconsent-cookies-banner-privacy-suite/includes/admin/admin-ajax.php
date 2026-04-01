@@ -1,5 +1,9 @@
 <?php
 
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 add_action( 'wp_ajax_wpconsent_add_category', 'wpconsent_ajax_add_category' );
 add_action( 'wp_ajax_wpconsent_edit_category', 'wpconsent_ajax_edit_category' );
 add_action( 'wp_ajax_wpconsent_delete_category', 'wpconsent_ajax_delete_category' );
@@ -25,6 +29,10 @@ add_action( 'wp_ajax_wpconsent_search_content', 'wpconsent_ajax_search_content' 
 add_action( 'wp_ajax_wpconsent_save_scanner_items', 'wpconsent_ajax_save_scanner_items' );
 
 add_action( 'wp_ajax_wpconsent_reset_to_defaults', 'wpconsent_ajax_reset_to_defaults' );
+
+add_action( 'wp_ajax_wpconsent_save_usage_tracking', 'wpconsent_ajax_save_usage_tracking' );
+
+add_action( 'wp_ajax_wpconsent_verify_ssl', 'wpconsent_ajax_verify_ssl' );
 
 /**
  * Add a new category via AJAX.
@@ -363,59 +371,7 @@ function wpconsent_ajax_auto_configure() {
 	$services        = isset( $_POST['scanner_service'] ) ? array_map( 'sanitize_text_field', wp_unslash( $_POST['scanner_service'] ) ) : array();
 	$script_blocking = isset( $_POST['script_blocking'] ) ? 1 : 0;
 
-	$all_services = wpconsent()->services->get_services();
-	$categories   = wpconsent()->cookies->get_categories();
-
-	// Let's loop through the services and add them to the database.
-	foreach ( $services as $service ) {
-		// Let's find the service in the all scripts array that has things split up by categories.
-		foreach ( $all_services as $service_key => $service_data ) {
-			$category = $service_data['category'];
-			if ( $service_key === $service ) {
-				$existing_cookies = array();
-				// First, let's check if we already have this service added to the database.
-				$existing_service = wpconsent()->cookies->get_service_by_slug( $service );
-				if ( $existing_service && wpconsent()->cookies->is_service_auto_added( $existing_service ) ) {
-					$service_id       = $existing_service['id'];
-					$existing_cookies = wpconsent()->cookies->get_cookies_by_service( $service_id );
-					// Let's filter out cookies that have auto_added set to false.
-					$existing_cookies = array_filter(
-						$existing_cookies,
-						function ( $cookie ) {
-							return $cookie['auto_added'];
-						}
-					);
-				} else {
-					// Let's add the service.
-					$category_id = $categories[ $category ]['id'];
-					$service_id  = wpconsent()->cookies->add_service( $service_data['label'], $category_id, $service_data['description'], $service_data['service_url'] );
-				}
-
-				// Let's mark this service as auto added and keep track of the source slug.
-				update_term_meta( $service_id, '_wpconsent_auto_added', true );
-				update_term_meta( $service_id, '_wpconsent_source_slug', $service );
-
-				// Let's add the cookies.
-				foreach ( $service_data['cookies'] as $cookie => $cookie_data ) {
-					// Let's see if we can find a cookie with the same cookie_id as $cookie in the $existing_cookies array and with auto_added true.
-					$existing_cookie = array_filter(
-						$existing_cookies,
-						function ( $existing_cookie ) use ( $cookie ) {
-							return $existing_cookie['cookie_id'] === $cookie;
-						}
-					);
-					if ( ! empty( $existing_cookie ) ) {
-						continue;
-					}
-
-					$cookie_id = wpconsent()->cookies->add_cookie( $cookie, $cookie, $cookie_data['description'], $service_id, $cookie_data['duration'] );
-					// Let's mark this service as auto added and keep track of the source slug.
-					update_post_meta( $cookie_id, '_wpconsent_auto_added', true );
-					update_post_meta( $cookie_id, '_wpconsent_source_slug', $cookie );
-				}
-			}
-		}
-	}
+	wpconsent()->scanner->auto_configure_services( $services );
 
 	// Let's mark the scan as configured.
 	wpconsent()->scanner->mark_scan_as_configured();
@@ -659,4 +615,67 @@ function wpconsent_ajax_reset_to_defaults() {
 	wpconsent()->cookies->reset_to_defaults();
 
 	wp_send_json_success();
+}
+
+/**
+ * Save usage tracking preference via AJAX.
+ *
+ * @return void
+ */
+function wpconsent_ajax_save_usage_tracking() {
+	check_ajax_referer( 'wpconsent_admin', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error(
+			array(
+				'message' => esc_html__( 'You do not have permission to perform this action.', 'wpconsent-cookies-banner-privacy-suite' ),
+			)
+		);
+	}
+
+	$usage_tracking = isset( $_POST['usage_tracking'] ) ? intval( $_POST['usage_tracking'] ) : 0;
+
+	// Save the usage tracking preference.
+	wpconsent()->settings->update_option( 'usage_tracking', $usage_tracking );
+
+	wp_send_json_success(
+		array(
+			'message' => esc_html__( 'Usage tracking preference saved successfully.', 'wpconsent-cookies-banner-privacy-suite' ),
+		)
+	);
+}
+
+/**
+ * Ajax handler to verify that the current web host can successfully
+ * make outbound SSL connections.
+ *
+ * @return void
+ */
+function wpconsent_ajax_verify_ssl() {
+	check_ajax_referer( 'wpconsent_admin', 'nonce' );
+
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error(
+			array(
+				'msg' => esc_html__( 'You do not have permission to perform this action.', 'wpconsent-cookies-banner-privacy-suite' ),
+			)
+		);
+	}
+
+	$response = wp_remote_post( 'https://wpconsent.com' );
+
+	if ( 200 === wp_remote_retrieve_response_code( $response ) ) {
+		wp_send_json_success(
+			array(
+				'msg' => esc_html__( 'Success! Your server can make SSL connections.', 'wpconsent-cookies-banner-privacy-suite' ),
+			)
+		);
+	}
+
+	wp_send_json_error(
+		array(
+			'msg'   => esc_html__( 'There was an error and the connection failed. Please contact your web host with the technical details below.', 'wpconsent-cookies-banner-privacy-suite' ),
+			'debug' => '<pre>' . print_r( map_deep( $response, 'wp_strip_all_tags' ), true ) . '</pre>', // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r
+		)
+	);
 }

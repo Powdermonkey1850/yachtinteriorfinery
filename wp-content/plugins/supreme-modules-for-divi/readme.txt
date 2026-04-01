@@ -3,9 +3,9 @@ Contributors: divisupreme, kenng87
 Tags: Divi, Divi Module, Divi Page Builder, divi theme, divi builder, Divi Extensions
 Donate link: https://divisupreme.com/supreme-modules-lite-for-divi/
 Requires at least: 4.5
-Tested up to: 6.8
+Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 2.5.62
+Stable tag: 2.5.63
 License: GPLv2
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -111,6 +111,9 @@ This is a common question that we get asked here every now and then which is why
 
 
 == Changelog ==
+= 2.5.63 – 19.12.2025 =
+* Improved: Hardened security for JSON uploads to prevent file upload vulnerabilities via JSON upload bypass.
+
 = 2.5.62 – 18.04.2025 =
 * Fixed: Wrong Text Domain overall. 
 * Fixed: _load_textdomain_just_in_time was called incorrectly. 

@@ -41,16 +41,16 @@ class WPConsent_Admin_Page_Geolocation extends WPConsent_Admin_Page {
 			</div>
 			<?php
 			echo WPConsent_Admin_page::get_upsell_box( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-					esc_html__( 'Geolocation is a PRO feature', 'wpconsent-cookies-banner-privacy-suite' ),
-					'<p>' . esc_html__( 'Upgrade to WPConsent PRO today and personalize the display of your cookie banner to show only in the specific countries or regions you choose.', 'wpconsent-cookies-banner-privacy-suite' ) . '</p>',
-					array(
-							'text' => esc_html__( 'Upgrade to PRO and Unlock "Geolocation"', 'wpconsent-cookies-banner-privacy-suite' ),
-							'url'  => esc_url( wpconsent_utm_url( 'https://wpconsent.com/lite/', 'geolocation-page', 'main' ) ),
-					),
-					array(
-							'text' => esc_html__( 'Learn more about all the features', 'wpconsent-cookies-banner-privacy-suite' ),
-							'url'  => esc_url( wpconsent_utm_url( 'https://wpconsent.com/lite/', 'geolocation-page', 'features' ) ),
-					)
+				esc_html__( 'Geolocation is a PRO feature', 'wpconsent-cookies-banner-privacy-suite' ),
+				'<p>' . esc_html__( 'Upgrade to WPConsent PRO today and personalize the display of your cookie banner to show only in the specific countries or regions you choose.', 'wpconsent-cookies-banner-privacy-suite' ) . '</p>',
+				array(
+					'text' => esc_html__( 'Upgrade to PRO and Unlock "Geolocation"', 'wpconsent-cookies-banner-privacy-suite' ),
+					'url'  => esc_url( wpconsent_utm_url( 'https://wpconsent.com/lite/', 'geolocation-page', 'main' ) ),
+				),
+				array(
+					'text' => esc_html__( 'Learn more about all the features', 'wpconsent-cookies-banner-privacy-suite' ),
+					'url'  => esc_url( wpconsent_utm_url( 'https://wpconsent.com/lite/', 'geolocation-page', 'features' ) ),
+				)
 			);
 			?>
 		</div>
@@ -91,7 +91,8 @@ class WPConsent_Admin_Page_Geolocation extends WPConsent_Admin_Page {
 	 * @return void
 	 */
 	public function output_location_groups_list( $location_groups ) {
-		echo $this->get_location_groups_list_content( $location_groups );
+		// Everything in the method is escaped.
+		echo $this->get_location_groups_list_content( $location_groups ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 
 	/**
@@ -146,9 +147,10 @@ class WPConsent_Admin_Page_Geolocation extends WPConsent_Admin_Page {
 					<td class="column-consent-settings">
 						<?php
 						$consent_settings = array(
-								'enable_script_blocking'  => __( 'Block Script', 'wpconsent-cookies-banner-privacy-suite' ),
-								'show_banner'             => __( 'Show Banner', 'wpconsent-cookies-banner-privacy-suite' ),
-								'enable_consent_floating' => __( 'Show Settings Button', 'wpconsent-cookies-banner-privacy-suite' ),
+							'enable_script_blocking'  => __( 'Block Script', 'wpconsent-cookies-banner-privacy-suite' ),
+							'enable_content_blocking' => __( 'Content Blocking', 'wpconsent-cookies-banner-privacy-suite' ),
+							'show_banner'             => __( 'Show Banner', 'wpconsent-cookies-banner-privacy-suite' ),
+							'enable_consent_floating' => __( 'Show Settings Button', 'wpconsent-cookies-banner-privacy-suite' ),
 						);
 
 						foreach ( $consent_settings as $key => $label ) {
@@ -200,9 +202,9 @@ class WPConsent_Admin_Page_Geolocation extends WPConsent_Admin_Page {
 	public function output_predefined_rules_metabox() {
 		$content = $this->get_predefined_rules_content();
 		$this->metabox(
-				__( 'Location-based Rules', 'wpconsent-cookies-banner-privacy-suite' ),
-				$content,
-				__( 'Quickly add predefined rules for common privacy regulations. Each rule will automatically configure the relevant countries and settings for the location.', 'wpconsent-cookies-banner-privacy-suite' )
+			__( 'Location-based Rules', 'wpconsent-cookies-banner-privacy-suite' ),
+			$content,
+			__( 'Quickly add predefined rules for common privacy regulations. Each rule will automatically configure the relevant countries and settings for the location.', 'wpconsent-cookies-banner-privacy-suite' )
 		);
 	}
 
@@ -276,23 +278,23 @@ class WPConsent_Admin_Page_Geolocation extends WPConsent_Admin_Page {
 	 */
 	public function get_location_groups() {
 		return array(
-				array(
-						'name'                    => 'GDPR Compliance',
-						'locations'               => 'Europe',
-						'type_of_consent'         => 'GDPR',
-						'enable_script_blocking'  => true,
-						'show_banner'             => true,
-						'enable_consent_floating' => true,
-				),
-				array(
-						'name'                    => 'CCPA',
-						'locations'               => 'California, USA',
-						'type_of_consent'         => 'CCPA',
-						'enable_script_blocking'  => true,
-						'show_banner'             => true,
-						'enable_consent_floating' => true,
-						'consent_mode'            => 'optout',
-				),
+			array(
+				'name'                    => 'GDPR Compliance',
+				'locations'               => 'Europe',
+				'type_of_consent'         => 'GDPR',
+				'enable_script_blocking'  => true,
+				'show_banner'             => true,
+				'enable_consent_floating' => true,
+			),
+			array(
+				'name'                    => 'CCPA',
+				'locations'               => 'California, USA',
+				'type_of_consent'         => 'CCPA',
+				'enable_script_blocking'  => true,
+				'show_banner'             => true,
+				'enable_consent_floating' => true,
+				'consent_mode'            => 'optout',
+			),
 		);
 	}
 }

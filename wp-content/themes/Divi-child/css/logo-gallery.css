@@ -63,3 +63,36 @@ html body .logo-gallery .et_post_gallery>div {
 html body .logo-gallery.logo-gallery-landscape .et_post_gallery>div {
   flex: 0 0 8%;
 }
+
+
+
+
+@media (max-width: 1500px) {
+
+}
+
+@media (max-width: 1200px) {
+
+}
+
+@media (max-width: 992px) {
+
+	html body .logo-gallery .et_post_gallery {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+
+html body .logo-gallery .et_post_gallery>div {
+  flex: 0 0 25%;
+}
+
+}
+
+@media (max-width: 768px) {
+
+}
+
+@media (max-width: 576px) {
+
+}

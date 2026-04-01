@@ -3,5 +3,3 @@
   Licensed under the MIT License (MIT), see
   http://jedwatson.github.io/classnames
 */
-
-/*! lil-uri - v0.3.1 - MIT License - https://github.com/lil-js/uri */

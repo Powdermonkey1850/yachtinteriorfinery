@@ -7,7 +7,9 @@
 .hover-card {
 	position: relative;
 	width: 100%;
-	height: 700px; /* fixed height – change as you like */
+	height:auto;
+	aspect-ratio:16 / 9;
+	/*	height: 700px; /* fixed height – change as you like */
 	background-size: cover;
 	background-position: center;
 	background-repeat: no-repeat;
@@ -68,10 +70,47 @@
 	transform: scale(1.02);
 }
 
+
+
+
+
+
+
 #next-section .et_pb_column {
-	overflow:hidden; 
+	overflow:hidden;
 }
 
+
+#next-section {
+	column-gap:3rem;
+	display: flex;
+}
+
+#next-section:after {
+	display:none;
+}
+
+#next-section > div {
+	gap:2rem;
+	margin:0px;
+	flex-direction:row;
+	flex-wrap:wrap;
+	display:flex;
+}
+
+
+
+#next-section > div > div {
+	flex: 0 0 calc(50% - 1rem);
+	overflow:hidden;
+	aspect-ratio: 16 / 9;
+	margin-bottom:0px;
+
+}
+
+#next-section > div > div > .et_pb_code_inner {
+	aspect-ratio:16 / 9;
+}
 
 .hover-text a {background-color: rgba(255, 255, 255, 0.8);
 	padding: 10px 30px;
@@ -117,15 +156,20 @@
 }
 
 
+.section-header-cont  .et_pb_column {
+	justify-content: center;
+
+}
+
 
 .explore-overlay {
-/* background-color:rgba(0,0,0,0.7); */
+	/* background-color:rgba(0,0,0,0.7); */
 }
 
 
 /* Multiply overlay */
 .section-header-title::before {
-/*	content: "";
+	/*	content: "";
 	position: absolute;
 	inset: 0;
 	background-color: #82657c;
@@ -181,9 +225,9 @@
 
 
 .section-header-title p {
-font-family:'Literata';
-font-size:15px;;
-line-height:1.7;
+	font-family:'Literata';
+	font-size:15px;;
+	line-height:1.7;
 }
 
 @media (max-width: 1400px) {
@@ -191,23 +235,26 @@ line-height:1.7;
 	html body .explore-row-header>div {
 	}
 
+
+	/* Old css from when there were 3 columns making up the header area */
+
 	html body .explore-row-header {
 		display: flex;
 		flex-wrap: wrap; /* Helps columns stack nicely if needed */
 
 		/* Column 1 */
 		> .et_pb_column:nth-child(1) {
-			flex: 0 0 15%;
+			i /* flex: 0 0 15%; */
 		}
 
 		/* Column 2 */
 		> .et_pb_column:nth-child(2) {
-			flex: 0 0 70%;
+			/* flex: 0 0 70%; */
 		}
 
 		/* Column 3 */
 		> .et_pb_column:nth-child(3) {
-			flex: 0 0 15%;
+			/* flex: 0 0 15%; */
 		}
 	}
 }
@@ -221,27 +268,28 @@ line-height:1.7;
 		height: 100%; /* ensure the row itself can define height context */
 	}
 
-	/* Hide side columns */
-	html body .explore-row-header {
-		> .et_pb_column:nth-child(1),
-		> .et_pb_column:nth-child(3) {
-			display: none !important;
-		}
 
-		/* Middle column full width + full height */
-		> .et_pb_column:nth-child(2) {
-			flex: 0 0 100%;
-			max-width: 100%;
-			height: 100%;
-			display: flex;          /* ensures inner content stretches too */
-			flex-direction: column; /* keeps inner stacking consistent */
-		}
+	#next-section {
+	padding-top:1rem !important;
+	padding-bottom:1rem !important;
+	}
 
-		.section-header-title {
-			padding-top:170px;
-			padding-left:15px;
-			padding-right:15px;
-		}
+	#next-section > div {
+		gap:1rem;
+	}
+	#next-section > div > div {
+		flex: 1 1 100%;
 	}
 
 }
+
+
+@media (max-width: 960px) {
+
+	html body .explore-row-header {
+		.section-header-title {
+			padding-top:150px;
+			min-height:100vh;
+
+		}
+	}

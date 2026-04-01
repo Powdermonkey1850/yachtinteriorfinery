@@ -170,14 +170,14 @@ class WPML implements IOverrideWPML
         $readers = [];
         foreach ($langs as $code) {
             $escaped = Util::getInstance()->esc_sql_name($code);
-            $setters[] = "tn.`cnt_{$escaped}` = curr.`cnt_{$escaped}`";
+            $setters[] = "tn.`cnt_{$escaped}` = COALESCE(curr.`cnt_{$escaped}`, 0)";
             // phpcs:disable WordPress.DB.PreparedSQL
-            $readers[] = $wpdb->prepare("SUM(IF(wpmlt.language_code = %s, 1, 0)) AS `cnt_{$escaped}`", $code);
+            $readers[] = $wpdb->prepare("SUM(t.language_code = %s) AS `cnt_{$escaped}`", $code);
             // phpcs:enable WordPress.DB.PreparedSQL
         }
         // Create UPDATE query
         // phpcs:disable WordPress.DB.PreparedSQL
-        $sqlStatement = "UPDATE {$table_name_icl} AS tn\n            INNER JOIN (\n                SELECT rmlic.fid, " . \join(',', $readers) . "\n                FROM {$table_name_icl} rmlic\n                LEFT JOIN {$table_name_posts} rmlpostscnt\n                    ON rmlpostscnt.fid = rmlic.fid\n                LEFT JOIN " . $wpdb->prefix . "icl_translations wpmlt\n                    ON wpmlt.element_id = rmlpostscnt.attachment\n                    AND wpmlt.element_type = 'post_attachment'\n                GROUP BY rmlic.fid\n            ) curr\n            ON curr.fid = tn.fid\n            SET " . \join(',', $setters) . "\n            WHERE {$where}";
+        $sqlStatement = "UPDATE {$table_name_icl} tn\n            LEFT JOIN (\n                SELECT p.fid, " . \join(',', $readers) . "\n                FROM {$table_name_posts} p\n                LEFT JOIN " . $wpdb->prefix . "icl_translations t\n                    ON t.element_id = p.attachment\n                    AND t.element_type = 'post_attachment'\n                GROUP BY p.fid\n            ) curr\n            ON curr.fid = tn.fid\n            SET " . \join(',', $setters) . "\n            WHERE {$where}";
         $wpdb->query($sqlStatement);
         // phpcs:enable WordPress.DB.PreparedSQL
         $this->debug('WPML: Update count cache table', __METHOD__);

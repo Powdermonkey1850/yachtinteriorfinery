@@ -60,12 +60,17 @@ function wpconsent_frontend_scripts() {
 				'slugs'                      => $slugs,
 				'enable_consent_banner'      => wpconsent()->settings->get_option( 'enable_consent_banner', 1 ),
 				'enable_script_blocking'     => wpconsent()->settings->get_option( 'enable_script_blocking', 1 ),
+				'enable_content_blocking'    => wpconsent()->settings->get_option( 'enable_content_blocking', 0 ),
 				'enable_consent_floating'    => boolval( wpconsent()->settings->get_option( 'enable_consent_floating', 0 ) ),
 				'enable_shared_consent'      => boolval( wpconsent()->settings->get_option( 'enable_shared_consent', 0 ) ),
+				'cookie_domain'              => wpconsent()->settings->get_option( 'cookie_domain', '' ),
 				'accept_button_enabled'      => boolval( wpconsent()->settings->get_option( 'accept_button_enabled', 1 ) ),
 				'cancel_button_enabled'      => boolval( wpconsent()->settings->get_option( 'cancel_button_enabled', 1 ) ),
 				'preferences_button_enabled' => boolval( wpconsent()->settings->get_option( 'preferences_button_enabled', 1 ) ),
 				'respect_gpc'                => boolval( wpconsent()->settings->get_option( 'respect_gpc', 0 ) ),
+				'gpc_toast_message'          => wpconsent()->settings->get_option( 'gpc_toast_message', wpconsent()->strings->get_string( 'gpc_toast_message' ) ),
+				'gpc_toast_duration'         => apply_filters( 'wpconsent_gpc_toast_duration', 10000 ),
+				'gpc_toast_enabled'          => apply_filters( 'wpconsent_gpc_toast_enabled', true ),
 			)
 		)
 	);
@@ -90,36 +95,27 @@ function wpconsent_google_consent_script() {
 		return;
 	}
 
-	$default = intval( wpconsent()->settings->get_option( 'default_allow', 0 ) );
+	$default_allow = intval( wpconsent()->settings->get_option( 'default_allow', 0 ) );
+	$default_state = $default_allow ? 'granted' : 'denied';
 
 	// We need to load the Google consent script earlier than other tracking scripts for it to take effect correctly.
+	// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	echo "<script data-cfasync=\"false\" data-wpfc-render=\"false\">
 		(function () {
 			window.dataLayer = window.dataLayer || [];function gtag(){dataLayer.push(arguments);}
-			
-			let preferences = {
-				marketing: {$default},
-				statistics: {$default},
-			}
-			
-			// Get preferences directly from cookie
-			const value = `; ` + document.cookie;
-			const parts = value.split(`; wpconsent_preferences=`);
-			if (parts.length === 2) {
-				try {
-					preferences = JSON.parse(parts.pop().split(';').shift());
-				} catch (e) {
-					console.error('Error parsing WPConsent preferences:', e);
-				}
-			}
-			
+
+			// Set the developer ID.
+			gtag('set', 'developer_id.dMmRkYz', true);
+
+			// Set default consent state based on plugin settings.
 			gtag('consent', 'default', {
-				'ad_storage': preferences.marketing ? 'granted' : 'denied',
-				'analytics_storage': preferences.statistics ? 'granted' : 'denied',
-				'ad_user_data': preferences.marketing ? 'granted' : 'denied',
-				'ad_personalization': preferences.marketing ? 'granted' : 'denied',
+				'ad_storage': '{$default_state}',
+				'analytics_storage': '{$default_state}',
+				'ad_user_data': '{$default_state}',
+				'ad_personalization': '{$default_state}',
 				'security_storage': 'granted',
-				'functionality_storage': 'granted'
+				'functionality_storage': 'granted',
+				'wait_for_update': 500,
 			});
 		})();
 	</script>"; // phpcs:ignore

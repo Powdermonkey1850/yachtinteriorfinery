@@ -1,38 +1,120 @@
 
 html body .section-boy-girl  {
 
-        p {
-        font-family: 'Open Sans', sans-serif;
-	font-size:0.9rem;
-        }
+	p {
+		font-family: 'Open Sans', sans-serif;
+		font-size:0.9rem;
+	}
 
-	        .et-pb-slider-arrows a:before {
-                color:#ffffff;
+	.et-pb-slider-arrows a:before {
+		color:#ffffff;
 		width:15px;
 		height:15px;
 		background-color:rgba(0,0,0,0.4);
 		border-radius:50%;
 		font-size:25px;
-       }
+	}
+
+
+	>div.et_pb_row {
+		padding-top:100px !important;
+		padding-bottom:100px !important;
+	}
 
 }
 
 
+@media (max-width: 1500px) {
+
+}
+
+@media (max-width: 1200px) {
+
+}
+
+@media (max-width: 992px) {
+
+	.section-boy-girl > :nth-child(odd),
+	.section-boy-girl > :nth-child(even) {
+
+		display:flex;
+		>div.et_pb_row {
+			padding-top:100px !important;
+			padding-bottom:100px !important;
+		}		flex-direction:column-reverse;
+
+	}
+	html body .section-boy-girl {
+
+		>div.et_pb_row {
+			padding-top:50px !important;
+			padding-bottom:50px !important;
+		}
+	}
+
+}
+
+@media (max-width: 768px) {
+
+	html body .section-boy-girl  {
+
+		p {
+			font-size:0.8rem;
+		}
+
+		>div.et_pb_row {
+			padding-top:50px !important;
+			padding-bottom:50px !important;
+		}
+
+		>div.et_pb_row>div.et_pb_column:nth-child(2) {
+			padding-bottom:50px;
+			height:auto !important;
+		}
+
+		.et_pb_slide, 
+		.et_pb_slides,
+	       	.et_pb_slider {
+			aspect-ratio:1 / 1;
+			height:auto !important;
+		}
+
+		.et-pb-arrow-next,
+		.et-pb-arrow-prev {
+		margin:0px 10px 0px 10px;
+		}
+
+
+	}
+
+
+
+
+}
+
+@media (max-width: 576px) {
+
+}
+
+
+
+
+
+
+/* WHAT ARE THESE? */
+
+
 @media (max-width: 980px) {
-  /* CSS rules for screens smaller than 981px */
+	/* CSS rules for screens smaller than 981px */
 
-  .section-boy-girl {
-	  display:block;
+	.section-boy-girl {
+		display:block;
 
-  }
+	}
 
-  .section-boy-girl > div {
-	width:80%
-  }
-
-  html body   .section-boy-girl h2 {
-        margin-top:46px;
-  }
+	.section-boy-girl > div {
+		width:80%
+	}
 
 }
 
@@ -40,6 +122,12 @@ html body .section-boy-girl  {
 @media (max-width: 1400px) {
 	html body .section-boy-girl > div  {
 		width:90%;
-		
+
 	}
 }
+
+
+
+
+
+

@@ -336,7 +336,7 @@ div.top-toggle-content-link {
 /* ===== H1 styling ===== */
 .custom-header-row h1 {
   font-family: 'Poppins', sans-serif;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 0.3;
   margin: 0;
   text-align: center;
@@ -356,7 +356,7 @@ span.yif {
 /* Second line – page title */
 .custom-header-row h1 .title {
   display: block;
-  font-weight: 400;
+  font-weight: 500;
   font-size: clamp(32px, 5vw, 50px);
   letter-spacing: clamp(8px, 2vw, 15px);
   margin-top: 0;

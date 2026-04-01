@@ -31,8 +31,6 @@ OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ***************************************************************************** */
 
-/*! lil-uri - v0.3.1 - MIT License - https://github.com/lil-js/uri */
-
 /**!
  * Sortable 1.15.6
  * @author	RubaXa   <trash@rubaxa.org>
