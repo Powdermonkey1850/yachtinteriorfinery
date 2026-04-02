@@ -85,9 +85,19 @@ add_action('admin_enqueue_scripts', 'yif_enqueue_custom_in_divi_builder');
 /**
  * Ensure Gravity Forms JS is available even if forms are in hidden popups.
  */
+
+/*
 add_action('wp_enqueue_scripts', function () {
   if (class_exists('GFForms')) {
     GFForms::include_addon_framework();
     wp_enqueue_script('gform_gravityforms');
   }
-}, 25);
+}, 25); */
+
+
+
+add_action('wp', function () {
+  if (function_exists('gravity_form_enqueue_scripts') && is_page()) {
+    gravity_form_enqueue_scripts(2, true);
+  }
+});

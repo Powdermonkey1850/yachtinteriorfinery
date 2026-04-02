@@ -3,11 +3,15 @@
 	flex-direction:column;
 }
 
+.et_pb_module.oneline .et-menu-nav ul {
+	max-width:none;
+
+}
 
 @media (max-width: 99999px) {
 
 	.yif-menu-cont {
-/*		width:100% !important; */
+		/*		width:100% !important; */
 		i/* background-color:transparent !important;*/
 
 	}
@@ -15,14 +19,14 @@
 
 
 	.yif-menu-cont-col {
-	/*	border:1px solid black !important;*/
+		/*	border:1px solid black !important;*/
 	}
 
 
 	.y-logo {
-	/* width:42px !important;
-	border:1px solid red; */
-	}
+		/* width:42px !important;
+		border:1px solid red; */
+}
 
 }
 
