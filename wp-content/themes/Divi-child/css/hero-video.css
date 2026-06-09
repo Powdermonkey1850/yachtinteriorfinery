@@ -22,6 +22,7 @@ body:has(.yif-hero-video) {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  z-index: 1;
 }
 
 /* Scale iframe to cover the full viewport regardless of aspect ratio */
@@ -30,13 +31,81 @@ body:has(.yif-hero-video) {
   top: 50%;
   left: 50%;
   width: 100vw;
-  height: 56.25vw;   /* viewport is wider than 16:9 */
-  min-width: 177.78vh; /* viewport is taller than 16:9 */
+  height: 56.25vw;
+  /* viewport is wider than 16:9 */
+  min-width: 177.78vh;
+  /* viewport is taller than 16:9 */
   min-height: 100vh;
   transform: translate(-50%, -50%);
   border: 0;
+  z-index: 2;
 }
 
+/* Content overlay panel */
+.yif-hero-video__overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 50%;
+  height: 100%;
+  background: rgba(106, 80, 103, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* 20% right = 10vw (matching the row container's 10% right padding below) */
+  padding: 3rem 20% 3rem 3rem;
+  text-align: center;
+  color: #fff;
+  z-index: 3;
+}
+
+.yif-hero-video__crest {
+  width: 100px;
+  height: auto;
+  margin-bottom: 1.5rem;
+}
+
+.yif-hero-video__brand {
+  font-size: 1.5rem;
+  letter-spacing: 0.2em;
+  line-height: 1.8;
+  margin-bottom: 1rem;
+  font-weight: 400;
+  color: #fff;
+}
+
+.yif-hero-video__tagline {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #fff;
+}
+
+.yif-hero-video__body {
+  font-size: 0.9rem;
+  line-height: 1.8;
+  margin-bottom: 2rem;
+  max-width: 380px;
+  color: #fff;
+}
+
+.yif-hero-video__cta {
+  display: inline-block;
+  padding: 0.75rem 2rem;
+  border: 1px solid #fff;
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.yif-hero-video__cta:hover {
+  background: #fff;
+  color: #84667c;
+}
 
 /* ---- Responsive ---- */
 @media (max-width: 1400px) {}
