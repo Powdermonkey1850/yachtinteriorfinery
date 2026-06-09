@@ -45,19 +45,28 @@ body:has(.yif-hero-video) {
 .yif-hero-video__overlay {
   position: absolute;
   top: 0;
-  right: 0;
-  width: 50%;
+  right: 10.3vw;
+  width: 39.7vw;
   height: 100%;
   background: rgba(106, 80, 103, 0.55);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* 20% right = 10vw (matching the row container's 10% right padding below) */
-  padding: 3rem 20% 3rem 3rem;
+  padding: 3rem;
+  margin-top: 7rem;
   text-align: center;
   color: #fff;
   z-index: 3;
+  box-sizing: border-box;
+}
+
+.yif-hero-video__overlay-inner {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .yif-hero-video__crest {
