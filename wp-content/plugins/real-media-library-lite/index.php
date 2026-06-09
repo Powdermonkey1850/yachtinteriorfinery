@@ -8,9 +8,11 @@
  * Description:     Organize uploaded media in folders, collections and galleries: A file manager for WordPress. Media management made easy!
  * Author:          devowl.io
  * Author URI:      https://devowl.io
- * Version:                                                                                                              4.22.72
- * Text Domain:     real-media-library
+ * Version:                                                                                                                     4.22.79
+ * Text Domain:     real-media-library-lite
  * Domain Path:     /languages
+ * License:         GPLv2 or later
+ * License URI:     https://www.gnu.org/licenses/gpl-2.0.en.html
  */
 
 defined('ABSPATH') or die('No script kiddies please!'); // Avoid direct file request

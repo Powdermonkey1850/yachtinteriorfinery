@@ -34,8 +34,8 @@ class ComposerAutoloaderInit9c45d73de7f1c22d3e50a90ec1d683c3
 
         $filesToLoad = \Composer\Autoload\ComposerStaticInit9c45d73de7f1c22d3e50a90ec1d683c3::$files;
         $requireFile = \Closure::bind(static function ($fileIdentifier, $file) {
-            if (empty($GLOBALS['__composer_autoload_files'][$fileIdentifier])) {
-                $GLOBALS['__composer_autoload_files'][$fileIdentifier] = true;
+            if (empty($GLOBALS['__composer_autoload_files_real-media-library'][$fileIdentifier])) {
+                $GLOBALS['__composer_autoload_files_real-media-library'][$fileIdentifier] = true;
 
                 require $file;
             }

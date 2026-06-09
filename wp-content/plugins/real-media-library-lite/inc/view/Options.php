@@ -36,10 +36,10 @@ class Options
         if (!\wp_rml_active()) {
             return;
         }
-        \add_settings_section('rml_options_general', \__('RealMediaLibrary:General'), [$this, 'empty_callback'], 'media');
+        \add_settings_section('rml_options_general', \__('RealMediaLibrary:General', 'real-media-library-lite'), [$this, 'empty_callback'], 'media');
         \add_option('rml_load_frontend', 1);
         \register_setting('media', 'rml_load_frontend', 'esc_attr');
-        \add_settings_field('rml_load_frontend', '<label for="rml_load_frontend">' . \__('Load RML functionality in frontend', RML_TD) . '</label>', [$this, 'html_rml_load_frontend'], 'media', 'rml_options_general');
+        \add_settings_field('rml_load_frontend', '<label for="rml_load_frontend">' . \__('Load RML functionality in frontend', 'real-media-library-lite') . '</label>', [$this, 'html_rml_load_frontend'], 'media', 'rml_options_general');
         /**
          * Allows you to register new options tabs and fields to the Real Media
          * Library options panel (Settings > Media).
@@ -49,7 +49,7 @@ class Options
          *  // Register tab
          *  add_settings_section(
          *      'rml_options_custom',
-         *      __('RealMediaLibrary:My Tab'), // The label must begin with RealMediaLibrary:
+         *      __('RealMediaLibrary:My Tab', 'real-media-library-lite'), // The label must begin with RealMediaLibrary:
          *      [MatthiasWeb\RealMediaLibrary\view\Options::getInstance(), 'empty_callback'),
          *      'media'
          *  );
@@ -66,13 +66,13 @@ class Options
          */
         \do_action('RML/Options/Register');
         // Reset
-        \add_settings_section('rml_options_reset', \__('RealMediaLibrary:Reset'), [$this, 'empty_callback'], 'media');
+        \add_settings_section('rml_options_reset', \__('RealMediaLibrary:Reset', 'real-media-library-lite'), [$this, 'empty_callback'], 'media');
         if ($this->isPro()) {
-            \add_settings_field('rml_button_order_reset', '<label for="rml_button_order_reset">' . \__('Reset the order of all galleries', RML_TD) . '</label>', [$this, 'html_rml_button_order_reset'], 'media', 'rml_options_reset');
+            \add_settings_field('rml_button_order_reset', '<label for="rml_button_order_reset">' . \__('Reset the order of all galleries', 'real-media-library-lite') . '</label>', [$this, 'html_rml_button_order_reset'], 'media', 'rml_options_reset');
         }
-        \add_settings_field('rml_button_wipe', '<label for="rml_button_wipe">' . \__('Wipe all settings (folders, attachment relations)', RML_TD) . '</label>', [$this, 'html_rml_button_wipe'], 'media', 'rml_options_reset');
-        \add_settings_field('rml_button_cnt_reset', '<label for="rml_button_wipe">' . \__('Reset folder count cache', RML_TD) . '</label>', [$this, 'html_rml_button_cnt_reset'], 'media', 'rml_options_reset');
-        \add_settings_field('rml_button_slug_reset', '<label for="rml_button_wipe">' . \__('Reset names, slugs and absolute pathes', RML_TD) . '</label>', [$this, 'html_rml_button_slug_reset'], 'media', 'rml_options_reset');
+        \add_settings_field('rml_button_wipe', '<label for="rml_button_wipe">' . \__('Wipe all settings (folders, attachment relations)', 'real-media-library-lite') . '</label>', [$this, 'html_rml_button_wipe'], 'media', 'rml_options_reset');
+        \add_settings_field('rml_button_cnt_reset', '<label for="rml_button_wipe">' . \__('Reset folder count cache', 'real-media-library-lite') . '</label>', [$this, 'html_rml_button_cnt_reset'], 'media', 'rml_options_reset');
+        \add_settings_field('rml_button_slug_reset', '<label for="rml_button_wipe">' . \__('Reset names, slugs and absolute pathes', 'real-media-library-lite') . '</label>', [$this, 'html_rml_button_slug_reset'], 'media', 'rml_options_reset');
     }
     // Noop
     public function empty_callback($arg)
@@ -86,26 +86,26 @@ class Options
     {
         // Check if reinstall the database tables
         if (isset($_GET['rml_install'])) {
-            echo 'DB Update was executed<br /><br />';
+            echo \esc_html('DB Update was executed') . '<br /><br />';
             $this->getCore()->getActivator()->install(\true);
             echo '<br /><br />';
         }
-        echo '<a class="rml-rest-button button" data-url="reset/relations" data-method="DELETE">' . \__('Wipe attachment relations', RML_TD) . '</a>
-        <a class="rml-rest-button button" data-url="reset/folders" data-method="DELETE">' . \__('Wipe all', RML_TD) . '</a>';
+        echo '<a class="rml-rest-button button" data-url="reset/relations" data-method="DELETE">' . \esc_html__('Wipe attachment relations', 'real-media-library-lite') . '</a>
+        <a class="rml-rest-button button" data-url="reset/folders" data-method="DELETE">' . \esc_html__('Wipe all', 'real-media-library-lite') . '</a>';
     }
     /**
      * Output count reset button.
      */
     public function html_rml_button_cnt_reset()
     {
-        echo '<a class="rml-rest-button button rml-button-wipe" data-url="reset/count" data-method="DELETE">' . \__('Reset count', RML_TD) . '</a>';
+        echo '<a class="rml-rest-button button rml-button-wipe" data-url="reset/count" data-method="DELETE">' . \esc_html__('Reset count', 'real-media-library-lite') . '</a>';
     }
     /**
      * Output reset slug button.
      */
     public function html_rml_button_slug_reset()
     {
-        echo '<a class="rml-rest-button button rml-button-wipe" data-url="reset/slugs" data-method="DELETE">' . \__('Reset', RML_TD) . '</a>';
+        echo '<a class="rml-rest-button button rml-button-wipe" data-url="reset/slugs" data-method="DELETE">' . \esc_html__('Reset', 'real-media-library-lite') . '</a>';
     }
     /**
      * Output load frontend checkbox.
@@ -115,15 +115,15 @@ class Options
         $value = \get_option('rml_load_frontend', '1');
         echo '<input type="checkbox" id="rml_load_frontend"
                 name="rml_load_frontend" value="1" ' . \checked(1, $value, \false) . ' />
-                <label>' . \__('Activate this option if you are using a page builder like Divi Page Builder, WPBakery Page Builder or Elementor.', RML_TD) . '</label>';
+                <label>' . \esc_html__('Activate this option if you are using a page builder like Divi Page Builder, WPBakery Page Builder or Elementor.', 'real-media-library-lite') . '</label>';
     }
     /**
      * Output order reset button.
      */
     public function html_rml_button_order_reset()
     {
-        echo '<a class="rml-rest-button button button-primary" data-url="reset/order" data-method="DELETE">' . \__('Reset') . '</a>
-            <p class="description">' . \__('You can also reset an single folder in its folder details.', RML_TD) . '</p>';
+        echo '<a class="rml-rest-button button button-primary" data-url="reset/order" data-method="DELETE">' . \esc_html__('Reset', 'real-media-library-lite') . '</a>
+            <p class="description">' . \esc_html__('You can also reset an single folder in its folder details.', 'real-media-library-lite') . '</p>';
     }
     /**
      * Is RML allowed to load on frontend? (Non-Admin area)

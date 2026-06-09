@@ -193,6 +193,19 @@ class WPCode_Library {
 			$this->data = $this->get_from_server();
 		}
 
+		// Enforce shape BEFORE maybe_add_usernames_data() so that method's
+		// `$this->data['categories'][] = ...` and `array_merge($this->data['snippets'], ...)`
+		// can't fatal on a partial-shape cache payload like {"snippets": null}.
+		if ( ! is_array( $this->data ) ) {
+			$this->data = $this->get_empty_array();
+		}
+		if ( ! isset( $this->data['categories'] ) || ! is_array( $this->data['categories'] ) ) {
+			$this->data['categories'] = array();
+		}
+		if ( ! isset( $this->data['snippets'] ) || ! is_array( $this->data['snippets'] ) ) {
+			$this->data['snippets'] = array();
+		}
+
 		$this->maybe_add_usernames_data();
 
 		return $this->data;
@@ -329,8 +342,11 @@ class WPCode_Library {
 	 */
 	public function process_response( $data ) {
 		$response = json_decode( $data, true );
-		if ( ! isset( $response['status'] ) || 'success' !== $response['status'] ) {
-			return $this->get_empty_array();
+		if ( ! is_array( $response ) || ! isset( $response['status'] ) || 'success' !== $response['status'] ) {
+			return array();
+		}
+		if ( ! isset( $response['data'] ) || ! is_array( $response['data'] ) ) {
+			return array();
 		}
 
 		return $response['data'];
@@ -373,6 +389,11 @@ class WPCode_Library {
 		// Save the version information if available in the API response.
 		if ( ! empty( $snippet_data['version'] ) ) {
 			update_post_meta( $snippet_id, '_wpcode_snippet_version', $snippet_data['version'] );
+		}
+
+		// Save the originating library author if available in the API response.
+		if ( ! empty( $snippet_data['username'] ) ) {
+			update_post_meta( $snippet_id, '_wpcode_library_author', sanitize_key( $snippet_data['username'] ) );
 		}
 
 		delete_transient( $this->used_snippets_transient_key );
@@ -450,6 +471,85 @@ class WPCode_Library {
 	 */
 	public function get_snippet_library_id( $snippet_id ) {
 		return absint( get_post_meta( $snippet_id, '_wpcode_library_id', true ) );
+	}
+
+	/**
+	 * Resolve which library username (author) a snippet came from.
+	 *
+	 * Returns the persisted `_wpcode_library_author` meta if present. For
+	 * snippets imported before this meta key was tracked, falls back to the
+	 * (per-request memoized) reverse lookup map and backfills the meta when
+	 * a match is found. Returns the generic 'wpcode' marker when a snippet
+	 * is library-linked but its origin can't be identified — without
+	 * persisting it, so a later call in the same request (or a later
+	 * render) can re-attempt once registered-author data becomes available.
+	 *
+	 * @param int $snippet_id The local snippet id.
+	 *
+	 * @return string The library username slug, or empty string if not from the library.
+	 */
+	public function get_snippet_author( $snippet_id ) {
+		$library_id = $this->get_snippet_library_id( $snippet_id );
+		if ( empty( $library_id ) ) {
+			return '';
+		}
+
+		$stored = get_post_meta( $snippet_id, '_wpcode_library_author', true );
+		if ( ! empty( $stored ) ) {
+			return $stored;
+		}
+
+		$map = $this->get_library_author_lookup_map();
+		if ( isset( $map[ $library_id ] ) ) {
+			update_post_meta( $snippet_id, '_wpcode_library_author', $map[ $library_id ] );
+
+			return $map[ $library_id ];
+		}
+
+		return 'wpcode';
+	}
+
+	/**
+	 * Reverse map of library_id => registered author username, built once
+	 * per request so backfill scans don't repeat per row.
+	 *
+	 * @return array<int, string>
+	 */
+	protected function get_library_author_lookup_map() {
+		static $map = null;
+		if ( null !== $map ) {
+			return $map;
+		}
+
+		$map = array();
+		foreach ( $this->get_library_usernames() as $username => $data ) {
+			$version  = isset( $data['version'] ) ? $data['version'] : '';
+			$snippets = $this->get_snippets_by_username( $username, $version );
+			foreach ( ( isset( $snippets['snippets'] ) ? $snippets['snippets'] : array() ) as $snippet ) {
+				if ( isset( $snippet['library_id'] ) ) {
+					$map[ absint( $snippet['library_id'] ) ] = $username;
+				}
+			}
+		}
+
+		return $map;
+	}
+
+	/**
+	 * Get the human readable label for a library author username.
+	 *
+	 * @param string $username The library username slug.
+	 *
+	 * @return string
+	 */
+	public function get_author_label( $username ) {
+		if ( 'wpcode' === $username ) {
+			return __( 'WPCode', 'insert-headers-and-footers' );
+		}
+
+		$usernames = $this->get_library_usernames();
+
+		return isset( $usernames[ $username ]['label'] ) ? $usernames[ $username ]['label'] : $username;
 	}
 
 	/**
@@ -823,6 +923,14 @@ class WPCode_Library {
 		// Update local version metadata.
 		if ( ! empty( $library_snippet['version'] ) ) {
 			update_post_meta( $snippet_id, '_wpcode_snippet_version', $library_snippet['version'] );
+		}
+
+		// Persist the originating library author from the fresh API response.
+		// This is a backfill opportunity for snippets imported before that meta
+		// key existed: a user clicking "Update Available" hits the same API
+		// endpoint as a new import, so the username is available here too.
+		if ( ! empty( $library_snippet['username'] ) ) {
+			update_post_meta( $snippet_id, '_wpcode_library_author', sanitize_key( $library_snippet['username'] ) );
 		}
 
 		return array(

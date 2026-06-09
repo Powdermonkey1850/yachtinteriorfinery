@@ -3,6 +3,367 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## 4.22.79 (2026-05-27)
+
+
+### Bug Fixes
+
+* enhance compatibility with WordPress 7+ block editor iframe mode (CU-869dezv7t)
+* prevent media toolbar overflow hiding plugin buttons on WordPress 7.0+ grid layout (CU-869dety0g)
+
+
+<details><summary>Dependency updates @devowl-wp/real-utils 1.14.24</summary>
+
+
+**_Purpose of dependency:_** _Create cross-selling ads, about page, rating and newsletter input for WP Real plugins._
+##### Bug Fixes
+
+* images not shown in Welcome page for Real Cookie Banner PRO (CU-869dewjvn)</details>
+
+
+
+
+
+## 4.22.78 (2026-05-20) (not released)
+
+**Note:** This version of the package has not (yet) been released publicly. This happens if changes have been made in dependencies that do not affect this package (e.g. changes for the development of the package). The changes will be rolled out with the next official update.
+
+**Note:** This package (@devowl-wp/real-media-library) has been updated because a dependency, which is also shipped with this package, has changed.
+
+
+<details><summary>Development dependency update @devowl-wp/api 1.10.0</summary>
+
+
+**_Purpose of dependency:_** _Shared typings for all Node.js backends and frontends._
+##### Features
+
+* redesign cart-abandonment email and ship opt-out flow (CU-869cmgnej)</details>
+
+<details><summary>Development dependency update @devowl-wp/continuous-integration 0.9.1</summary>
+
+
+**_Purpose of dependency:_** _DevOps macros, job templates and jobs for Gitlab CI and @devowl-wp/node-gitlab-ci._
+##### Code Refactoring
+
+* migrate retypeapp to rspress (CU-869dcazu8)
+
+
+##### Continuous Integration
+
+* inject devowl-io-production-design-apply bundle into review-app wordpress container via S3 ensure-bundle + docker cp (CU-869ckvgg2)</details>
+
+<details><summary>Development dependency update @devowl-wp/monorepo-utils 0.2.29</summary>
+
+
+**_Purpose of dependency:_** _Predefined monorepo utilities and tasks._
+##### Code Refactoring
+
+* migrate retypeapp to rspress (CU-869dcazu8)</details>
+
+
+
+
+
+## 4.22.77 (2026-05-13) (not released)
+
+**Note:** This version of the package has not (yet) been released publicly. This happens if changes have been made in dependencies that do not affect this package (e.g. changes for the development of the package). The changes will be rolled out with the next official update.
+
+**Note:** This package (@devowl-wp/real-media-library) has been updated because a dependency, which is also shipped with this package, has changed.
+
+
+<details><summary>Development dependency update @devowl-wp/continuous-integration 0.9.0</summary>
+
+
+**_Purpose of dependency:_** _DevOps macros, job templates and jobs for Gitlab CI and @devowl-wp/node-gitlab-ci._
+##### Code Refactoring
+
+* docker-compose network governance for devowl-wp stacks, enhancing service exposure and internal network management (CU-869c51h34)
+
+
+##### Continuous Integration
+
+* add endpoint wait functionality for SeaweedFS services readiness (CU-869c7xrrv)
+* every docker review deploy gets a dedicated docker stack name coupled to the Gitlab CI job id (CU-869d915w8)
+
+
+##### Features
+
+* enforce package-tier import boundaries via dependency-cruiser (CU-869d0qyx8)</details>
+
+<details><summary>Development dependency update @devowl-wp/node-gitlab-ci 0.8.20</summary>
+
+
+**_Purpose of dependency:_** _Create dynamic GitLab CI pipelines in JavaScript or TypeScript for each project. Reuse and inherit instructions and avoid duplicate code!_
+##### Continuous Integration
+
+* every docker review deploy gets a dedicated docker stack name coupled to the Gitlab CI job id (CU-869d915w8)</details>
+
+
+
+
+
+## 4.22.76 (2026-05-11)
+
+
+### Bug Fixes
+
+* gallery shortcode did not work for free version (CU-869d454p5)
+
+
+
+
+
+
+
+## 4.22.75 (2026-05-07)
+
+
+### Bug Fixes
+
+* compatibility with Divi 5 and show folder sidebar in frontend editor (CU-869cx853w)
+* declare GPL license in plugin headers (CU-869d454p5)
+
+
+### Build System
+
+* improve build tasks for stripping variant markers for free version (CU-869d454p5)
+
+
+### Code Refactoring
+
+* enable more WPCS rules and use correct wordpress.org text domain (CU-869d454p5)
+
+
+<details><summary>Dependency updates @devowl-wp/freemium 1.3.138</summary>
+
+
+**_Purpose of dependency:_** _Make your plugin to a freemium plugin with predefined Envato support_
+##### Build System
+
+* improve build tasks for stripping variant markers for free version (CU-869d454p5)
+
+
+##### Code Refactoring
+
+* enable more WPCS rules and use correct wordpress.org text domain (CU-869d454p5)</details>
+
+<details><summary>Dependency updates @devowl-wp/real-product-manager-wp-client 1.20.21</summary>
+
+
+**_Purpose of dependency:_** _A WordPress client for Real Product Manager_
+##### Bug Fixes
+
+* uncaught TypeError: substr(): Argument [#1](https://git.owlinfra.de/devowlio/devowl-wp/issues/1) () must be of type string, array given (CU-869cx9ua6)
+
+
+##### Build System
+
+* improve build tasks for stripping variant markers for free version (CU-869d454p5)
+
+
+##### Code Refactoring
+
+* enable more WPCS rules and use correct wordpress.org text domain (CU-869d454p5)</details>
+
+<details><summary>Dependency updates @devowl-wp/real-utils 1.14.21</summary>
+
+
+**_Purpose of dependency:_** _Create cross-selling ads, about page, rating and newsletter input for WP Real plugins._
+##### Code Refactoring
+
+* enable more WPCS rules and use correct wordpress.org text domain (CU-869d454p5)</details>
+
+<details><summary>Dependency updates @devowl-wp/utils 1.20.21</summary>
+
+
+**_Purpose of dependency:_** _Utility functionality for all your WordPress plugins._
+##### Bug Fixes
+
+* deduplicate repeated frontend preload links in wp_head output (CU-869chp8wu)
+* free versions Cannot declare InstalledVersions fatal error (CU-8696ru88g)
+
+
+##### Build System
+
+* improve build tasks for stripping variant markers for free version (CU-869d454p5)
+
+
+##### Code Refactoring
+
+* enable more WPCS rules and use correct wordpress.org text domain (CU-869d454p5)</details>
+
+<details><summary>Development dependency update @devowl-wp/composer-licenses 0.1.21</summary>
+
+
+**_Purpose of dependency:_** _Helper functionalities for your composer project to validate licenses and generate a disclaimer._
+##### Code Refactoring
+
+* enable more WPCS rules and use correct wordpress.org text domain (CU-869d454p5)</details>
+
+<details><summary>Development dependency update @devowl-wp/phpcs-config 0.1.20</summary>
+
+
+**_Purpose of dependency:_** _Predefined functionalities for PHPCS._
+##### Code Refactoring
+
+* enable more WPCS rules and use correct wordpress.org text domain (CU-869d454p5)</details>
+
+
+
+
+
+## 4.22.74 (2026-04-29) (not released)
+
+**Note:** This version of the package has not (yet) been released publicly. This happens if changes have been made in dependencies that do not affect this package (e.g. changes for the development of the package). The changes will be rolled out with the next official update.
+
+**Note:** This package (@devowl-wp/real-media-library) has been updated because a dependency, which is also shipped with this package, has changed.
+
+
+<details><summary>Dependency updates @devowl-wp/react-folder-tree 0.1.28</summary>
+
+
+**_Purpose of dependency:_** _Feature-rich folder tree renderer with toolbar (formerly react-aiot)._
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)</details>
+
+<details><summary>Development dependency update @devowl-wp/continuous-integration 0.8.3</summary>
+
+
+**_Purpose of dependency:_** _DevOps macros, job templates and jobs for Gitlab CI and @devowl-wp/node-gitlab-ci._
+##### Bug Fixes
+
+* patch wp-cli/i18n-command regex bug in Dockerfile to make Real Physical Media translations work (CU-869d346j5)
+
+
+##### Build System
+
+* initially introduce ansible and step-ca (CU-869cxr1cn, CU-869cyyxer)
+* manage swarm-internal-manager-1 via ansible and trust CA for CI access (CU-869cyyxer)
+
+
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)
+
+
+##### Continuous Integration
+
+* custom browserless image with custom TLS certificate support (CU-869cb1mbz)
+
+
+##### Maintenance
+
+* pin Docker DIND version to v28 for GitLab CI compatibility (CU-869crn919)</details>
+
+<details><summary>Development dependency update @devowl-wp/continuous-localization 0.8.37</summary>
+
+
+**_Purpose of dependency:_** _Provide a CLI to push and pull localization files from different translation management systems._
+##### Bug Fixes
+
+* using develop as weblate fallback on non existing branches due to missing pipeline run (CU-869crn919)
+
+
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)</details>
+
+<details><summary>Development dependency update @devowl-wp/monorepo-utils 0.2.27</summary>
+
+
+**_Purpose of dependency:_** _Predefined monorepo utilities and tasks._
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)</details>
+
+<details><summary>Development dependency update @devowl-wp/node-gitlab-ci 0.8.19</summary>
+
+
+**_Purpose of dependency:_** _Create dynamic GitLab CI pipelines in JavaScript or TypeScript for each project. Reuse and inherit instructions and avoid duplicate code!_
+##### Bug Fixes
+
+* add normalization function for GitLab trace line prefixes to improve log parsing in CI summary (CU-319766g)
+* support OCI image manifests and resolve digests correctly (CU-319766g)
+* update container registry image validation to support multiple manifest types in request headers (CU-319766g)
+
+
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)</details>
+
+<details><summary>Development dependency update @devowl-wp/react-utils 1.0.21</summary>
+
+
+**_Purpose of dependency:_** _Provide various React utils, side effect free and tree shakeable._
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)</details>
+
+<details><summary>Development dependency update @devowl-wp/regexp-translation-extractor 0.2.52</summary>
+
+
+**_Purpose of dependency:_** _Provide a performant translation extractor based on regular expression._
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)</details>
+
+<details><summary>Development dependency update @devowl-wp/webpack-config 0.2.57</summary>
+
+
+**_Purpose of dependency:_** _Webpack config builder for multiple ecosystems like standalone React frontends, Antd, Preact and WordPress._
+##### Code Refactoring
+
+* streamline tsconfig.json includes and remove unnecessary test file references across multiple backends (CU-869cb1mbz)</details>
+
+
+
+
+
+## 4.22.73 (2026-04-02) (not released)
+
+**Note:** This version of the package has not (yet) been released publicly. This happens if changes have been made in dependencies that do not affect this package (e.g. changes for the development of the package). The changes will be rolled out with the next official update.
+
+**Note:** This package (@devowl-wp/real-media-library) has been updated because a dependency, which is also shipped with this package, has changed.
+
+
+<details><summary>Development dependency update @devowl-wp/api 1.9.0</summary>
+
+
+**_Purpose of dependency:_** _Shared typings for all Node.js backends and frontends._
+##### Features
+
+* allow to create type-safe clients from any OpenAPI spec (CU-869br0bp5)</details>
+
+<details><summary>Development dependency update @devowl-wp/continuous-integration 0.8.2</summary>
+
+
+**_Purpose of dependency:_** _DevOps macros, job templates and jobs for Gitlab CI and @devowl-wp/node-gitlab-ci._
+##### Maintenance
+
+* harden cli provisioning via docker binary stage and extrepo (CU-869cqreex)
+* remove unused file</details>
+
+<details><summary>Development dependency update @devowl-wp/eslint-config 0.3.0</summary>
+
+
+**_Purpose of dependency:_** _Provide eslint configuration for our complete monorepo._
+##### Features
+
+* allow to create type-safe clients from any OpenAPI spec (CU-869br0bp5)</details>
+
+<details><summary>Development dependency update @devowl-wp/node-gitlab-ci 0.8.18</summary>
+
+
+**_Purpose of dependency:_** _Create dynamic GitLab CI pipelines in JavaScript or TypeScript for each project. Reuse and inherit instructions and avoid duplicate code!_
+##### Maintenance
+
+* harden cli provisioning via docker binary stage and extrepo (CU-869cqreex)</details>
+
+
+
+
+
 ## 4.22.72 (2026-03-26)
 
 

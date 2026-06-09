@@ -6,6 +6,7 @@ use Exception;
 use MatthiasWeb\RealMediaLibrary\exception\FolderAlreadyExistsException;
 use MatthiasWeb\RealMediaLibrary\exception\OnlyInProVersionException;
 use MatthiasWeb\RealMediaLibrary\Util;
+// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This trait throws internal exceptions and returns internal messages.
 // @codeCoverageIgnoreStart
 \defined('ABSPATH') or die('No script kiddies please!');
 // Avoid direct file request
@@ -146,7 +147,7 @@ trait Creatable
                 $_this->setParent(null, $newOrder);
             } else {
                 // There is nothing given
-                throw new Exception(\__('Something went wrong.', RML_TD));
+                throw new Exception(\__('Something went wrong.', 'real-media-library-lite'));
             }
             $this->debug('Successfully relocated', __METHOD__);
             return \true;

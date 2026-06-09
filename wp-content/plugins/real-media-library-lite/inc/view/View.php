@@ -71,9 +71,9 @@ class View
             $root = \_wp_rml_root();
             $tree = $this->structure->getTree();
             if ($useAll) {
-                $return .= '<option value="" ' . $this->optionsSelected($selected, '') . (\in_array(RML_TYPE_ALL, $disabled, \true) ? 'disabled="disabled"' : '') . '>' . \__('All', RML_TD) . '</option>';
+                $return .= '<option value="" ' . $this->optionsSelected($selected, '') . (\in_array(RML_TYPE_ALL, $disabled, \true) ? 'disabled="disabled"' : '') . '>' . \__('All', 'real-media-library-lite') . '</option>';
             }
-            $return .= '<option value="' . $root . '" ' . $this->optionsSelected($selected, $root) . 'data-path="/"' . (\in_array(RML_TYPE_ROOT, $disabled, \true) ? 'disabled="disabled"' : '') . ' data-name="' . \esc_attr(\__('Unorganized', RML_TD)) . '"' . ' data-type="' . RML_TYPE_ROOT . '">' . \__('Unorganized', RML_TD) . '</option>';
+            $return .= '<option value="' . $root . '" ' . $this->optionsSelected($selected, $root) . 'data-path="/"' . (\in_array(RML_TYPE_ROOT, $disabled, \true) ? 'disabled="disabled"' : '') . ' data-name="' . \esc_attr(\__('Unorganized', 'real-media-library-lite')) . '"' . ' data-type="' . RML_TYPE_ROOT . '">' . \__('Unorganized', 'real-media-library-lite') . '</option>';
         }
         if (!\is_null($tree) && \count($tree) > 0) {
             foreach ($tree as $parent) {
@@ -128,7 +128,7 @@ class View
         $return = ['names' => [], 'slugs' => [], 'types' => []];
         if ($tree === null) {
             $tree = $this->structure->getTree();
-            $return['names'][] = \__('Unorganized pictures', RML_TD);
+            $return['names'][] = \__('Unorganized pictures', 'real-media-library-lite');
             $return['slugs'][] = \_wp_rml_root();
             $return['types'][] = 0;
         }

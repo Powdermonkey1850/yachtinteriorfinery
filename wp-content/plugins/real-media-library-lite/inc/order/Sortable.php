@@ -54,14 +54,14 @@ abstract class Sortable extends Creatable implements IOverrideSortable
     public static function getAvailableContentOrders($asMap = \false)
     {
         if (self::$cachedContentOrders === null) {
-            $orders = ['date_asc' => ['label' => \__('Order by date ascending', RML_TD), 'sqlOrder' => 'wp.post_date'], 'date_desc' => ['label' => \__('Order by date descending', RML_TD), 'sqlOrder' => 'wp.post_date'], 'title_asc' => ['label' => \__('Order by title ascending', RML_TD), 'sqlOrder' => 'wp.post_title'], 'title_desc' => ['label' => \__('Order by title descending', RML_TD), 'sqlOrder' => 'wp.post_title'], 'filename_asc' => ['label' => \__('Order by filename ascending', RML_TD), 'sqlOrder' => "SUBSTRING_INDEX(wp.guid, '/', -1)"], 'filename_desc' => ['label' => \__('Order by filename descending', RML_TD), 'sqlOrder' => "SUBSTRING_INDEX(wp.guid, '/', -1)"], 'filenameNat_asc' => ['label' => \__('Natural order by filename ascending', RML_TD), 'sqlOrder' => "LENGTH(SUBSTRING_INDEX(wp.guid, '/', -1)), SUBSTRING_INDEX(wp.guid, '/', -1)"], 'filenameNat_desc' => ['label' => \__('Natural order by filename descending', RML_TD), 'sqlOrder' => "LENGTH(SUBSTRING_INDEX(wp.guid, '/', -1)) desc, SUBSTRING_INDEX(wp.guid, '/', -1)"], 'id_asc' => ['label' => \__('Order by ID ascending', RML_TD), 'sqlOrder' => 'wp.ID'], 'id_desc' => ['label' => \__('Order by ID descending', RML_TD), 'sqlOrder' => 'wp.ID']];
+            $orders = ['date_asc' => ['label' => \__('Order by date ascending', 'real-media-library-lite'), 'sqlOrder' => 'wp.post_date'], 'date_desc' => ['label' => \__('Order by date descending', 'real-media-library-lite'), 'sqlOrder' => 'wp.post_date'], 'title_asc' => ['label' => \__('Order by title ascending', 'real-media-library-lite'), 'sqlOrder' => 'wp.post_title'], 'title_desc' => ['label' => \__('Order by title descending', 'real-media-library-lite'), 'sqlOrder' => 'wp.post_title'], 'filename_asc' => ['label' => \__('Order by filename ascending', 'real-media-library-lite'), 'sqlOrder' => "SUBSTRING_INDEX(wp.guid, '/', -1)"], 'filename_desc' => ['label' => \__('Order by filename descending', 'real-media-library-lite'), 'sqlOrder' => "SUBSTRING_INDEX(wp.guid, '/', -1)"], 'filenameNat_asc' => ['label' => \__('Natural order by filename ascending', 'real-media-library-lite'), 'sqlOrder' => "LENGTH(SUBSTRING_INDEX(wp.guid, '/', -1)), SUBSTRING_INDEX(wp.guid, '/', -1)"], 'filenameNat_desc' => ['label' => \__('Natural order by filename descending', 'real-media-library-lite'), 'sqlOrder' => "LENGTH(SUBSTRING_INDEX(wp.guid, '/', -1)) desc, SUBSTRING_INDEX(wp.guid, '/', -1)"], 'id_asc' => ['label' => \__('Order by ID ascending', 'real-media-library-lite'), 'sqlOrder' => 'wp.ID'], 'id_desc' => ['label' => \__('Order by ID descending', 'real-media-library-lite'), 'sqlOrder' => 'wp.ID']];
             /**
              * Add an available order criterium to folder content. If you pass
              * user input to the SQL Order please be sure the values are escaped!
              *
              * @example
              * $orders["id_asc"] = [
-             *  "label" => __("Order by ID ascending", RML_TD),
+             *  "label" => __("Order by ID ascending", 'real-media-library-lite'),
              *  "sqlOrder" => "wp.ID"
              * )
              * @param {object[]} $orders The available orders

@@ -39,3 +39,24 @@ body {
 /*  font-family: 'Literata', serif; */
 }
 
+
+/* Hide Divi background video loading spinner */
+
+.mejs-container {
+
+	zzwidth:200px;
+	zzheight:200px;
+	zzdisplay:none;
+	zzborder:3px solid red;
+}
+
+
+.et_pb_preload,
+.et_pb_section_video_bg .mejs-overlay-loading {
+   zzzzzdisplay:none !important;
+}
+
+/* Make sure section background image shows behind video */
+.et_pb_section_video_bg {
+    zzzzzbackground-color: transparent !important;
+}

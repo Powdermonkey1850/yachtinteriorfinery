@@ -2579,7 +2579,7 @@ ctfBuilder = new Vue({
 					self.updateFeedTypeAndSourcesCustomizer();
 				break;
                 case 'createMoreFeeds' :
-                    window.open('https://smashballoon.com/pricing/twitter-feed/?utm_source=twitter-free&utm_medium=settings-builder&utm_campaign=multiple-feeds&utm_content=AddNew')
+                    window.open('https://smashballoon.com/custom-twitter-feeds/twitter-lite-upgrade/?utm_campaign=twitter-free&utm_source=settings-builder&utm_medium=multiple-feeds&utm_content=AddNew')
                     break;
 			}
 		},
@@ -2955,7 +2955,8 @@ ctfBuilder = new Vue({
 					'16' : 'd M Y, G:i',
 					'17' : 'l jS F Y, G:i',
 					'18' : 'm.d.y - G:i',
-					'19' : 'd.m.y - G:i'
+					'19' : 'd.m.y - G:i',
+					'20' : 'Y-m-d'
 				};
 				if(formatsChoices.hasOwnProperty(dateFortmat)){
 					printDate = date_i18n( formatsChoices[dateFortmat], newTime );

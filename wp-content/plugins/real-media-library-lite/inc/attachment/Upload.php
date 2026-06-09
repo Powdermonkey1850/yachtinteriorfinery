@@ -54,7 +54,9 @@ class Upload
         }
         // Check if relative path is given an create folders
         if (isset($_REQUEST['rmlCreateFolder']) && $allowRecursively) {
-            $rmlCreateFolder = \join('/', \array_map('sanitize_file_name', \explode('/', \dirname($_REQUEST['rmlCreateFolder']))));
+            // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- path segments sanitized via sanitize_file_name below.
+            $createFolderRaw = \wp_unslash($_REQUEST['rmlCreateFolder']);
+            $rmlCreateFolder = \join('/', \array_map('sanitize_file_name', \explode('/', \dirname($createFolderRaw))));
             // Create folder recursively
             $rmlFolder = $rmlFolder === null ? \_wp_rml_root() : $rmlFolder;
             try {
@@ -80,20 +82,23 @@ class Upload
                 return;
             }
             // Get the options depending on the current page
-            $options = ['name' => 'rmlFolder', 'disabled' => [RML_TYPE_COLLECTION], 'title' => \__('Select destination folder', RML_TD)];
+            $options = ['name' => 'rmlFolder', 'disabled' => [RML_TYPE_COLLECTION], 'title' => \__('Select destination folder', 'real-media-library-lite')];
             $defaultFolder = DefaultFolder::getDefaultFolder();
             if (!empty($defaultFolder)) {
                 $options['selected'] = $defaultFolder;
             }
             if (isset($_GET['rml_preselect'])) {
-                $options['selected'] = \sanitize_text_field($_GET['rml_preselect']);
+                $options['selected'] = \sanitize_text_field(\wp_unslash($_GET['rml_preselect']));
             }
             if ($pagenow === 'media-new.php') {
-                $label = \__('You can simply upload files directly to a folder. Select a folder and upload files.', RML_TD);
+                $label = \__('You can simply upload files directly to a folder. Select a folder and upload files.', 'real-media-library-lite');
             } else {
-                $label = \__('upload to folder', RML_TD);
+                $label = \__('upload to folder', 'real-media-library-lite');
             }
-            echo '<p class="attachments-filter-upload-chooser">' . $label . '</p><p>' . \wp_rml_selector($options) . '</p>';
+            echo '<p class="attachments-filter-upload-chooser">' . \esc_html($label) . '</p><p>';
+            // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- wp_rml_selector returns structured markup for media UI.
+            echo \wp_rml_selector($options);
+            echo '</p>';
         }
     }
     /**

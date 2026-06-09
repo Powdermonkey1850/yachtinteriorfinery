@@ -8,9 +8,9 @@ defined( 'ABSPATH' ) || exit;
 
 define( 'WP_ROCKET_ADVANCED_CACHE', true );
 
-$rocket_path        = '/var/www/prod-candc.powdermonkey.co.uk/wp-content/plugins/wp-rocket/';
-$rocket_config_path = '/var/www/prod-candc.powdermonkey.co.uk/wp-content/wp-rocket-config/';
-$rocket_cache_path  = '/var/www/prod-candc.powdermonkey.co.uk/wp-content/cache/wp-rocket/';
+$rocket_path        = '/var/www/prod-yachtinteriorfinery.com/wp-content/plugins/wp-rocket/';
+$rocket_config_path = '/var/www/prod-yachtinteriorfinery.com/wp-content/wp-rocket-config/';
+$rocket_cache_path  = '/var/www/prod-yachtinteriorfinery.com/wp-content/cache/wp-rocket/';
 
 if (
 	version_compare( phpversion(), '7.3', '<' )
@@ -23,8 +23,8 @@ if (
 }
 
 
-if ( file_exists( '/var/www/prod-candc.powdermonkey.co.uk/wp-content/plugins/wp-rocket/inc/classes/dependencies/mobiledetect/mobiledetectlib/Mobile_Detect.php' ) && ! class_exists( 'WP_Rocket_Mobile_Detect' ) ) {
-	include_once '/var/www/prod-candc.powdermonkey.co.uk/wp-content/plugins/wp-rocket/inc/classes/dependencies/mobiledetect/mobiledetectlib/Mobile_Detect.php';
+if ( file_exists( '/var/www/prod-yachtinteriorfinery.com/wp-content/plugins/wp-rocket/inc/classes/dependencies/mobiledetect/mobiledetectlib/Mobile_Detect.php' ) && ! class_exists( 'WP_Rocket_Mobile_Detect' ) ) {
+	include_once '/var/www/prod-yachtinteriorfinery.com/wp-content/plugins/wp-rocket/inc/classes/dependencies/mobiledetect/mobiledetectlib/Mobile_Detect.php';
 }
 
 

@@ -136,7 +136,7 @@ class ExportMediaLibrary
         $type = $request->get_param('type');
         $folder = \wp_rml_get_object_by_id($request->get_param('folder'));
         if (!\is_rml_folder($folder)) {
-            return new WP_Error('rest_rml_massedge_export', \__('No valid folder.'), ['status' => 500]);
+            return new WP_Error('rest_rml_massedge_export', \__('No valid folder.', 'real-media-library-lite'), ['status' => 500]);
         }
         $filename = \sanitize_file_name($folder->getName());
         $id = $folder->getId();
@@ -173,7 +173,7 @@ class ExportMediaLibrary
                 $options['query_args'] = \array_merge($options['query_args'], ['rml_include_children' => \true]);
                 break;
             default:
-                return new WP_Error('rest_rml_massedge_export', \__('No valid type.'), ['status' => 500]);
+                return new WP_Error('rest_rml_massedge_export', \__('No valid type.', 'real-media-library-lite'), ['status' => 500]);
         }
         // Export the file
         ExportMediaLibraryAPI::export($options);

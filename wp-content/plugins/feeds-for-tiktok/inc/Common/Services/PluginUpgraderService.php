@@ -9,6 +9,14 @@
 
 namespace SmashBalloon\TikTokFeeds\Common\Services;
 
+// phpcs:disable WordPress.Security.NonceVerification.Recommended
+// phpcs:disable WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
 use Smashballoon\Stubs\Services\ServiceProvider;
 use SmashBalloon\TikTokFeeds\Common\Services\SettingsManagerService;
 use SmashBalloon\TikTokFeeds\Common\Helpers\PluginSilentUpgrader;
@@ -38,7 +46,7 @@ class PluginUpgraderService extends ServiceProvider
 
 	protected const REDIRECT = 'sbtt-settings';
 
-	protected const INSTALL_INSTRUCTIONS = 'https://smashballoon.com/doc/installing-the-tiktok-feeds-pro-wordpress-plugin/?tiktok&utm_campaign=tiktok-free&utm_source=settings&utm_medium=freetopro&utm_content=Upgrade Manually';
+	protected const INSTALL_INSTRUCTIONS = 'https://smashballoon.com/doc/installing-the-tiktok-feeds-pro-wordpress-plugin/?tiktok&utm_campaign=tiktok-pro&utm_source=settings&utm_medium=freetopro&utm_content=upgrade-manually';
 
 	/**
 	 * Registers the PluginUpgraderService.
@@ -113,7 +121,7 @@ class PluginUpgraderService extends ServiceProvider
 		$home_url = home_url();
 		check_ajax_referer('sbtt-admin', 'nonce');
 
-		if (! current_user_can('manage_options')) {
+		if (! sbtt_current_user_can()) {
 			wp_send_json_error();
 		}
 
@@ -391,7 +399,7 @@ class PluginUpgraderService extends ServiceProvider
 		if (false === strpos($url, 'http://') && false === strpos($url, 'https://')) {
 			$url = 'http://' . $url;
 		}
-		$url_parts = parse_url($url);
+		$url_parts = parse_url($url); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
 		$host      = ! empty($url_parts['host']) ? $url_parts['host'] : false;
 		if (! empty($url) && ! empty($host)) {
 			if (false !== ip2long($host)) {

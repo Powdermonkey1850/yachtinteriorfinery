@@ -21,9 +21,10 @@ class OnlyInProVersionException extends Exception
     public function __construct($method)
     {
         // translators:
-        parent::__construct(
+        parent::__construct(\sprintf(
             // translators:
-            \sprintf(\__('This functionality is not available in the free version (%s).', RML_TD), $method)
-        );
+            \__('This functionality is not available in the free version (%s).', 'real-media-library-lite'),
+            $method
+        ));
     }
 }

@@ -10,6 +10,7 @@ use MatthiasWeb\RealMediaLibrary\overrides\interfce\folder\IOverrideCreatable;
 use MatthiasWeb\RealMediaLibrary\Util;
 use Exception;
 use WP_Query;
+// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- This base folder class throws internal exceptions and returns internal messages.
 // @codeCoverageIgnoreStart
 \defined('ABSPATH') or die('No script kiddies please!');
 // Avoid direct file request
@@ -143,7 +144,7 @@ abstract class Creatable extends \MatthiasWeb\RealMediaLibrary\folder\BaseFolder
             Util::getInstance()->doActionAnyParentHas($this, 'Folder/Insert', [$this->id, $ids, $this, $isShortcut, $sourceFolders]);
             return \true;
         } else {
-            throw new Exception(\__('You need to provide a set of files.', RML_TD));
+            throw new Exception(\__('You need to provide a set of files.', 'real-media-library-lite'));
         }
     }
     /**
@@ -217,10 +218,10 @@ abstract class Creatable extends \MatthiasWeb\RealMediaLibrary\folder\BaseFolder
                 $this->applySubfolderOrderBy();
                 return $this->id;
             } else {
-                throw new Exception(\__('The folder could not be created in the database.', RML_TD));
+                throw new Exception(\__('The folder could not be created in the database.', 'real-media-library-lite'));
             }
         } else {
-            throw new Exception(\__('The folder could not be created because it already exists.', RML_TD));
+            throw new Exception(\__('The folder could not be created because it already exists.', 'real-media-library-lite'));
         }
     }
     // Documented in IFolderActions
@@ -281,7 +282,7 @@ abstract class Creatable extends \MatthiasWeb\RealMediaLibrary\folder\BaseFolder
          * @return {string}
          * @hook RML/Folder/Type/Name
          */
-        return \apply_filters('RML/Folder/Type/Name', $default === null ? \__('Folder', RML_TD) : $default, $this->getType(), $this->getId());
+        return \apply_filters('RML/Folder/Type/Name', $default === null ? \__('Folder', 'real-media-library-lite') : $default, $this->getType(), $this->getId());
     }
     // Documented in IFolder
     public function getTypeDescription($default = null)
@@ -295,7 +296,7 @@ abstract class Creatable extends \MatthiasWeb\RealMediaLibrary\folder\BaseFolder
          * @return {string}
          * @hook RML/Folder/Type/Name
          */
-        return \apply_filters('RML/Folder/Type/Description', $default === null ? \__('A folder can contain every type of file or a collection, but not gallery.', RML_TD) : $default, $this->getType(), $this->getId());
+        return \apply_filters('RML/Folder/Type/Description', $default === null ? \__('A folder can contain every type of file or a collection, but not gallery.', 'real-media-library-lite') : $default, $this->getType(), $this->getId());
     }
     // Documented in IFolderActions
     public function setVisible($visible)
@@ -309,7 +310,7 @@ abstract class Creatable extends \MatthiasWeb\RealMediaLibrary\folder\BaseFolder
         // Check valid folder name
         if (!$this->isValidName($name)) {
             // translators:
-            throw new Exception(\sprintf(\__("'%s' is not a valid folder name.", RML_TD), $name));
+            throw new Exception(\sprintf(\__("'%s' is not a valid folder name.", 'real-media-library-lite'), $name));
         }
         // Check, if the parent has already the given folder name
         $parent = \wp_rml_get_object_by_id($this->parent);
@@ -427,14 +428,14 @@ abstract class Creatable extends \MatthiasWeb\RealMediaLibrary\folder\BaseFolder
     public static function getAvailableSubfolderOrders($asMap = \false)
     {
         if (self::$cachedOrders === null) {
-            $orders = ['name_asc' => ['label' => \__('Order by name ascending', RML_TD), 'sqlOrder' => 'rmlo.name'], 'name_desc' => ['label' => \__('Order by name descending', RML_TD), 'sqlOrder' => 'rmlo.name'], 'id_asc' => ['label' => \__('Order by ID ascending', RML_TD), 'sqlOrder' => 'rmlo.id'], 'id_desc' => ['label' => \__('Order by ID descending', RML_TD), 'sqlOrder' => 'rmlo.id']];
+            $orders = ['name_asc' => ['label' => \__('Order by name ascending', 'real-media-library-lite'), 'sqlOrder' => 'rmlo.name'], 'name_desc' => ['label' => \__('Order by name descending', 'real-media-library-lite'), 'sqlOrder' => 'rmlo.name'], 'id_asc' => ['label' => \__('Order by ID ascending', 'real-media-library-lite'), 'sqlOrder' => 'rmlo.id'], 'id_desc' => ['label' => \__('Order by ID descending', 'real-media-library-lite'), 'sqlOrder' => 'rmlo.id']];
             /**
              * Add an available order criterium to the tree. If you pass
              * user input to the SQL Order please be sure the values are escaped!
              *
              * @example
              * $orders["id_asc"] = [
-             *  "label" => __("Order by ID ascending", RML_TD),
+             *  "label" => __("Order by ID ascending", 'real-media-library-lite'),
              *  "sqlOrder" => "rml.ID"
              * )
              * @param {object[]} $orders The available orders

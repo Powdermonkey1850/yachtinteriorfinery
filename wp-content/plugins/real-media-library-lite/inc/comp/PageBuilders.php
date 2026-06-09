@@ -80,6 +80,8 @@ class PageBuilders
             \add_filter('et_fb_bundle_dependencies', [$this, 'et_fb_bundle_dependencies']);
         }
         \add_action('et_fb_enqueue_assets', [$this, 'et_fb_enqueue_assets']);
+        // Divi 5+
+        \add_action('et_fb_framework_loaded', [$this, 'et_fb_enqueue_assets']);
     }
     /**
      * Divi Page Builder.

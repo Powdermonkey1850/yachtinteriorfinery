@@ -110,7 +110,7 @@ if (!\function_exists('wp_attachment_order_update')) {
             }
         } else {
             Core::getInstance()->debug("Could not find the folder with id {$folderId}", __FUNCTION__);
-            return [\__('The given folder was not found.', \RML_TD)];
+            return [\__('The given folder was not found.', 'real-media-library-lite')];
         }
     }
 }
@@ -132,7 +132,7 @@ if (!\function_exists('wp_rml_move')) {
     {
         if ($to === \false || !\is_numeric($to)) {
             // No movement
-            return [\__('The given folder was not found.', \RML_TD)];
+            return [\__('The given folder was not found.', 'real-media-library-lite')];
         }
         // Get folder
         $folder = \wp_rml_get_object_by_id($to);
@@ -147,7 +147,7 @@ if (!\function_exists('wp_rml_move')) {
             }
         } else {
             Core::getInstance()->debug("Could not find the folder with id {$to}", __FUNCTION__);
-            return [\__('The given folder was not found.', \RML_TD)];
+            return [\__('The given folder was not found.', 'real-media-library-lite')];
         }
     }
 }

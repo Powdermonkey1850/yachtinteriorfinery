@@ -94,7 +94,7 @@ class CRUD implements IOverrideCRUD
             if ($folder !== null) {
                 $folder->setName($name, $supress_validation);
             } else {
-                throw new Exception(\__('The given folder does not exist or you cannot rename this folder.', RML_TD));
+                throw new Exception(\__('The given folder does not exist or you cannot rename this folder.', 'real-media-library-lite'));
             }
             return \true;
         } catch (Exception $e) {
@@ -111,7 +111,7 @@ class CRUD implements IOverrideCRUD
             if ($folder !== null) {
                 // Check if subfolders
                 if (\count($folder->getChildren()) > 0) {
-                    throw new Exception(\__('The folder you try to delete has subfolders.', RML_TD));
+                    throw new Exception(\__('The folder you try to delete has subfolders.', 'real-media-library-lite'));
                 }
                 // Check if other fails are counted
                 if ($supress_validation === \false) {
@@ -161,7 +161,7 @@ class CRUD implements IOverrideCRUD
                 $this->debug("Successfully deleted folder id {$id}", __METHOD__);
                 return \true;
             } else {
-                throw new Exception(\__('The given folder does not exist.', RML_TD));
+                throw new Exception(\__('The given folder does not exist.', 'real-media-library-lite'));
             }
         } catch (Exception $e) {
             $this->debug('Error: ' . $e->getMessage(), __METHOD__);

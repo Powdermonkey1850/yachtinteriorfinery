@@ -36,7 +36,7 @@ class CoverImage implements IMetadata
         if (!isset($_REQUEST['url'])) {
             \wp_send_json_error();
         }
-        $id = \attachment_url_to_postid(\esc_url_raw($_REQUEST['url']));
+        $id = \attachment_url_to_postid(\esc_url_raw(\wp_unslash($_REQUEST['url'])));
         if (!$id) {
             \wp_send_json_error();
         }
@@ -71,10 +71,10 @@ class CoverImage implements IMetadata
     public function content($content, $folder)
     {
         if ($this->isDisabled()) {
-            return \__('This option is disabled on this page. Please navigate to the media library.', RML_TD);
+            return \__('This option is disabled on this page. Please navigate to the media library.', 'real-media-library-lite');
         }
         $id = $this->getAttachmentID($folder->getId());
-        return $content . '<label>' . \__('Cover image', RML_TD) . '</label><input name="coverImage" data-wprfc-visible="1" data-wprfc="metaCoverImage" value="' . \esc_attr($id) . '" type="text" />';
+        return $content . '<label>' . \__('Cover image', 'real-media-library-lite') . '</label><input name="coverImage" data-wprfc-visible="1" data-wprfc="metaCoverImage" value="' . \esc_attr($id) . '" type="text" />';
     }
     /**
      * Save content in meta box.

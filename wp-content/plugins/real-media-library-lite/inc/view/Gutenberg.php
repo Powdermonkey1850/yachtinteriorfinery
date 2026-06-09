@@ -16,13 +16,14 @@ class Gutenberg
 {
     use UtilsProvider;
     private static $me = null;
-    const ID_GALLERY = RML_TD . '/gallery';
+    const ID_GALLERY = 'real-media-library/gallery';
     /**
      * Register Gutenberg block.
      */
     private function __construct()
     {
-        \register_block_type(self::ID_GALLERY, ['render_callback' => [$this, 'renderGallery'], 'attributes' => ['fid' => ['type' => 'number'], 'align' => ['type' => 'string', 'default' => 'undefined'], 'columns' => ['type' => 'number', 'default' => 3], 'imageCrop' => ['type' => 'boolean', 'default' => \true], 'captions' => ['type' => 'boolean', 'default' => \true], 'linkTo' => ['type' => 'string', 'default' => 'none'], 'lastEditReload' => ['type' => 'number', 'default' => 0]]]);
+        global $wp_version;
+        \register_block_type(self::ID_GALLERY, ['api_version' => \version_compare($wp_version, '6.3', '>=') ? 3 : 1, 'render_callback' => [$this, 'renderGallery'], 'attributes' => ['fid' => ['type' => 'number'], 'align' => ['type' => 'string', 'default' => 'undefined'], 'columns' => ['type' => 'number', 'default' => 3], 'imageCrop' => ['type' => 'boolean', 'default' => \true], 'captions' => ['type' => 'boolean', 'default' => \true], 'linkTo' => ['type' => 'string', 'default' => 'none'], 'lastEditReload' => ['type' => 'number', 'default' => 0]]]);
     }
     /**
      * Render gallery in website.

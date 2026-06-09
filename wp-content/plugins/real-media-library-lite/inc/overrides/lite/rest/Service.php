@@ -25,7 +25,7 @@ trait Service
                 return new WP_Error('rest_rml_hierarchy_failed', \implode(' ', $result), ['status' => 500]);
             }
         } else {
-            return new WP_Error('rest_rml_hierarchy_not_found', \__('Folder not found.', RML_TD), ['status' => 500]);
+            return new WP_Error('rest_rml_hierarchy_not_found', \__('Folder not found.', 'real-media-library-lite'), ['status' => 500]);
         }
     }
 }

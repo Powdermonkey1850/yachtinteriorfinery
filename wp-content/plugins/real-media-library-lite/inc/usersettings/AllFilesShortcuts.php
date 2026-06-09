@@ -49,8 +49,8 @@ class AllFilesShortcuts implements IUserSettings
     // Documented in IMetadata
     public function content($content, $user)
     {
-        $content .= '<label><input name="' . self::FIELD_NAME . '" type="checkbox" value="1" ' . \checked(1, self::isEnabled(), \false) . ' /> ' . \__('Hide shortcuts in "All files"', RML_TD) . '</label>
-            <p class="description">' . \__('The count always includes shortcuts', RML_TD) . '</p>';
+        $content .= '<label><input name="' . self::FIELD_NAME . '" type="checkbox" value="1" ' . \checked(1, self::isEnabled(), \false) . ' /> ' . \__('Hide shortcuts in "All files"', 'real-media-library-lite') . '</label>
+            <p class="description">' . \__('The count always includes shortcuts', 'real-media-library-lite') . '</p>';
         return $content;
     }
     // Documented in IMetadata

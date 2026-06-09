@@ -243,7 +243,7 @@ class WPML implements IOverrideWPML
     public function options_register()
     {
         \register_setting('media', 'rml_wpml_move', 'esc_attr');
-        \add_settings_field('rml_wpml_move', '<label for="rml_wpml_move">' . \__('WPML: Automatically move translations', RML_TD) . '</label>', [$this, 'html_options_move'], 'media', 'rml_options_general');
+        \add_settings_field('rml_wpml_move', '<label for="rml_wpml_move">' . \__('WPML: Automatically move translations', 'real-media-library-lite') . '</label>', [$this, 'html_options_move'], 'media', 'rml_options_general');
     }
     /**
      * Option to move files also when a translation gets moved.
@@ -253,7 +253,7 @@ class WPML implements IOverrideWPML
         $value = \get_option('rml_wpml_move', '1');
         echo '<input type="checkbox" id="rml_wpml_move"
                 name="rml_wpml_move" value="1" ' . \checked(1, $value, \false) . ' />
-                <label>' . \__('If you move a file, the corresponding translated file will also be moved.', RML_TD) . '</label>';
+                <label>' . \esc_html__('If you move a file, the corresponding translated file will also be moved.', 'real-media-library-lite') . '</label>';
     }
     /**
      * A file is moved (not copied) and then move also all the translations.

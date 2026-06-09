@@ -299,7 +299,6 @@ class WPCode_Code_Snippets_Table extends WP_List_Table {
 		$library_id = wpcode()->library->get_snippet_library_id( $snippet_id );
         $has_auth = wpcode()->library_auth->has_auth() ? 1 : 0;
 
-
 		// Check if snippet has updates
 		$snippets_with_updates = wpcode()->library->get_snippets_with_updates();
 		if ( in_array( $snippet_id, $snippets_with_updates, true ) && $library_id ) {
@@ -341,9 +340,10 @@ class WPCode_Code_Snippets_Table extends WP_List_Table {
 			'<span><strong>%s</strong></span>',
 			esc_html( $title )
 		);
+		$badge = $this->get_library_badge_markup( $snippet->ID );
 
 		if ( 'trash' === $this->view ) {
-			return $name;
+			return $badge . $name;
 		}
 
 		if ( current_user_can( 'edit_post', $snippet->ID ) ) {
@@ -361,6 +361,8 @@ class WPCode_Code_Snippets_Table extends WP_List_Table {
 			);
 		}
 
+		$result = $badge . $name;
+
 		// Check if snippet is locked for editing.
 		$post_lock = wp_check_post_lock( $snippet );
 		if ( $post_lock ) {
@@ -372,10 +374,55 @@ class WPCode_Code_Snippets_Table extends WP_List_Table {
 				esc_html( $user->display_name )
 			);
 
-			$name = '<div class="wpcode-locked-snippet">' . $currently_editing . '</div>' . $name;
+			$result = '<div class="wpcode-locked-snippet">' . $currently_editing . '</div>' . $result;
 		}
 
-		return $name;
+		return $result;
+	}
+
+	/**
+	 * Build the cloud-badge markup that identifies the snippet's library author.
+	 * Returns an empty string for snippets that did not come from the library.
+	 *
+	 * @param int $snippet_id The snippet ID.
+	 *
+	 * @return string
+	 */
+	protected function get_library_badge_markup( $snippet_id ) {
+		$library_id = wpcode()->library->get_snippet_library_id( $snippet_id );
+
+		if ( $library_id ) {
+			$author = wpcode()->library->get_snippet_author( $snippet_id );
+			if ( 'wpcode' === $author ) {
+				$tooltip_raw = __( 'Imported from the WPCode Library', 'insert-headers-and-footers' );
+			} else {
+				$tooltip_raw = sprintf(
+					/* translators: %s - third-party library author name like "WPForms" */
+					__( 'Imported from the WPCode Library (by %s)', 'insert-headers-and-footers' ),
+					wpcode()->library->get_author_label( $author )
+				);
+			}
+		} elseif ( get_post_meta( $snippet_id, '_wpcode_cloud_id', true ) ) {
+			// No live-auth fallback — the connected account may differ from the importing one.
+			$author = get_post_meta( $snippet_id, '_wpcode_library_author', true );
+			if ( ! empty( $author ) ) {
+				$tooltip_raw = sprintf(
+					/* translators: %s - the user's WPCode.com account username */
+					__( 'Imported from your private library (%s)', 'insert-headers-and-footers' ),
+					$author
+				);
+			} else {
+				$tooltip_raw = __( 'Imported from your private library', 'insert-headers-and-footers' );
+			}
+		} else {
+			return '';
+		}
+
+		return sprintf(
+			'<span class="wpcode-library-badge wpcode-help-tooltip">%1$s<span class="wpcode-help-tooltip-text">%2$s</span></span>',
+			get_wpcode_icon( 'cloud', 16, 12, '0 0 16 12' ),
+			esc_html( $tooltip_raw )
+		);
 	}
 
 	/**

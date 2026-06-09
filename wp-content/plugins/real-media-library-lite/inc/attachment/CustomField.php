@@ -46,7 +46,7 @@ class CustomField
             $editable = \is_rml_folder($folder) && !$folder->isRestrictFor('mov');
         }
         $isShortcut = \wp_attachment_is_shortcut($post->ID);
-        $textToMove = $isShortcut ? \__('If you move this shortcut, the location of the source/main file is not changed.', RML_TD) : \__('If you move this attachment, the folder location of the associated shortcuts are not changed.', RML_TD);
+        $textToMove = $isShortcut ? \__('If you move this shortcut, the location of the source/main file is not changed.', 'real-media-library-lite') : \__('If you move this attachment, the folder location of the associated shortcuts are not changed.', 'real-media-library-lite');
         /**
          * This content is showed in the attachment details below the custom field dropdown.
          *
@@ -59,9 +59,9 @@ class CustomField
          * @hook RML/CustomField
          */
         $appendHTML = \apply_filters('RML/CustomField', '', $post, $isShortcut, $form_fields);
-        $selector = \wp_rml_selector(['selected' => $folderID, 'name' => 'rmlFolder', 'editable' => $editable, 'disabled' => [RML_TYPE_COLLECTION], 'name' => 'attachments[' . $post->ID . '][rml_folder]', 'title' => \__('Move to another folder', RML_TD)]);
+        $selector = \wp_rml_selector(['selected' => $folderID, 'name' => 'rmlFolder', 'editable' => $editable, 'disabled' => [RML_TYPE_COLLECTION], 'name' => 'attachments[' . $post->ID . '][rml_folder]', 'title' => \__('Move to another folder', 'real-media-library-lite')]);
         // Create form field
-        $form_fields['rml_dir'] = ['label' => \__('Folder', RML_TD), 'input' => 'html', 'html' => '<div class="rml-compat-preUploadUi">' . $selector . '</div><p class="description">' . $textToMove . '</p>' . $appendHTML];
+        $form_fields['rml_dir'] = ['label' => \__('Folder', 'real-media-library-lite'), 'input' => 'html', 'html' => '<div class="rml-compat-preUploadUi">' . $selector . '</div><p class="description">' . $textToMove . '</p>' . $appendHTML];
         // Create form field
         $form_fields['rml_shortcut'] = ['label' => '', 'input' => 'html', 'html' => '<div class="rml-wprfc" data-wprfc="shortcutInfo" data-id="' . $post->ID . '"></div><script>jQuery(function() { window.rml.hooks.call("wprfc"); });</script>'];
         return $form_fields;
@@ -80,11 +80,11 @@ class CustomField
             // Return output
             $output = '<div class="rml-shortcut-info-container" data-id="' . $postId . '">
                 <div style="clear:both;"></div>
-                <h2>' . \__('Shortcut infos', RML_TD) . '</h2>';
+                <h2>' . \__('Shortcut infos', 'real-media-library-lite') . '</h2>';
             $shortcut = \wp_attachment_is_shortcut($post, \true);
             $output .= '<p class="description">';
             if ($shortcut > 0) {
-                $output .= \__('This is a shortcut of a media library file. Shortcuts doesn\'t need any physical storage <strong>(0 kB)</strong>. If you want to change the file itself, you must do this in the original file (for example replace media file through a plugin).<br/>Note also that the fields in the shortcuts can be different to the original file, for example "Title", "Description" or "Caption".', RML_TD) . '
+                $output .= \__('This is a shortcut of a media library file. Shortcuts doesn\'t need any physical storage <strong>(0 kB)</strong>. If you want to change the file itself, you must do this in the original file (for example replace media file through a plugin).<br/>Note also that the fields in the shortcuts can be different to the original file, for example "Title", "Description" or "Caption".', 'real-media-library-lite') . '
                     <a target="_blank" href="' . \admin_url('post.php?post=' . $shortcut . '&action=edit') . '">Open original file.</a><br />';
             }
             $shortcuts = \wp_attachment_get_shortcuts(\wp_attachment_ensure_source_file($post->ID), \false, \true);
@@ -98,7 +98,7 @@ class CustomField
             if ($shortcutsCnt > 0) {
                 $output .= \sprintf(
                     // translators:
-                    \_n('For this file is %d shortcut available in the following folder:', 'For this file are %d shortcuts available in the following folders:', $shortcutsCnt, RML_TD),
+                    \_n('For this file is %d shortcut available in the following folder:', 'For this file are %d shortcuts available in the following folders:', $shortcutsCnt, 'real-media-library-lite'),
                     $shortcutsCnt
                 );
                 foreach ($shortcuts as $shortcut) {
@@ -108,7 +108,7 @@ class CustomField
                     $output .= '</div>';
                 }
             } elseif (!$shortcut) {
-                $output .= \__('This file has no associated shortcuts. You can create shortcuts by moving files per mouse and hold any key.', RML_TD);
+                $output .= \__('This file has no associated shortcuts. You can create shortcuts by moving files per mouse and hold any key.', 'real-media-library-lite');
             }
             $output .= '</p>';
             /**

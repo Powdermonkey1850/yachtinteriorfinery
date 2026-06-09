@@ -8,6 +8,7 @@ namespace SmashBalloon\Reviews\Common;
 use SmashBalloon\Reviews\Common\Builder\SBR_Sources;
 use SmashBalloon\Reviews\Common\Customizer\DB;
 use SmashBalloon\Reviews\Common\Helpers\SBR_Error_Handler;
+use SmashBalloon\Reviews\Pro\Integrations\Providers\EDD;
 
 class Util
 {
@@ -48,15 +49,46 @@ class Util
 		return in_array($provider_type, $disabled, true);
 	}
 
+	/**
+	 * Resolve EDD's pluginRequired / pluginRequiredMessage for the customizer
+	 * provider tile. Strict: in Pro the gate requires both EDD core AND the
+	 * EDD Reviews extension — otherwise the modal would let users add a source
+	 * the integration can't actually capture new reviews for.
+	 *
+	 * Free builds may not ship class/Pro/Integrations/Providers/EDD.php, so
+	 * fall back to the prior core-only check there. Free never reaches this
+	 * tile in the disabled-from-extension state anyway (EDD shows as an
+	 * upsell, not a regular provider), but the fallback keeps parity with
+	 * pre-existing behavior.
+	 *
+	 * @return array Two-key map: pluginRequired (bool), pluginRequiredMessage (string)
+	 */
+	private static function get_edd_provider_status()
+	{
+		if (class_exists(EDD::class)) {
+			return [
+				'pluginRequired'        => ! EDD::is_active_static(),
+				'pluginRequiredMessage' => EDD::plugin_required_message(),
+			];
+		}
+
+		return [
+			'pluginRequired'        => ! ( class_exists('Easy_Digital_Downloads') || defined('EDD_VERSION') ),
+			'pluginRequiredMessage' => __('Enable Easy Digital Downloads plugin to use it as a source', 'reviews-feed'),
+		];
+	}
+
 	public static function get_providers()
 	{
+		$campaign = self::sbr_is_pro() ? 'reviews-pro' : 'reviews-free';
+
 		$providers = [
 			[
 				'type'    => 'google',
 				'name'    => 'Google',
 				'heading' => __('Place ID', 'reviews-feed'),
 				'placeholder' => __('Enter Place ID', 'reviews-feed'),
-				'docLink' => 'https://smashballoon.com/doc/creating-a-google-api-key/'
+				'docLink' => 'https://smashballoon.com/doc/creating-a-google-api-key/?utm_campaign=' . $campaign . '&utm_source=settings&utm_medium=docs'
 			],
 			[
 				'type' => 'facebook',
@@ -69,14 +101,14 @@ class Util
 				'placeholder' => __('https://tripadvisor.com/...', 'reviews-feed'),
 				'apiKey' => true,
 				'mandatoryApiKey'    => true,
-				'docLink' => 'https://smashballoon.com/doc/creating-a-tripadvisor-api-key/'
+				'docLink' => 'https://smashballoon.com/doc/creating-a-tripadvisor-api-key/?utm_campaign=' . $campaign . '&utm_source=settings&utm_medium=docs'
 			],
 			[
 				'type' => 'yelp',
 				'name' => 'Yelp',
 				'heading' => __('Page URL', 'reviews-feed'),
 				'placeholder' => __('https://yelp.com/...', 'reviews-feed'),
-				'docLink' => 'https://smashballoon.com/doc/creating-a-yelp-api-key/'
+				'docLink' => 'https://smashballoon.com/doc/creating-a-yelp-api-key/?utm_campaign=' . $campaign . '&utm_source=settings&utm_medium=docs'
 			],
 			[
 				'type' => 'trustpilot',
@@ -102,6 +134,17 @@ class Util
 				'pluginRequired' => ! ( class_exists('WooCommerce') || function_exists('WC') ),
 				'pluginRequiredMessage' => __('Enable WooCommerce plugin to use it as a source', 'reviews-feed'),
 			],
+			array_merge(
+				[
+					'type' => 'edd',
+					'name' => 'Easy Digital Downloads',
+					'heading' => __('Download', 'reviews-feed'),
+					'placeholder' => __('Select a download', 'reviews-feed'),
+					'onlyDetails' => true,
+					'isLocal' => true,
+				],
+				self::get_edd_provider_status()
+			),
 			[
 				'type' => 'airbnb',
 				'name' => 'Airbnb',
@@ -291,26 +334,28 @@ class Util
 	public static function get_plugins_info()
 	{
 		$installed_plugins = get_plugins();
+		$campaign = self::sbr_is_pro() ? 'reviews-pro' : 'reviews-free';
+
 		$plugins_list = [
 			'facebook' => [
 				'free' => 'custom-facebook-feed/custom-facebook-feed.php',
 				'pro' => 'custom-facebook-feed-pro/custom-facebook-feed.php',
-				'link' => 'https://smashballoon.com/custom-facebook-feed/'
+				'link' => 'https://smashballoon.com/custom-facebook-feed/?utm_campaign=' . $campaign . '&utm_source=about-us&utm_medium=marketing'
 			],
 			'instagram' => [
 				'free' => 'instagram-feed/instagram-feed.php',
 				'pro' => 'instagram-feed-pro/instagram-feed.php',
-				'link' => 'https://smashballoon.com/instagram-feed/'
+				'link' => 'https://smashballoon.com/instagram-feed/?utm_campaign=' . $campaign . '&utm_source=about-us&utm_medium=marketing'
 			],
 			'twitter' => [
 				'free' => 'custom-twitter-feeds/custom-twitter-feed.php',
 				'pro' => 'custom-twitter-feeds-pro/custom-twitter-feed.php',
-				'link' => 'https://smashballoon.com/custom-twitter-feeds/'
+				'link' => 'https://smashballoon.com/custom-twitter-feeds/?utm_campaign=' . $campaign . '&utm_source=about-us&utm_medium=marketing'
 			],
 			'youtube' => [
 				'free' => 'feeds-for-youtube/youtube-feed.php',
 				'pro' => 'youtube-feed-pro/youtube-feed.php',
-				'link' => 'https://smashballoon.com/youtube-feed/'
+				'link' => 'https://smashballoon.com/youtube-feed/?utm_campaign=' . $campaign . '&utm_source=about-us&utm_medium=marketing'
 			]
 		];
 
@@ -586,6 +631,9 @@ class Util
 	{
 		$output = '## GLOBAL SETTINGS: ## </br>';
 		$sbr_settings = get_option('sbr_settings', array());
+		if (! is_array($sbr_settings)) {
+			$sbr_settings = array();
+		}
 
 		$plugin_status = new AuthorizationStatusCheck();
 
@@ -994,8 +1042,8 @@ class Util
 				'description' => __('Upgrade to our "Plus" tier to display reviews from the well known social media platform.', 'reviews-feed'),
 				'image' => 'upsell-facebook.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=facebook-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=facebook-modal&utm_content=Upgrade',
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=facebook-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=facebook-modal&utm_content=Upgrade',
 				# 'demo' => 'https://smashballoon.com/reviews-feed/demo/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=responsive-modal&utm_content=ViewDemo'
 				],
 
@@ -1006,8 +1054,8 @@ class Util
 				'description' => __('Upgrade to our "Plus" tier to display reviews from the well known business review site.', 'reviews-feed'),
 				'image' => 'upsell-trustpilot.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=trustpilot-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=trustpilot-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=trustpilot-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=trustpilot-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1016,8 +1064,8 @@ class Util
 				'description' => __('Upgrade to our "Elite" tier to display reviews from the well known travel advice site.', 'reviews-feed'),
 				'image' => 'upsell-tripadvisor.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=tripadvisor-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=tripadvisor-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=tripadvisor-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=tripadvisor-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1026,8 +1074,8 @@ class Util
 				'description' => __('Upgrade to our "Elite" tier to display reviews for plugins and themes.', 'reviews-feed'),
 				'image' => 'upsell-wordpress.org.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=wordpressorg-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=wordpressorg-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=wordpressorg-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=wordpressorg-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1036,8 +1084,18 @@ class Util
 				'description' => __('Upgrade to our "Plus" tier to display product reviews from your WooCommerce store.', 'reviews-feed'),
 				'image' => 'upsell-woocommerce.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=woocommerce-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=woocommerce-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=woocommerce-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=woocommerce-modal&utm_content=Upgrade'
+				],
+				'includeContent' => true
+			],
+			'eddProvider' => [
+				'heading' => __('Upgrade to Pro to display Easy Digital Downloads reviews', 'reviews-feed'),
+				'description' => __('Upgrade to our "Plus" tier to display download reviews from your EDD store.', 'reviews-feed'),
+				'image' => 'upsell-woocommerce.png',
+				'buttons' => [
+					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=edd-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=edd-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1046,8 +1104,8 @@ class Util
 				'description' => __('Upgrade to our "Plus" tier to display reviews from the popular accommodation platform.', 'reviews-feed'),
 				'image' => 'upsell-airbnb.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=airbnb-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=airbnb-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=airbnb-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=airbnb-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1056,8 +1114,8 @@ class Util
 				'description' => __('Upgrade to our "Plus" tier to display reviews from the leading travel booking site.', 'reviews-feed'),
 				'image' => 'upsell-booking.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=booking-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=booking-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=booking-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=booking-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1066,8 +1124,8 @@ class Util
 				'description' => __('Upgrade to our "Plus" tier to display product reviews from the global marketplace.', 'reviews-feed'),
 				'image' => 'upsell-aliexpress.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=aliexpress-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=aliexpress-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=aliexpress-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=aliexpress-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1076,8 +1134,8 @@ class Util
 				'description' => __('An eye-catching rotating slider of your videos to add extra content in minimal space on your website.', 'reviews-feed'),
 				'image' => 'upsell-carousel.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=carousel-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=carousel-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=carousel-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=carousel-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1086,8 +1144,8 @@ class Util
 				'description' => __('More layout settings to customize the look and feel of your reviews even more.', 'reviews-feed'),
 				'image' => 'upsell-morereviews.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=num-reviews-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=num-reviews-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=num-reviews-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=num-reviews-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1096,8 +1154,8 @@ class Util
 				'description' => __('Boost social proof to make more sales conversions with the number of ratings and an average rating.', 'reviews-feed'),
 				'image' => 'upsell-averagerating.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=average-rating-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=average-rating-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=average-rating-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=average-rating-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1106,8 +1164,8 @@ class Util
 				'description' => __('Overwhelm (in a good way) your visitors with additional reviews loaded on the page with a click.', 'reviews-feed'),
 				'image' => 'upsell-loadmore.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=load-more-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=load-more-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=load-more-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=load-more-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1116,8 +1174,8 @@ class Util
 				'description' => __('Display images from Yelp and Tripadvisor reviews.', 'reviews-feed'),
 				'image' => 'upsell-reviewsmedia.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=lite-upgrade-footer-coupon&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=template-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=lite-upgrade-footer-coupon&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=template-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1126,8 +1184,8 @@ class Util
 				'description' => __('Build brand trust with positive reviews from real customers.', 'reviews-feed'),
 				'image' => 'upsell-authorimage.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=author-avatar-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=author-avatar-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=author-avatar-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=author-avatar-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1136,8 +1194,8 @@ class Util
 				'description' => __('Show only the most positive reviews and build brand trust with review filtering.', 'reviews-feed'),
 				'image' => 'upsell-filters.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=star-filter-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=star-filter-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=star-filter-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=star-filter-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1146,8 +1204,8 @@ class Util
 				'description' => __('Take complete control of what reviews show in the feed using keyword filters and a visual moderation system.', 'reviews-feed'),
 				'image' => 'upsell-moderation.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=moderation-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=moderation-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=moderation-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=moderation-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1156,8 +1214,8 @@ class Util
 				'description' => __('Quickly create and preview new feeds with pre-configured options based on popular feed types.', 'reviews-feed'),
 				'image' => 'upsell-template.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=template-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=template-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=template-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=template-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1166,8 +1224,8 @@ class Util
 				'description' => __('Take control of your feed layouts by customizing number of reviews & columns', 'reviews-feed'),
 				'image' => 'upsell-responsive.png',
 				'buttons' => [
-					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=responsive-modal&utm_content=LiteUsers50OFF',
-					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=temresponsiveplate-modal&utm_content=Upgrade'
+					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=responsive-modal&utm_content=LiteUsers50OFF',
+					'upgrade' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=responsive-modal&utm_content=Upgrade'
 				],
 				'includeContent' => true
 			],
@@ -1455,6 +1513,9 @@ class Util
 	public static function should_store_local_images()
 	{
 		$settings = get_option('sbr_settings', sbr_plugin_settings_defaults());
+		if (! is_array($settings)) {
+			$settings = sbr_plugin_settings_defaults();
+		}
 		return !empty($settings['optimize_images']) ? $settings['optimize_images'] : true;
 	}
 

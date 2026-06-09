@@ -474,7 +474,7 @@ class WPCode_Abilities_API {
 			$results = wpcode()->library->search_snippets( $keyword );
 		} else {
 			$data         = wpcode()->library->get_data();
-			$all_snippets = isset( $data['snippets'] ) ? $data['snippets'] : array();
+			$all_snippets = $data['snippets'];
 			$results      = array();
 
 			foreach ( $all_snippets as $snippet ) {

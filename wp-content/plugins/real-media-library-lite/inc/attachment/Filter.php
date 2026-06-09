@@ -185,6 +185,7 @@ class Filter
             $id = $queryFolder;
         } elseif (\wp_rml_active()) {
             if ($fromRequest) {
+                // phpcs:disable WordPress.Security.NonceVerification.Missing -- used inside authenticated core media AJAX; folder IDs cast to int.
                 if (isset($_REQUEST['rml_folder'])) {
                     // Query rml folder from list mode
                     $id = \intval($_REQUEST['rml_folder']);
@@ -197,6 +198,7 @@ class Filter
                 } else {
                     return null;
                 }
+                // phpcs:enable WordPress.Security.NonceVerification.Missing
             }
         } else {
             return null;
@@ -275,9 +277,11 @@ class Filter
     {
         $screen = \get_current_screen();
         if ($screen->id === 'upload') {
+            // phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- markup mirrors core attachment filters; options built server-side.
             echo '<select name="rml_folder" id="filter-by-rml-folder" class="attachment-filters attachment-filters-rml">
     			' . \MatthiasWeb\RealMediaLibrary\attachment\Structure::getInstance()->getView()->dropdown(isset($_REQUEST['rml_folder']) ? \intval($_REQUEST['rml_folder']) : '', []) . '
     		</select>&nbsp;';
+            // phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
         }
     }
     /**

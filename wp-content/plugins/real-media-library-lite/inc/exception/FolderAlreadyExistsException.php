@@ -29,12 +29,11 @@ class FolderAlreadyExistsException extends Exception
      */
     public function __construct($parent, $name, $code = 0, $previous = null)
     {
-        parent::__construct(
-            // translators:
-            \sprintf(\__("'%s' already exists in this folder.", RML_TD), \htmlentities($name)),
-            $code,
-            $previous
-        );
+        parent::__construct(\sprintf(
+            // translators: %s: Existing folder name.
+            \esc_html__("'%s' already exists in this folder.", 'real-media-library-lite'),
+            \esc_html($name)
+        ), $code, $previous);
         $this->parent = $parent;
         $this->name = $name;
     }

@@ -51,7 +51,7 @@ class Attachment
     public function rest_attachment_collection_params($params)
     {
         $params['orderby']['enum'][] = 'rml';
-        $params['rml_folder'] = ['description' => \__('Fetch only media in a folder by folder id.', RML_TD), 'type' => 'integer'];
+        $params['rml_folder'] = ['description' => \__('Fetch only media in a folder by folder id.', 'real-media-library-lite'), 'type' => 'integer'];
         return $params;
     }
     /**
@@ -142,7 +142,7 @@ class Attachment
         $isCopy = $request->get_param('isCopy');
         $isCopy = \gettype($isCopy) === 'string' ? $isCopy === 'true' : $isCopy;
         if (!\is_array($ids) || \count($ids) === 0 || $to === null) {
-            return new WP_Error('rest_rml_posts_bulk_move_failed', \__('Something went wrong.', RML_TD), ['status' => 500]);
+            return new WP_Error('rest_rml_posts_bulk_move_failed', \__('Something went wrong.', 'real-media-library-lite'), ['status' => 500]);
         }
         $result = \wp_rml_move($to, $ids, \false, $isCopy);
         if (\is_array($result)) {

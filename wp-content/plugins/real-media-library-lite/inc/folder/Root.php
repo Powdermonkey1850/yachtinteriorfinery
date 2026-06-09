@@ -20,7 +20,7 @@ class Root extends Sortable
     // Documented in IFolder
     public function __construct()
     {
-        parent::__construct(-1, null, '/' . \__('Unorganized', RML_TD), '/', '/');
+        parent::__construct(-1, null, '/' . \__('Unorganized', 'real-media-library-lite'), '/', '/');
     }
     // Documented in IFolder
     public function persist()
@@ -81,12 +81,12 @@ class Root extends Sortable
     // Documented in IFolder
     public function getTypeName($default = null)
     {
-        return parent::getTypeName($default === null ? \__('Unorganized', RML_TD) : $default);
+        return parent::getTypeName($default === null ? \__('Unorganized', 'real-media-library-lite') : $default);
     }
     // Documented in IFolder
     public function getTypeDescription($default = null)
     {
-        return parent::getTypeDescription($default === null ? \__('Unorganized is the same as a root folder. Here you can find all files which are not assigned to a folder.', RML_TD) : $default);
+        return parent::getTypeDescription($default === null ? \__('Unorganized is the same as a root folder. Here you can find all files which are not assigned to a folder.', 'real-media-library-lite') : $default);
     }
     /**
      * Get instance.

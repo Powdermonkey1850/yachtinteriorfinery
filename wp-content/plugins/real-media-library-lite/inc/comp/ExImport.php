@@ -51,23 +51,22 @@ class ExImport implements IOverrideExImport
      */
     public function options_register()
     {
-        \add_settings_section('rml_options_import', \__('RealMediaLibrary:Import / Export'), [Options::getInstance(), 'empty_callback'], 'media');
-        \add_settings_field('rml_button_import_cats', '<label for="rml_button_import_cats">' . \__('Import from other plugins', RML_TD) . '</label>', [$this, 'html_rml_button_import_cats'], 'media', 'rml_options_import');
-        \add_settings_field('rml_button_export', '<label for="rml_button_export">' . \__('Export / Import Real Media Library folders', RML_TD) . '</label>', [$this, 'html_rml_button_export'], 'media', 'rml_options_import');
+        \add_settings_section('rml_options_import', \__('RealMediaLibrary:Import / Export', 'real-media-library-lite'), [Options::getInstance(), 'empty_callback'], 'media');
+        \add_settings_field('rml_button_import_cats', '<label for="rml_button_import_cats">' . \esc_html__('Import from other plugins', 'real-media-library-lite') . '</label>', [$this, 'html_rml_button_import_cats'], 'media', 'rml_options_import');
+        \add_settings_field('rml_button_export', '<label for="rml_button_export">' . \esc_html__('Export / Import Real Media Library folders', 'real-media-library-lite') . '</label>', [$this, 'html_rml_button_export'], 'media', 'rml_options_import');
     }
     /**
      * Output export button in options.
      */
     public function html_rml_button_export()
     {
-        $disabled = $this->isPro() ? '' : 'disabled="disabled"';
-        echo '<a class="rml-rest-button button button-primary" data-url="export" data-method="GET">' . \__('Export', RML_TD) . '</a>
-        <a class="rml-rest-button button" data-url="import" data-method="POST" ' . $disabled . '>' . \__('Import', RML_TD) . '</a>
-        <p class="description" style="margin-bottom:10px">' . \__('All available folders will be exported. The current structure is not lost during import - but check that there are no duplicate names in the import data, as these are not checked.', RML_TD) . '</p>
-        <div id="rml_export_data" style="float:left;margin-right: 10px;"><div>' . \__('Exported data:', RML_TD) . '</div><textarea></textarea></div>
-        <div id="rml_import_data" style="float:left;"><div>' . \__('Import data:', RML_TD) . '</div><textarea ' . $disabled . '></textarea></div><div class="clear"></div>';
+        echo '<a class="rml-rest-button button button-primary" data-url="export" data-method="GET">' . \esc_html__('Export', 'real-media-library-lite') . '</a>
+        <a class="rml-rest-button button" data-url="import" data-method="POST" ' . ($this->isPro() ? '' : 'disabled="disabled"') . '>' . \esc_html__('Import', 'real-media-library-lite') . '</a>
+        <p class="description" style="margin-bottom:10px">' . \esc_html__('All available folders will be exported. The current structure is not lost during import - but check that there are no duplicate names in the import data, as these are not checked.', 'real-media-library-lite') . '</p>
+        <div id="rml_export_data" style="float:left;margin-right: 10px;"><div>' . \esc_html__('Exported data:', 'real-media-library-lite') . '</div><textarea></textarea></div>
+        <div id="rml_import_data" style="float:left;"><div>' . \esc_html__('Import data:', 'real-media-library-lite') . '</div><textarea ' . ($this->isPro() ? '' : 'disabled="disabled"') . '></textarea></div><div class="clear"></div>';
         if (!$this->isPro()) {
-            echo '<p class="description"><strong>' . \__('Importing data is only available in PRO version.', RML_TD) . ' <a href="' . (RML_PRO_VERSION . '&feature=import-export') . '" target="_blank">' . \__('Learn more about PRO', RML_TD) . '</a></strong></p>';
+            echo '<p class="description"><strong>' . \esc_html__('Importing data is only available in PRO version.', 'real-media-library-lite') . ' <a href="' . \esc_url(RML_PRO_VERSION . '&feature=import-export') . '" target="_blank">' . \esc_html__('Learn more about PRO', 'real-media-library-lite') . '</a></strong></p>';
         }
     }
     /**
@@ -78,25 +77,24 @@ class ExImport implements IOverrideExImport
         $hasMediaLibraryFolders = $this->hasMediaLibraryFolders();
         $hasFileBird = $this->hasFileBird();
         if (\count($this->getHierarchicalTaxos()) || $hasMediaLibraryFolders || $hasFileBird) {
-            $disabled = $this->isPro() ? '' : 'disabled="disabled"';
             foreach ($this->getHierarchicalTaxos() as $tax) {
-                $name = isset(self::IMPORT_TAX_MATRIX[$tax]) ? self::IMPORT_TAX_MATRIX[$tax] : '<code>' . $tax . '</code>';
-                echo '<a class="rml-rest-button button" data-url="import/taxonomy" data-method="POST" data-taxonomy="' . \esc_attr($tax) . '" ' . $disabled . '>' . \__('Import', RML_TD) . ' (' . $name . ')</a>&nbsp;';
+                $name = isset(self::IMPORT_TAX_MATRIX[$tax]) ? \esc_html(self::IMPORT_TAX_MATRIX[$tax]) : '<code>' . \esc_html($tax) . '</code>';
+                echo '<a class="rml-rest-button button" data-url="import/taxonomy" data-method="POST" data-taxonomy="' . \esc_attr($tax) . '" ' . ($this->isPro() ? '' : 'disabled="disabled"') . '>' . \esc_html__('Import', 'real-media-library-lite') . ' (' . \esc_html($name) . ')</a>&nbsp;';
             }
             // Media Library Folders plugin
             if ($hasMediaLibraryFolders) {
-                echo '<a class="rml-rest-button button" data-url="import/mlf" data-method="POST" ' . $disabled . '>' . \__('Import', RML_TD) . ' (Media Library Folders)</a>&nbsp;';
+                echo '<a class="rml-rest-button button" data-url="import/mlf" data-method="POST" ' . ($this->isPro() ? '' : 'disabled="disabled"') . '>' . \esc_html__('Import', 'real-media-library-lite') . ' (Media Library Folders)</a>&nbsp;';
             }
             // Filebird plugin
             if ($hasFileBird) {
-                echo '<a class="rml-rest-button button" data-url="import/filebird" data-method="POST" ' . $disabled . '>' . \__('Import', RML_TD) . ' (FileBird)</a>&nbsp;';
+                echo '<a class="rml-rest-button button" data-url="import/filebird" data-method="POST" ' . ($this->isPro() ? '' : 'disabled="disabled"') . '>' . \esc_html__('Import', 'real-media-library-lite') . ' (FileBird)</a>&nbsp;';
             }
-            echo '<p class="description">' . \__('Imports categories and post relations.', RML_TD) . '</p>';
+            echo '<p class="description">' . \esc_html__('Imports categories and post relations.', 'real-media-library-lite') . '</p>';
         } else {
-            echo '<p>' . \__('Nothing to import.', RML_TD) . '</p>';
+            echo '<p>' . \esc_html__('Nothing to import.', 'real-media-library-lite') . '</p>';
         }
         if (!$this->isPro()) {
-            echo '<p class="description"><strong>' . \__('Importing categories from another plugin is only available in PRO version.', RML_TD) . ' <a href="' . (RML_PRO_VERSION . '&feature=import-export') . '" target="_blank">' . \__('Learn more about PRO', RML_TD) . '</a></strong></p>';
+            echo '<p class="description"><strong>' . \esc_html__('Importing categories from another plugin is only available in PRO version.', 'real-media-library-lite') . ' <a href="' . \esc_url(RML_PRO_VERSION . '&feature=import-export') . '" target="_blank">' . \esc_html__('Learn more about PRO', 'real-media-library-lite') . '</a></strong></p>';
         }
     }
     /**

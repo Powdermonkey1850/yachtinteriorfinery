@@ -363,7 +363,7 @@ class WPCode_Admin_Page_Snippet_Manager extends WPCode_Admin_Page {
 	 * @return void
 	 */
 	public function show_snippet_library() {
-		$library_data     = wp_parse_args( wpcode()->library->get_data(), wpcode()->library->get_empty_array() );
+		$library_data     = wpcode()->library->get_data();
 		$categories       = $library_data['categories'];
 		$snippets         = $library_data['snippets'];
 		$default_category = isset( $categories[0]['slug'] ) ? $categories[0]['slug'] : '';

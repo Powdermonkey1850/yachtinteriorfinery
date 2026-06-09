@@ -32,7 +32,7 @@ class Description implements IMetadata
     public function content($content, $folder)
     {
         $description = $this->getDescription($folder->getId());
-        $content .= '<label>' . \__('Description') . '</label><textarea name="description" class="regular-text">' . \esc_textarea($description) . '</textarea>';
+        $content .= '<label>' . \__('Description', 'real-media-library-lite') . '</label><textarea name="description" class="regular-text">' . \esc_textarea($description) . '</textarea>';
         return $content;
     }
     /**

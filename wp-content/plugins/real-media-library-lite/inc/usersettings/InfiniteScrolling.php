@@ -35,8 +35,8 @@ class InfiniteScrolling implements IUserSettings
     // Documented in IMetadata
     public function content($content, $user)
     {
-        $content .= '<label><input name="' . self::FIELD_NAME . '" type="checkbox" value="1" ' . \checked(1, self::isEnabled(), \false) . ' /> ' . \__('Enable infinite scrolling in grid view', RML_TD) . '</label>
-            <p class="description">' . \__('Instead of displaying a "Load More" button, all files are loaded automatically as you scroll down. This is not supported in list view.', RML_TD) . '</p>';
+        $content .= '<label><input name="' . self::FIELD_NAME . '" type="checkbox" value="1" ' . \checked(1, self::isEnabled(), \false) . ' /> ' . \__('Enable infinite scrolling in grid view', 'real-media-library-lite') . '</label>
+            <p class="description">' . \__('Instead of displaying a "Load More" button, all files are loaded automatically as you scroll down. This is not supported in list view.', 'real-media-library-lite') . '</p>';
         return $content;
     }
     // Documented in IMetadata

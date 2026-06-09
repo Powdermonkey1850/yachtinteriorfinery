@@ -3,7 +3,7 @@ Contributors: smashballoon, craig-at-smash-balloon, am, smub
 Tags: Google reviews, reviews, testimonials, yelp, Google business
 Requires at least: 4.1
 Tested up to: 6.9
-Stable tag: 2.5.1
+Stable tag: 2.6.2
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -204,6 +204,34 @@ We understand that sometimes you need help, have issues or just have questions. 
 * Encourage visitors to leave their own reviews with a link to Google or Yelp to rate your business.
 
 == Changelog ==
+= 2.6.2 =
+* Fix: Improved reliability on PHP 8 — when a review source can't be reached, the plugin now logs the issue quietly in the background instead of interrupting the feed builder.
+* Tweak: Refreshed the Easy Digital Downloads source icon to match EDD's current branding.
+
+= 2.6.0 =
+* Tweak: Cleaner small-icon notice graphics — admin notification thumbnails now keep their aspect ratio instead of being stretched into a square.
+* Tweak: Notification icons load reliably across the admin area; the small "Reviews Feed" thumbnails that occasionally appeared as broken images now resolve to the correct file.
+
+= 2.5.5 =
+* Fix: Background cron update optimizations — feed processing batches more efficiently, reducing Google Places API requests on sites with multiple feeds.
+* Fix: Connection stability under transient server conditions such as cache events, brief deploys, and high-traffic parallel requests.
+* Fix: Site URL recognition across proxy formats (Cloudflare, AWS, Nginx), www variations, and trailing-dot domain forms for consistent connectivity behind any hosting setup.
+* Tweak: Update external links.
+
+= 2.5.4 =
+* Fix: Resolved a registration loop on multilingual sites (WPML, Polylang) where WordPress's home URL emitted different language paths across requests.
+* Fix: Hardened the registration retry limiter so it correctly stops repeated requests even when the plugin successfully registers in a loop.
+
+= 2.5.3 =
+* Fix: Resolved a loop where sites that switched between http and https (for example after enabling SSL via their host) kept re-registering on every page load.
+* Tweak: Added a safeguard that limits how often the plugin can retry registration when something goes wrong, so it never floods your site or our servers.
+
+= 2.5.2 =
+* Fix: Google reviews from authors with non-Latin names (Japanese, Korean, Arabic, Cyrillic, etc.) no longer disappear.
+* Fix: Source address now shows under the business name for your Google sources.
+* Fix: Total ratings no longer dips during a provider outage — falls back to last good count.
+* Fix: Plugin self-heals on next admin load if settings get corrupted by a backup/migration tool.
+
 = 2.5.1 =
 * Fix: Resolved an issue where email verification could get stuck in a loop if the email was already verified.
 * Fix: Resolved an error that could occur when clicking an expired email verification link.

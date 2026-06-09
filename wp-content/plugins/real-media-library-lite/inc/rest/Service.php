@@ -152,10 +152,10 @@ class Service implements IOverrideService
     public static function permit($cap = 'upload_files')
     {
         if (!\current_user_can($cap)) {
-            return new WP_Error('rest_rml_forbidden', \__('Forbidden'), ['status' => 403]);
+            return new WP_Error('rest_rml_forbidden', \__('Forbidden', 'real-media-library-lite'), ['status' => 403]);
         }
         if (!\wp_rml_active()) {
-            return new WP_Error('rest_rml_not_activated', \__('Real Media Library is not active for the current user.', RML_TD), ['status' => 500]);
+            return new WP_Error('rest_rml_not_activated', \__('Real Media Library is not active for the current user.', 'real-media-library-lite'), ['status' => 500]);
         }
         return null;
     }

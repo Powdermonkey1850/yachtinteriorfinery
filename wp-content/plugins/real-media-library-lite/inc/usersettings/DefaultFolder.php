@@ -40,9 +40,9 @@ class DefaultFolder implements IUserSettings, IOverrideDefaultFolder
         $selectedNone = $default === self::ID_NONE ? 'selected="selected"' : '';
         $selectedLastQueried = $default === self::ID_LAST_QUERIED ? 'selected="selected"' : '';
         $disabled = $this->isPro() ? '' : 'disabled="disabled" ';
-        $content .= '<label>' . \__('Default startup folder', RML_TD) . '</label><select ' . $disabled . ' name="' . self::FIELD_NAME . '"><option value="' . self::ID_NONE . '" ' . $selectedNone . '>' . \__('No folder at startup', RML_TD) . '</option><option value="' . self::ID_LAST_QUERIED . '" ' . $selectedLastQueried . '>' . \__('Last opened folder', RML_TD) . '</option>' . \wp_rml_dropdown($default, []) . '</select>';
+        $content .= '<label>' . \__('Default startup folder', 'real-media-library-lite') . '</label><select ' . $disabled . ' name="' . self::FIELD_NAME . '"><option value="' . self::ID_NONE . '" ' . $selectedNone . '>' . \__('No folder at startup', 'real-media-library-lite') . '</option><option value="' . self::ID_LAST_QUERIED . '" ' . $selectedLastQueried . '>' . \__('Last opened folder', 'real-media-library-lite') . '</option>' . \wp_rml_dropdown($default, []) . '</select>';
         if (!$this->isPro()) {
-            $content .= '<p class="description">' . \__('Your media library can always open in the last opened folder or a folder you choose. This saves you time every time you open the media library!', RML_TD) . ' <a href="' . (RML_PRO_VERSION . '&feature=start-up-folder') . '" target="_blank">' . \__('Learn more about PRO', RML_TD) . '</a></p>';
+            $content .= '<p class="description">' . \__('Your media library can always open in the last opened folder or a folder you choose. This saves you time every time you open the media library!', 'real-media-library-lite') . ' <a href="' . (RML_PRO_VERSION . '&feature=start-up-folder') . '" target="_blank">' . \__('Learn more about PRO', 'real-media-library-lite') . '</a></p>';
         }
         return $content;
     }

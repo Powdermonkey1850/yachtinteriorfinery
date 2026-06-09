@@ -11,11 +11,11 @@ if (!function_exists('rml_skip_php_admin_notice')) {
             $data = get_plugin_data(RML_FILE, true, false);
             echo '<div class=\'notice notice-error\'>
 				<p><strong>' .
-                $data['Name'] .
+                esc_html($data['Name']) .
                 '</strong> could not be initialized because you need minimum PHP version ' .
-                RML_MIN_PHP .
+                esc_html(RML_MIN_PHP) .
                 ' ... you are running: ' .
-                phpversion() .
+                esc_html(phpversion()) .
                 '.
 			</div>';
         }

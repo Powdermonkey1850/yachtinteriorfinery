@@ -51,7 +51,7 @@ class PolyLang
     public function options_register()
     {
         \register_setting('media', 'rml_polylang_move', 'esc_attr');
-        \add_settings_field('rml_polylang_move', '<label for="rml_polylang_move">' . \__('PolyLang: Automatically move translations', RML_TD) . '</label>', [$this, 'html_options_move'], 'media', 'rml_options_general');
+        \add_settings_field('rml_polylang_move', '<label for="rml_polylang_move">' . \__('PolyLang: Automatically move translations', 'real-media-library-lite') . '</label>', [$this, 'html_options_move'], 'media', 'rml_options_general');
     }
     /**
      * Output button to move translation.
@@ -61,7 +61,7 @@ class PolyLang
         $value = \get_option('rml_polylang_move', '1');
         echo '<input type="checkbox" id="rml_polylang_move"
                 name="rml_polylang_move" value="1" ' . \checked(1, $value, \false) . ' />
-                <label>' . \__('If you move a file, the corresponding translated file will also be moved.', RML_TD) . '</label>';
+                <label>' . \esc_html__('If you move a file, the corresponding translated file will also be moved.', 'real-media-library-lite') . '</label>';
     }
     /**
      * A file is moved (not copied) and then move also all the translations.

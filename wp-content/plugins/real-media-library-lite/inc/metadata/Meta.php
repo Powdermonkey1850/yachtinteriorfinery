@@ -39,9 +39,9 @@ class Meta implements IMetadata
     {
         $type = $folder->getType();
         if ($type !== RML_TYPE_ROOT) {
-            $content .= '<label>' . \__('Path', RML_TD) . '</label>' . $folder->getPath(' > ') . '';
+            $content .= '<label>' . \__('Path', 'real-media-library-lite') . '</label>' . $folder->getPath(' > ') . '';
         }
-        $content .= '<label>' . \__('Folder type', RML_TD) . '</label>' . $folder->getTypeName() . ' <i>' . $folder->getTypeDescription() . '</i>';
+        $content .= '<label>' . \__('Folder type', 'real-media-library-lite') . '</label>' . $folder->getTypeName() . ' <i>' . $folder->getTypeDescription() . '</i>';
         return $content;
     }
     // Documented in IMetadata
@@ -82,7 +82,7 @@ class Meta implements IMetadata
          * @return {array} The tabs
          * @since 3.3
          */
-        $tabs = \apply_filters('RML/' . ($type === RML_TYPE_ALL ? 'User/Settings' : 'Folder/Meta') . '/Groups', ['general' => \__('General', RML_TD)]);
+        $tabs = \apply_filters('RML/' . ($type === RML_TYPE_ALL ? 'User/Settings' : 'Folder/Meta') . '/Groups', ['general' => \__('General', 'real-media-library-lite')]);
         // Create content form
         $content = '<form method="POST" action="">
             <input type="hidden" name="folderId" value="' . $inputID . '" />

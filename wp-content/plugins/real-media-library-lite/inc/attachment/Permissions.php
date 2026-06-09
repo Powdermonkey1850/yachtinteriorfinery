@@ -36,7 +36,7 @@ class Permissions
     public static function insert($errors, $id, $folder)
     {
         if (\is_rml_folder($folder) && $folder->isRestrictFor('ins')) {
-            $errors[] = \__('You are not allowed to insert files here.', RML_TD);
+            $errors[] = \__('You are not allowed to insert files here.', 'real-media-library-lite');
             return $errors;
         }
         // Check if "mov" of current folder is allowed
@@ -44,7 +44,7 @@ class Permissions
         if ($otherFolder !== '') {
             $otherFolder = \wp_rml_get_by_id($otherFolder, null, \true);
             if (\is_rml_folder($otherFolder) && $otherFolder->isRestrictFor('mov')) {
-                $errors[] = \__('You are not allowed to move the file.', RML_TD);
+                $errors[] = \__('You are not allowed to move the file.', 'real-media-library-lite');
             }
         }
         return $errors;
@@ -62,7 +62,7 @@ class Permissions
     {
         $folder = \wp_rml_get_by_id($parent, null, \true);
         if (\is_rml_folder($folder) && $folder->isRestrictFor('cre')) {
-            $errors[] = \__('You are not allowed to create a subfolder here.', RML_TD);
+            $errors[] = \__('You are not allowed to create a subfolder here.', 'real-media-library-lite');
         }
         return $errors;
     }
@@ -77,7 +77,7 @@ class Permissions
     public static function deleteFolder($errors, $id, $folder)
     {
         if (\is_rml_folder($folder) && $folder->isRestrictFor('del')) {
-            $errors[] = \__('You are not allowed to delete this folder.', RML_TD);
+            $errors[] = \__('You are not allowed to delete this folder.', 'real-media-library-lite');
         }
         return $errors;
     }
@@ -92,7 +92,7 @@ class Permissions
     public static function setName($errors, $name, $folder)
     {
         if (\is_rml_folder($folder) && $folder->isRestrictFor('ren')) {
-            $errors[] = \__('You are not allowed to rename this folder.', RML_TD);
+            $errors[] = \__('You are not allowed to rename this folder.', 'real-media-library-lite');
         }
         return $errors;
     }

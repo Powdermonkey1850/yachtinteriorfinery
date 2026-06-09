@@ -36,7 +36,11 @@ class Assets
      */
     public function enqueue_block_editor_assets()
     {
-        $this->enqueueScript(RML_SLUG . '-gutenberg', [[$this->isPro(), 'rml_gutenberg.pro.js'], 'rml_gutenberg.lite.js'], ['wp-blocks', 'wp-i18n', 'wp-element']);
+        $handle = $this->enqueueScript(RML_SLUG . '-gutenberg', [[$this->isPro(), 'rml_gutenberg.pro.js'], 'rml_gutenberg.lite.js'], ['wp-api-fetch', 'wp-blocks', 'wp-i18n', 'wp-element']);
+        // Ensure our editor bundle gets the same `rmlOpts` globals as the main RML bundle.
+        // The block editor context (and its iframe) does not automatically enqueue `rml` (main script).
+        // Without localization, `rmlOpts` is undefined and even our Block API version switch can't run.
+        \wp_localize_script($handle, RML_OPT_PREFIX . 'Opts', $this->localizeScript(Constants::ASSETS_TYPE_ADMIN));
     }
     /**
      * Enqueue scripts and styles depending on the type. This function is called
@@ -116,6 +120,7 @@ class Assets
      */
     public function overrideLocalizeScript($context)
     {
+        global $wp_version;
         $mode = \get_user_option('media_library_mode', \get_current_user_id());
         $mode = $mode ? $mode : 'grid';
         // Compatibility with MLA plugin
@@ -134,7 +139,7 @@ class Assets
         } else {
             $mlNotices = ['showTaxImportNotice' => \false];
         }
-        return \apply_filters('RML/Localize', \array_merge(['showLicenseFormImmediate' => $showLicenseFormImmediate, 'isDevLicense' => $isDevLicense, 'licenseActivationLink' => $pluginUpdater->getView()->getActivateLink(\true), 'canManageOptions' => \current_user_can('manage_options'), 'lang' => (new Lang())->getItems($this), 'childrenSql' => \intval(\get_option(RML_OPT_PREFIX . \MatthiasWeb\RealMediaLibrary\Activator::DB_CHILD_QUERY_SUPPORTED, null)), 'lastQueried' => \wp_rml_last_queried_folder(), 'blogId' => \get_current_blog_id(), 'rootId' => \_wp_rml_root(), 'listMode' => $mode, 'userSettings' => \has_filter('RML/User/Settings/Content'), 'sortables' => ['content' => Sortable::getAvailableContentOrders(\true), 'tree' => Creatable::getAvailableSubfolderOrders(\true)], 'taxImportNoticeLink' => \admin_url('options-media.php#rml-rml_export_data'), 'pluginsUrl' => \admin_url('plugins.php')], $mlNotices, $this->localizeFreemiumScript()));
+        return \apply_filters('RML/Localize', \array_merge(['showLicenseFormImmediate' => $showLicenseFormImmediate, 'isDevLicense' => $isDevLicense, 'isBlockApiVersion3Supported' => \version_compare($wp_version, '6.3', '>='), 'licenseActivationLink' => $pluginUpdater->getView()->getActivateLink(\true), 'canManageOptions' => \current_user_can('manage_options'), 'lang' => (new Lang())->getItems($this), 'childrenSql' => \intval(\get_option(RML_OPT_PREFIX . \MatthiasWeb\RealMediaLibrary\Activator::DB_CHILD_QUERY_SUPPORTED, null)), 'lastQueried' => \wp_rml_last_queried_folder(), 'blogId' => \get_current_blog_id(), 'rootId' => \_wp_rml_root(), 'listMode' => $mode, 'userSettings' => \has_filter('RML/User/Settings/Content'), 'sortables' => ['content' => Sortable::getAvailableContentOrders(\true), 'tree' => Creatable::getAvailableSubfolderOrders(\true)], 'taxImportNoticeLink' => \admin_url('options-media.php#rml-rml_export_data'), 'pluginsUrl' => \admin_url('plugins.php')], $mlNotices, $this->localizeFreemiumScript()));
     }
     /**
      * Add an "Add-On" link to the plugin row links.
@@ -146,7 +151,7 @@ class Assets
     public function plugin_row_meta($links, $file)
     {
         if (\false !== \strpos($file, \plugin_basename(RML_FILE))) {
-            $links[] = '<a target="_blank" href="' . \esc_attr(\__('https://devowl.io/', RML_TD)) . '"><strong>' . \__('Complementary Plugins', RML_TD) . '</strong></a>';
+            $links[] = '<a target="_blank" href="' . \esc_attr(\__('https://devowl.io/', 'real-media-library-lite')) . '"><strong>' . \__('Complementary Plugins', 'real-media-library-lite') . '</strong></a>';
         }
         return $links;
     }
@@ -163,7 +168,7 @@ class Assets
      */
     public function media_view_strings($strings)
     {
-        $str = \__("\n\nNote: If you want to delete a shortcut file, the source file will NOT be deleted.\nIf you want to delete a non-shortcut file, all associated shortcuts are deleted, too.", RML_TD);
+        $str = \__("\n\nNote: If you want to delete a shortcut file, the source file will NOT be deleted.\nIf you want to delete a non-shortcut file, all associated shortcuts are deleted, too.", 'real-media-library-lite');
         if ($strings === \false) {
             return $str;
         }
