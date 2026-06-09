@@ -61,6 +61,7 @@ function yif_enqueue_custom_assets() {
   wp_enqueue_style('global', $theme_uri . '/css/global.css', array(), $version);
   wp_enqueue_style('testimonials', $theme_uri . '/css/testimonials.css', array(), $version);
   wp_enqueue_style('footer', $theme_uri . '/css/footer.css', array(), $version);
+  wp_enqueue_style('hero-video', $theme_uri . '/css/hero-video.css', array(), $version);
 
 
 
