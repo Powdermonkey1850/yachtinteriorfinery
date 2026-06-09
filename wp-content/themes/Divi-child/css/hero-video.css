@@ -48,9 +48,9 @@ body:has(.yif-hero-video) {
   right: 10.3vw;
   width: 39.7vw;
   color: #fff;
-  text-align: left;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
+  text-align: right;
+  font-size: 0.8rem;
+  letter-spacing: 2px;
   text-transform: uppercase;
   z-index: 3;
   margin: 0;
@@ -105,6 +105,7 @@ body:has(.yif-hero-video) {
   font-weight: 700;
   margin-bottom: 1rem;
   color: #fff;
+  font-family: 'script', Helvetica, Arial, Lucida, sans-serif;
 }
 
 .yif-hero-video__body {
