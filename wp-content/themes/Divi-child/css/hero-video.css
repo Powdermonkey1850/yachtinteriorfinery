@@ -105,7 +105,7 @@ body:has(.yif-hero-video) {
   font-weight: 700;
   margin-bottom: 1rem;
   color: #fff;
-  font-family: 'script', Helvetica, Arial, Lucida, sans-serif;
+  font-family: 'script', Helvetica, Arial, Lucida, sans-serif, 'mook';
 }
 
 .yif-hero-video__body {
