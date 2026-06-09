@@ -64,7 +64,7 @@ body:has(.yif-hero-video) {
   right: 10vw;
   width: 39.7vw;
   height: calc(100% - 10rem);
-  background: rgba(106, 80, 103, 0.55);
+  background: rgba(182, 162, 180, 0.8);
   display: flex;
   flex-direction: column;
   align-items: center;
