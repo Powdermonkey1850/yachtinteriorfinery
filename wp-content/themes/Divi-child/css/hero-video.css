@@ -158,3 +158,20 @@ body:has(.yif-hero-video) {
 }
 
 @media (max-width: 576px) {}
+
+@media (max-height: 650px) {
+  .yif-hero-video__eyebrow {
+    display: none;
+  }
+
+  .yif-hero-video__overlay {
+    right: 0;
+    width: 100%;
+    margin-top: 0;
+    height: 100%;
+  }
+
+  .yif-hero-video__crest {
+    display: none;
+  }
+}
