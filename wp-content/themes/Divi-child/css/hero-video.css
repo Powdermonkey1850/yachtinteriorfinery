@@ -61,7 +61,7 @@ body:has(.yif-hero-video) {
 .yif-hero-video__overlay {
   position: absolute;
   top: 0;
-  right: 10vw;
+  right: 10.32vw;
   width: 39.7vw;
   height: calc(100% - 10rem);
   background: rgba(182, 162, 180, 0.8);
