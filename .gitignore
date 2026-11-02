@@ -25,3 +25,134 @@ wp-content/wp-rocket-config/
 
 /updraft
 
+# Shared mattcasson rules (Garak management)
+############################
+# Drupal runtime config
+############################
+
+# Environment-specific (never commit)
+web/sites/*/settings.php
+web/sites/*/settings.production.php
+web/sites/*/settings.local.php
+web/sites/*/services.yml
+web/sites/*/services.local.yml
+
+# Allow defaults
+!web/sites/*/default.settings.php
+!web/sites/*/default.services.yml
+
+
+
+############################
+# Drupal files directory
+# (KEEP files in repo)
+
+# Not old SYNC
+/web/sites/default/files/sync
+
+############################
+
+# Ignore generated/cached subdirectories only
+web/sites/*/files/php/
+web/sites/*/files/css/
+web/sites/*/files/js/
+web/sites/*/files/styles/
+web/sites/*/files/tmp/
+web/sites/default/files/insta-imports/
+
+
+############################
+# Temporary & cache
+############################
+
+tmp/
+
+
+############################
+# Composer / dependencies
+############################
+
+/vendor/
+
+
+############################
+# Drush
+############################
+
+.drush/
+.drush/cache/
+.drush.lock
+
+
+############################
+# IDE / editor / OS
+############################
+
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+*~
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+
+############################
+# Logs & dumps
+############################
+
+*.log
+*.sql
+*.tar
+*.tar.gz
+*.zip
+*.bak
+*.orig
+*.save
+
+
+############################
+# Node / build artifacts
+############################
+
+node_modules/
+dist/
+build/
+
+
+############################
+# PHPUnit
+############################
+
+phpunit.xml
+/tests/simpletest/output/
+
+mattcasson.code-workspace
+
+############################
+# Local-dev-only module symlinks (Composer path repositories)
+############################
+
+# block_layout_accordion is developed as its own project at
+# ~/sites/block_layout_accordion and pulled in here via a Composer path
+# repository/symlink for fast local iteration. That symlink is specific to
+# this machine and must never be committed — deploy gets the module from a
+# real drupal.org release once one exists, same as every other contrib
+# module in this repo.
+/web/modules/contrib/block_layout_accordion
+
+# Compressed database dumps
+*.sql.gz
+*.sql.bz2
+*.sql.xz
+*.sql.zst
+
+# Composer-managed Drupal dependencies
+/web/core/
+/web/modules/contrib/
+/web/themes/contrib/
+/web/profiles/contrib/
+!/composer.json
+!/composer.lock
