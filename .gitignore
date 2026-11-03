@@ -159,3 +159,8 @@ mattcasson.code-workspace
 
 # Local WordPress credentials and server settings
 /wp-config.php
+
+# WordPress generated cache, backups and local settings
+/wp-content/et-cache/
+/wp-content/updraft/
+/wp-content/debug.log
