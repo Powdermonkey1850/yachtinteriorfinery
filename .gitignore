@@ -156,3 +156,6 @@ mattcasson.code-workspace
 /web/profiles/contrib/
 !/composer.json
 !/composer.lock
+
+# Local WordPress credentials and server settings
+/wp-config.php
