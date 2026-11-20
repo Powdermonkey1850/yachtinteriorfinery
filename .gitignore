@@ -1,166 +1,48 @@
+# yif2025: WordPress live site.
+# Track everything (core, plugins, themes, all uploads incl. image sizes)
+# except credentials, dumps, logs, caches and backups.
+
+# ---- Credentials and environment config ----
+/wp-config.php
+# Any copy of wp-config.php (wp-config.phpBAK..., wp-config.php.old); keeps wp-config-sample.php
+/wp-config.php?*
+/wp-config-ddev.php
+/.ddev/
+
+# ---- Database dumps and archives ----
 *.sql
-*.tar.gz
-# Ignore WordPress debug log
-wp-content/debug.log
-wp-config.php
-
-wp-content/languages/*
-wp-content/plugins/gravityforms/*
-wp-content/plugins/divi-extended-gravity-forms-styler/*
-
-# Ignore all plugins except custom
-# wp-content/plugins/*
-!wp-content/plugins/your-custom-plugin-folder/
-
-# ddev
-.ddev
-wp-config-ddev.php
-
-wp-content/et-cache/
-wp-content/cache/
-wp-content/advanced-cache.php
-wp-content/wp-rocket-config/
-
-.vscode
-
-/updraft
-
-# Shared mattcasson rules (Garak management)
-############################
-# Drupal runtime config
-############################
-
-# Environment-specific (never commit)
-web/sites/*/settings.php
-web/sites/*/settings.production.php
-web/sites/*/settings.local.php
-web/sites/*/services.yml
-web/sites/*/services.local.yml
-
-# Allow defaults
-!web/sites/*/default.settings.php
-!web/sites/*/default.services.yml
-
-
-
-############################
-# Drupal files directory
-# (KEEP files in repo)
-
-# Not old SYNC
-/web/sites/default/files/sync
-
-############################
-
-# Ignore generated/cached subdirectories only
-web/sites/*/files/php/
-web/sites/*/files/css/
-web/sites/*/files/js/
-web/sites/*/files/styles/
-web/sites/*/files/tmp/
-web/sites/default/files/insta-imports/
-
-
-############################
-# Temporary & cache
-############################
-
-tmp/
-
-
-############################
-# Composer / dependencies
-############################
-
-/vendor/
-
-
-############################
-# Drush
-############################
-
-.drush/
-.drush/cache/
-.drush.lock
-
-
-############################
-# IDE / editor / OS
-############################
-
-.idea/
-.vscode/
-*.swp
-*.swo
-*.swn
-*~
-.DS_Store
-Thumbs.db
-*:Zone.Identifier
-
-
-############################
-# Logs & dumps
-############################
-
-*.log
-*.sql
-*.tar
-*.tar.gz
-*.zip
-*.bak
-*.orig
-*.save
-
-
-############################
-# Node / build artifacts
-############################
-
-node_modules/
-dist/
-build/
-
-
-############################
-# PHPUnit
-############################
-
-phpunit.xml
-/tests/simpletest/output/
-
-mattcasson.code-workspace
-
-############################
-# Local-dev-only module symlinks (Composer path repositories)
-############################
-
-# block_layout_accordion is developed as its own project at
-# ~/sites/block_layout_accordion and pulled in here via a Composer path
-# repository/symlink for fast local iteration. That symlink is specific to
-# this machine and must never be committed — deploy gets the module from a
-# real drupal.org release once one exists, same as every other contrib
-# module in this repo.
-/web/modules/contrib/block_layout_accordion
-
-# Compressed database dumps
 *.sql.gz
 *.sql.bz2
 *.sql.xz
 *.sql.zst
+*.tar
+*.tar.gz
 
-# Composer-managed Drupal dependencies
-/web/core/
-/web/modules/contrib/
-/web/themes/contrib/
-/web/profiles/contrib/
-!/composer.json
-!/composer.lock
+# ---- Logs ----
+*.log
 
-# Local WordPress credentials and server settings
-/wp-config.php
-
-# WordPress generated cache, backups and local settings
+# ---- Caches (rebuilt automatically) ----
+/wp-content/cache/
 /wp-content/et-cache/
+/wp-content/advanced-cache.php
+/wp-content/wp-rocket-config/
+
+# ---- Backups and update temp folders ----
 /wp-content/updraft/
-/wp-content/debug.log
+/wp-content/upgrade/
+/wp-content/upgrade-temp-backup/
+
+# ---- Premium plugins installed outside Git ----
+/wp-content/plugins/gravityforms/
+/wp-content/plugins/divi-extended-gravity-forms-styler/
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+node_modules/
