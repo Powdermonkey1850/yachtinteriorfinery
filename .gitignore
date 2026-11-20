@@ -32,10 +32,6 @@
 /wp-content/upgrade/
 /wp-content/upgrade-temp-backup/
 
-# ---- Premium plugins installed outside Git ----
-/wp-content/plugins/gravityforms/
-/wp-content/plugins/divi-extended-gravity-forms-styler/
-
 # ---- Editor / OS ----
 .vscode/
 .idea/
