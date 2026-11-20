@@ -164,21 +164,3 @@ mattcasson.code-workspace
 /wp-content/et-cache/
 /wp-content/updraft/
 /wp-content/debug.log
-
-# WordPress uploads: track originals, not files WP or plugins regenerate.
-# Image size derivatives (rebuilt with `wp media regenerate`). -scaled and
-# -rotated files are kept, because the database uses them as the attachment file.
-/wp-content/uploads/**/*-[0-9]*x[0-9]*.jpg
-/wp-content/uploads/**/*-[0-9]*x[0-9]*.jpeg
-/wp-content/uploads/**/*-[0-9]*x[0-9]*.png
-/wp-content/uploads/**/*-[0-9]*x[0-9]*.gif
-/wp-content/uploads/**/*-[0-9]*x[0-9]*.webp
-/wp-content/uploads/**/*-[0-9]*x[0-9]*.avif
-# Exception: an original whose name only looks like a size derivative
-!/wp-content/uploads/2025/09/about-1332406_1080x675.webp
-# Imagify .jpg.webp/.png.webp copies are NOT ignored: on this site some
-# genuine uploads carry those double extensions.
-# Plugin caches
-/wp-content/uploads/wpcode/cache/
-/wp-content/uploads/wpconsent/cache/
-/wp-content/uploads/sb-instagram-feed-images/
