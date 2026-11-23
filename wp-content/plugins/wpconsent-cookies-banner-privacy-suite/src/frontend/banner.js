@@ -4,6 +4,103 @@
  * @package WPConsent
  */
 
+// Fallback styles injected into the shadow root when the banner stylesheet
+// fails to load, so the consent UI stays usable (#192). Colors come from the
+// inline --wpconsent-* props on #wpconsent-root, which survive the failure.
+const WPCONSENT_FALLBACK_CSS = `
+#wpconsent-banner-holder {
+	display: none;
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: var(--wpconsent-z-index, 900000);
+}
+#wpconsent-banner-holder.wpconsent-banner-visible {
+	display: block;
+}
+#wpconsent-banner-holder .wpconsent-banner {
+	box-sizing: border-box;
+	margin: 10px;
+	padding: var(--wpconsent-padding, 15px 20px);
+	background: var(--wpconsent-background, #ffffff);
+	color: var(--wpconsent-text, #1a1a1a);
+	border-radius: 10px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+	font-size: var(--wpconsent-font-size, 14px);
+	line-height: 1.4;
+}
+#wpconsent-banner-holder .wpconsent-banner-footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 12px;
+}
+#wpconsent-banner-holder button,
+#wpconsent-preferences-modal button {
+	cursor: pointer;
+	padding: 8px 16px;
+	border: 1px solid rgba(0, 0, 0, 0.2);
+	border-radius: 4px;
+	font-size: inherit;
+}
+#wpconsent-banner-holder .wpconsent-accept-all,
+#wpconsent-preferences-modal .wpconsent-accept-all {
+	background: var(--wpconsent-accept-bg, #2563eb);
+	color: var(--wpconsent-accept-color, #ffffff);
+	border-color: transparent;
+}
+#wpconsent-banner-holder .wpconsent-cancel-cookies,
+#wpconsent-preferences-modal .wpconsent-cancel-cookies {
+	background: var(--wpconsent-cancel-bg, #f3f4f6);
+	color: var(--wpconsent-cancel-color, #1a1a1a);
+}
+#wpconsent-preferences-modal {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 10202020;
+	align-items: center;
+	justify-content: center;
+}
+#wpconsent-preferences-modal .wpconsent-preferences-content {
+	box-sizing: border-box;
+	width: 800px;
+	max-width: 90%;
+	max-height: 90vh;
+	margin: auto;
+	padding: 20px;
+	overflow: auto;
+	background: var(--wpconsent-background, #ffffff);
+	color: var(--wpconsent-text, #1a1a1a);
+	border-radius: 10px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+}
+#wpconsent-consent-floating {
+	display: none;
+	position: fixed;
+	bottom: 20px;
+	left: 20px;
+	z-index: 9999;
+	cursor: pointer;
+}
+#wpconsent-gpc-toast {
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	max-width: 280px;
+	padding: 10px 14px;
+	z-index: calc(var(--wpconsent-z-index, 900000) + 1);
+	background: var(--wpconsent-background, #ffffff);
+	color: var(--wpconsent-text, #1a1a1a);
+	border-radius: 8px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+`;
+
 // Define global WPConsent namespace
 window.WPConsent = {
 	// Hook system for display checks
@@ -17,6 +114,10 @@ window.WPConsent = {
 	// 1. Add storage for the listener and the last known state
 	listeners: [],
 	lastPreferences: null,
+
+	// Lazy CSS loading state: the shadow-root stylesheet is fetched on first
+	// reveal of any UI element that needs it, then cached so it loads at most once.
+	cssPromise: null,
 
 	// 2. The Registration function GTM will call.
 	registerListener: function( callback ) {
@@ -90,6 +191,7 @@ window.WPConsent = {
 	hooks: {
 		beforeShowPreferences: [],
 		afterShowPreferences: [],
+		afterHidePreferences: [],
 		beforeHideBanner: [],
 		afterHideBanner: [],
 		beforeShowBanner: [],
@@ -123,42 +225,45 @@ window.WPConsent = {
 	 * @param {number} duration - Duration in milliseconds (default 2500)
 	 */
 	showToast: function( message, duration = 2500 ) {
-		const toast = this.shadowRoot.querySelector( '#wpconsent-gpc-toast' );
-		if ( ! toast ) {
-			return;
-		}
+		// The toast is a shadow-root element; ensure styles are present first.
+		this.ensureCSS().then( () => {
+			const toast = this.shadowRoot.querySelector( '#wpconsent-gpc-toast' );
+			if ( ! toast ) {
+				return;
+			}
 
-		// Update message
-		const messageEl = toast.querySelector( '.wpconsent-toast-message' );
-		if ( messageEl && message ) {
-			messageEl.textContent = message;
-		}
+			// Update message
+			const messageEl = toast.querySelector( '.wpconsent-toast-message' );
+			if ( messageEl && message ) {
+				messageEl.textContent = message;
+			}
 
-		// Show toast
-		toast.style.display = 'block';
-		setTimeout( () => {
-			toast.classList.add( 'wpconsent-toast-visible' );
-		}, 10 );
-
-		// Auto-hide after duration
-		const hideToast = () => {
-			toast.classList.remove( 'wpconsent-toast-visible' );
+			// Show toast
+			toast.style.display = 'block';
 			setTimeout( () => {
-				toast.style.display = 'none';
-			}, 300 ); // Match CSS transition duration
-		};
+				toast.classList.add( 'wpconsent-toast-visible' );
+			}, 10 );
 
-		// Set auto-hide timer
-		const timer = setTimeout( hideToast, duration );
-
-		// Close button functionality
-		const closeBtn = toast.querySelector( '.wpconsent-toast-close' );
-		if ( closeBtn ) {
-			closeBtn.onclick = () => {
-				clearTimeout( timer );
-				hideToast();
+			// Auto-hide after duration
+			const hideToast = () => {
+				toast.classList.remove( 'wpconsent-toast-visible' );
+				setTimeout( () => {
+					toast.style.display = 'none';
+				}, 300 ); // Match CSS transition duration
 			};
-		}
+
+			// Set auto-hide timer
+			const timer = setTimeout( hideToast, duration );
+
+			// Close button functionality
+			const closeBtn = toast.querySelector( '.wpconsent-toast-close' );
+			if ( closeBtn ) {
+				closeBtn.onclick = () => {
+					clearTimeout( timer );
+					hideToast();
+				};
+			}
+		} );
 	},
 
 	/**
@@ -254,12 +359,9 @@ window.WPConsent = {
 		// Apply GPC preferences - savePreferences handles all the comparison logic
 		this.savePreferences( gpcPreferences, true ); // This is automatic GPC application
 
-		// Show toast notification that GPC was honored (if enabled).
-		if ( wpconsent.gpc_toast_enabled !== false ) {
-			const toastMessage = wpconsent.gpc_toast_message || 'GPC Signal Honored';
-			const toastDuration = wpconsent.gpc_toast_duration || 10000;
-			this.showToast( toastMessage, toastDuration );
-		}
+		// Show toast notification that GPC was honored. When the toast is disabled via the
+		// wpconsent_gpc_toast_enabled filter the markup is not rendered and showToast() is a no-op.
+		this.showToast( wpconsent.gpc_toast_message || 'GPC Signal Honored', parseInt( wpconsent.gpc_toast_duration, 10 ) || 10000 );
 
 		// Disable banner
 		this.checksPassed = false;
@@ -357,75 +459,84 @@ window.WPConsent = {
 	},
 
 	showPreferences: function () {
-		const modal = this.shadowRoot?.querySelector( '#wpconsent-preferences-modal' );
-		if ( modal ) {
-			modal.style.display = 'flex';
-			// Set up focus trap for the preferences modal
-			this.setupFocusTrap( modal );
+		// The preferences modal lives in the shadow root, so ensure its styles are
+		// loaded before display. On consented pageviews with the floating button
+		// disabled this is the first (and only) time the CSS is fetched.
+		// Returns the promise so callers can act after the modal is populated (e.g.
+		// the GPC override flow that pre-checks specific boxes after the restore).
+		return this.ensureCSS().then( () => {
+			const modal = this.shadowRoot?.querySelector( '#wpconsent-preferences-modal' );
+			if ( modal ) {
+				modal.style.display = 'flex';
+				// Set up focus trap for the preferences modal
+				this.setupFocusTrap( modal );
 
-			// Run afterShowPreferences hooks for extensions.
-			this.runHooks( 'afterShowPreferences' );
+				// Run afterShowPreferences hooks for extensions.
+				this.runHooks( 'afterShowPreferences' );
 
-			// Focus the preferences title
-			const modalTitle = this.shadowRoot?.querySelector( '#wpconsent-preferences-title' );
-			if ( modalTitle ) {
-				setTimeout( () => {
-					modalTitle.focus( {preventScroll: true} );
-					// Set this as our tracked element
-					this.lastFocusedElement = modalTitle;
-				}, 100 );
-			}
+				// Focus the preferences title
+				const modalTitle = this.shadowRoot?.querySelector( '#wpconsent-preferences-title' );
+				if ( modalTitle ) {
+					setTimeout( () => {
+						modalTitle.focus( {preventScroll: true} );
+						// Set this as our tracked element
+						this.lastFocusedElement = modalTitle;
+					}, 100 );
+				}
 
-			// Set checkbox states based on saved preferences
-			const preferences = this.getCookie( 'wpconsent_preferences' );
-			if ( preferences ) {
-				try {
-					const savedPreferences = JSON.parse( preferences );
-					const checkboxes = this.shadowRoot.querySelectorAll( '#wpconsent-preferences-modal input[type="checkbox"]' );
-					checkboxes.forEach( checkbox => {
-						let preferenceKey = null;
+				// Set checkbox states based on saved preferences
+				const preferences = this.getCookie( 'wpconsent_preferences' );
+				if ( preferences ) {
+					try {
+						const savedPreferences = JSON.parse( preferences );
+						const checkboxes = this.shadowRoot.querySelectorAll( '#wpconsent-preferences-modal input[type="checkbox"]' );
+						checkboxes.forEach( checkbox => {
+							let preferenceKey = null;
 
-						// Handle category checkboxes (ID: cookie-category-{slug})
-						if ( checkbox.id.startsWith( 'cookie-category-' ) ) {
-							preferenceKey = checkbox.id.replace( 'cookie-category-', '' );
+							// Handle category checkboxes (ID: cookie-category-{slug})
+							if ( checkbox.id.startsWith( 'cookie-category-' ) ) {
+								preferenceKey = checkbox.id.replace( 'cookie-category-', '' );
+							}
+							// Handle service checkboxes (ID: cookie-service-{slug})
+							else if ( checkbox.id.startsWith( 'cookie-service-' ) ) {
+								preferenceKey = checkbox.id.replace( 'cookie-service-', '' );
+							}
+							// Fallback to using value attribute for other patterns
+							else {
+								preferenceKey = checkbox.value;
+							}
+
+							if ( preferenceKey && preferenceKey in savedPreferences ) {
+								checkbox.checked = savedPreferences[preferenceKey];
+							}
+						} );
+
+						// Handle GPC override toggle visibility
+						const gpcOverrideContainer = this.shadowRoot.querySelector( '#wpconsent-gpc-override-container' );
+						if ( gpcOverrideContainer ) {
+							const hasGPCSignal = navigator.globalPrivacyControl === true;
+							const respectGPCInPrefs = savedPreferences && savedPreferences.respect_gpc === true;
+
+							// Show toggle if GPC signal exists and was previously honored
+							if ( hasGPCSignal && respectGPCInPrefs ) {
+								gpcOverrideContainer.style.display = 'block';
+							} else {
+								gpcOverrideContainer.style.display = 'none';
+							}
 						}
-						// Handle service checkboxes (ID: cookie-service-{slug})
-						else if ( checkbox.id.startsWith( 'cookie-service-' ) ) {
-							preferenceKey = checkbox.id.replace( 'cookie-service-', '' );
-						}
-						// Fallback to using value attribute for other patterns
-						else {
-							preferenceKey = checkbox.value;
-						}
-
-						if ( preferenceKey && preferenceKey in savedPreferences ) {
-							checkbox.checked = savedPreferences[preferenceKey];
-						}
-					} );
-
-					// Handle GPC override toggle visibility
-					const gpcOverrideContainer = this.shadowRoot.querySelector( '#wpconsent-gpc-override-container' );
-					if ( gpcOverrideContainer ) {
-						const hasGPCSignal = navigator.globalPrivacyControl === true;
-						const respectGPCInPrefs = savedPreferences && savedPreferences.respect_gpc === true;
-
-						// Show toggle if GPC signal exists and was previously honored
-						if ( hasGPCSignal && respectGPCInPrefs ) {
-							gpcOverrideContainer.style.display = 'block';
-						} else {
-							gpcOverrideContainer.style.display = 'none';
-						}
+					} catch ( e ) {
+						console.error( 'Error parsing WPConsent preferences:', e );
 					}
-				} catch ( e ) {
-					console.error( 'Error parsing WPConsent preferences:', e );
 				}
 			}
-		}
+		} );
 	},
 
 	closePreferences: function () {
 		const modal = this.shadowRoot?.querySelector( '#wpconsent-preferences-modal' );
 		if ( modal ) {
+			// Only run the hide hooks when the modal was actually open, not on repeat closes.
+			const wasOpen = 'flex' === modal.style.display;
 			modal.style.display = 'none';
 			// Remove focus trap when preferences modal is closed
 			this.removeFocusTrap();
@@ -433,6 +544,11 @@ window.WPConsent = {
 			if ( this.previouslyFocusedElement ) {
 				this.previouslyFocusedElement.focus( {preventScroll: true} );
 				this.previouslyFocusedElement = null;
+			}
+
+			if ( wasOpen ) {
+				// Run afterHidePreferences hooks for extensions.
+				this.runHooks( 'afterHidePreferences' );
 			}
 		}
 	},
@@ -443,7 +559,12 @@ window.WPConsent = {
 		}
 
 		const banner = this.shadowRoot?.querySelector( '#wpconsent-banner-holder' );
-		if ( banner ) {
+		if ( !banner ) {
+			return;
+		}
+
+		// Load the stylesheet before revealing so the banner never flashes unstyled.
+		this.ensureCSS().then( () => {
 			// Run beforeShowBanner hooks for extensions.
 			this.runHooks( 'beforeShowBanner' );
 
@@ -455,7 +576,7 @@ window.WPConsent = {
 
 			// Run afterShowBanner hooks for extensions.
 			this.runHooks( 'afterShowBanner' );
-		}
+		} );
 	},
 
 	hideBanner: function () {
@@ -556,10 +677,110 @@ window.WPConsent = {
 			if ( service && preferences[service] !== undefined ) {
 				return preferences[service];
 			}
-			return false;
+			return preferences[category] === true;
 		}
 
 		return preferences[category] === true;
+	},
+
+	activateScript: function ( script ) {
+		const newScript = document.createElement( 'script' );
+
+		// Copy all attributes except 'type'
+		script.getAttributeNames().forEach( attr => {
+			if ( attr !== 'type' ) {
+				newScript.setAttribute( attr, script.getAttribute( attr ) );
+			}
+		} );
+
+		// Handle src attribute
+		const src = script.getAttribute( 'data-wpconsent-src' );
+		if ( src ) {
+			newScript.src = src;
+		} else {
+			newScript.text = script.text;
+		}
+
+		script.parentNode.replaceChild( newScript, script );
+	},
+
+	// Give a blocked iframe its src back and drop the blocking attributes.
+	activateIframe: function ( iframe ) {
+		const src = iframe.getAttribute( 'data-wpconsent-src' );
+		if ( src ) {
+			iframe.src = src;
+		}
+
+		iframe.removeAttribute( 'data-wpconsent-src' );
+		iframe.removeAttribute( 'data-wpconsent-name' );
+		iframe.removeAttribute( 'data-wpconsent-category' );
+	},
+
+	// Restore content that content blocking does not apply to for this visitor (geolocation group, or content
+	// blocking disabled) by unwrapping the blocked iframes and dropping the element placeholders and script
+	// blocks for every service that is not in the list. Anything other than an array keeps everything blocked,
+	// matching the server, which blocks all services when the list is not a valid array.
+	unlockContentExcept: function ( servicesToKeepBlocked ) {
+		if ( ! Array.isArray( servicesToKeepBlocked ) ) {
+			return;
+		}
+
+		const isUnlocked = serviceName => !! serviceName && servicesToKeepBlocked.indexOf( serviceName ) === -1;
+
+		document.querySelectorAll( 'iframe[data-wpconsent-src]' ).forEach( iframe => {
+			if ( ! isUnlocked( iframe.getAttribute( 'data-wpconsent-name' ) ) ) {
+				return;
+			}
+
+			this.activateIframe( iframe );
+
+			// Put the iframe back where the placeholder wrapper sits and drop the wrapper.
+			const placeholder = iframe.closest( '.wpconsent-iframe-placeholder' );
+			if ( placeholder ) {
+				placeholder.parentNode.insertBefore( iframe, placeholder );
+				placeholder.remove();
+			}
+		} );
+
+		// Element placeholders (reCAPTCHA and the like) are rendered in front of the blocked element, so they are
+		// simply removed. They carry data-wpconsent-element, but HTML cached before that marker existed does not,
+		// so recognise them by what is left after the iframe pass: a placeholder with no blocked iframe inside.
+		document.querySelectorAll( '.wpconsent-iframe-placeholder' ).forEach( placeholder => {
+			if ( placeholder.querySelector( 'iframe[data-wpconsent-src]' ) ) {
+				return;
+			}
+
+			if ( isUnlocked( placeholder.getAttribute( 'data-wpconsent-name' ) ) ) {
+				placeholder.remove();
+			}
+		} );
+
+		// Scripts for those services are only blocked because content blocking applies to them.
+		document.querySelectorAll( 'script[type="text/plain"][data-wpconsent-element]' ).forEach( script => {
+			if ( isUnlocked( script.getAttribute( 'data-wpconsent-name' ) ) ) {
+				this.activateScript( script );
+			}
+		} );
+	},
+
+	/**
+	 * Map category preferences to the Google Consent Mode signals they control.
+	 * Mirrors $signal_categories in wpconsent_google_consent_script() (includes/frontend-scripts.php).
+	 *
+	 * @param {Object} preferences Category slug => boolean.
+	 * @return {Object} Consent Mode signal => 'granted' | 'denied'.
+	 */
+	consentModeState: function ( preferences ) {
+		const marketing  = preferences.marketing ? 'granted' : 'denied';
+		const statistics = preferences.statistics ? 'granted' : 'denied';
+
+		return {
+			'ad_storage': marketing,
+			'analytics_storage': statistics,
+			'ad_user_data': marketing,
+			'ad_personalization': marketing,
+			'personalization_storage': marketing
+		};
 	},
 
 	unlockScripts: function ( preferences ) {
@@ -583,24 +804,7 @@ window.WPConsent = {
 			const service = script.getAttribute( 'data-wpconsent-name' );
 
 			if ( this.shouldUnlockContent( preferences, service, category ) ) {
-				const newScript = document.createElement( 'script' );
-
-				// Copy all attributes except 'type'
-				script.getAttributeNames().forEach( attr => {
-					if ( attr !== 'type' ) {
-						newScript.setAttribute( attr, script.getAttribute( attr ) );
-					}
-				} );
-
-				// Handle src attribute
-				const src = script.getAttribute( 'data-wpconsent-src' );
-				if ( src ) {
-					newScript.src = src;
-				} else {
-					newScript.text = script.text;
-				}
-
-				script.parentNode.replaceChild( newScript, script );
+				this.activateScript( script );
 			}
 		} );
 
@@ -611,17 +815,7 @@ window.WPConsent = {
 		WPConsent.localGtag( 'set', 'developer_id.dMmRkYz', true );
 
 		// Update gtag consent state.
-		WPConsent.localGtag(
-			'consent',
-			'update',
-			{
-				'ad_storage': preferences.marketing ? 'granted' : 'denied',
-				'analytics_storage': preferences.statistics ? 'granted' : 'denied',
-				'ad_user_data': preferences.marketing ? 'granted' : 'denied',
-				'ad_personalization': preferences.marketing ? 'granted' : 'denied',
-				'personalization_storage': preferences.marketing ? 'granted' : 'denied'
-			}
-		);
+		WPConsent.localGtag( 'consent', 'update', this.consentModeState( preferences ) );
 
 		// Push event to GTM dataLayer for tag triggering.
 		window.dataLayer = window.dataLayer || [];
@@ -638,16 +832,7 @@ window.WPConsent = {
 			const service = iframe.getAttribute( 'data-wpconsent-name' );
 
 			if ( this.shouldUnlockContent( preferences, service, category ) ) {
-				// Get the src from the data attribute
-				const src = iframe.getAttribute( 'data-wpconsent-src' );
-				if ( src ) {
-					iframe.src = src;
-				}
-
-				// Remove the data attributes
-				iframe.removeAttribute( 'data-wpconsent-src' );
-				iframe.removeAttribute( 'data-wpconsent-name' );
-				iframe.removeAttribute( 'data-wpconsent-category' );
+				this.activateIframe( iframe );
 			}
 		} );
 
@@ -684,6 +869,11 @@ window.WPConsent = {
 			const container = document.getElementById( 'wpconsent-container' );
 			const template = document.getElementById( 'wpconsent-template' );
 
+			// Container and template are absent when wpconsent_banner_output suppresses output_banner() (EDD receipts, builder previews).
+			if ( !container || !template ) {
+				return;
+			}
+
 			// Get existing shadow root or create new one
 			this.shadowRoot = container.shadowRoot;
 			if ( !this.shadowRoot ) {
@@ -697,12 +887,13 @@ window.WPConsent = {
 				this.initializeAccordions();
 				this.initializeKeyboardHandlers();
 
-				// Run all display checks before proceeding with banner initialization
+				// Run all display checks before proceeding with banner initialization.
+				// CSS is no longer pre-loaded here: it is fetched lazily by the reveal
+				// methods (showBanner / showPreferences / showToast /
+				// showFloatingButtonIfEnabled) only when a shadow-root element is
+				// actually shown, so consented visitors who see nothing never fetch it.
 				this.runDisplayChecks().then( () => {
-					// Only load CSS and potentially show banner after all checks have passed
-					this.loadExternalCSS( container ).then( () => {
-						this.processBannerDisplay();
-					} );
+					this.processBannerDisplay();
 				} );
 			} else {
 				// If shadow root already exists, run display checks then process banner display
@@ -764,12 +955,8 @@ window.WPConsent = {
 				this.unlockIframes( allPreferences );
 			} else if ( !wpconsent.enable_content_blocking ) {
 				// Content blocking is disabled (e.g. by geolocation) but script blocking is still on.
-				// Only unlock iframes, not scripts.
-				const allPreferences = {};
-				wpconsent.slugs.forEach( slug => {
-					allPreferences[slug] = true;
-				} );
-				this.unlockIframes( allPreferences );
+				// Restore the blocked content, not the scripts that are waiting on consent.
+				this.unlockContentExcept( [] );
 			}
 		}
 
@@ -784,28 +971,116 @@ window.WPConsent = {
 		window.dispatchEvent( new CustomEvent( 'wpconsent_banner_initialized' ) );
 	},
 
-	// Load external CSS using a <link> element to avoid CORS issues with fetch() on subdomain setups.
+	// Ensure the shadow-root stylesheet is loaded exactly once.
+	// Returns a promise that resolves when the CSS is ready (or failed gracefully).
+	// Safe to call from every reveal path; subsequent calls reuse the first promise.
+	ensureCSS: function () {
+		if ( this.cssPromise ) {
+			return this.cssPromise;
+		}
+		const container = document.getElementById( 'wpconsent-container' );
+		this.cssPromise = this.loadExternalCSS( container );
+		return this.cssPromise;
+	},
+
+	// Reveal the shadow host. Safe to call multiple times.
+	revealContainer: function ( container ) {
+		if ( container ) {
+			container.style.display = 'block';
+		}
+	},
+
+	// Load the stylesheet with a retry + timeout guard; fall back to injected styles on failure (#192).
 	loadExternalCSS: function ( container ) {
 		return new Promise( ( resolve ) => {
-			try {
-				const cssUrl = `${wpconsent.css_url}?ver=${wpconsent.css_version}`;
+			// Guard against a duplicate <link> if this is ever reached twice.
+			if ( this.shadowRoot && this.shadowRoot.querySelector( 'link[data-wpconsent-css]' ) ) {
+				this.revealContainer( container );
+				resolve();
+				return;
+			}
+
+			if ( ! this.shadowRoot ) {
+				resolve();
+				return;
+			}
+
+			const baseUrl = `${wpconsent.css_url}?ver=${wpconsent.css_version}`;
+			const maxAttempts = 2; // Initial try + one retry.
+			const loadTimeout = 5000; // ms before treating a hung request as failed.
+			let settled = false;
+
+			const finish = () => {
+				if ( settled ) {
+					return;
+				}
+				settled = true;
+				resolve();
+			};
+
+			const attempt = ( n ) => {
+				let timer = null;
 				const link = document.createElement( 'link' );
 				link.rel = 'stylesheet';
-				link.href = cssUrl;
-				link.onload = function () {
-					container.style.display = 'block';
-					resolve();
+				// Cache-bust the retry so a negatively-cached first failure is bypassed.
+				link.href = n === 1 ? baseUrl : `${baseUrl}&wpcretry=${n}`;
+				link.setAttribute( 'data-wpconsent-css', '' );
+
+				const cleanup = () => {
+					if ( timer ) {
+						clearTimeout( timer );
+						timer = null;
+					}
+					link.onload = null;
+					link.onerror = null;
 				};
-				link.onerror = function () {
-					console.error( 'Failed to load WPConsent styles' );
-					resolve();
+
+				const onFailure = ( fromTimeout ) => {
+					cleanup();
+					// Drop the dead <link> so the retry's dedupe guard and the DOM stay clean.
+					if ( link.parentNode ) {
+						link.parentNode.removeChild( link );
+					}
+					// Retry a hard error once; a timeout means the host is unreachable, so fall back now.
+					if ( n < maxAttempts && ! fromTimeout ) {
+						attempt( n + 1 );
+					} else {
+						this.applyCSSFallback( container, baseUrl );
+						finish();
+					}
 				};
-				this.shadowRoot.appendChild( link );
-			} catch ( error ) {
-				console.error( 'Failed to load WPConsent styles:', error );
-				resolve();
-			}
+
+				link.onload = () => {
+					cleanup();
+					this.revealContainer( container );
+					finish();
+				};
+				link.onerror = () => onFailure( false );
+				timer = setTimeout( () => onFailure( true ), loadTimeout );
+
+				try {
+					this.shadowRoot.appendChild( link );
+				} catch ( error ) {
+					console.error( 'WPConsent: failed to inject stylesheet link:', error );
+					onFailure();
+				}
+			};
+
+			attempt( 1 );
 		} );
+	},
+
+	// Inject fallback styles into the shadow root and reveal the host. Idempotent.
+	applyCSSFallback: function ( container, cssUrl ) {
+		if ( this.shadowRoot && ! this.shadowRoot.querySelector( 'style[data-wpconsent-css-fallback]' ) ) {
+			const style = document.createElement( 'style' );
+			style.setAttribute( 'data-wpconsent-css-fallback', '' );
+			style.textContent = WPCONSENT_FALLBACK_CSS;
+			this.shadowRoot.appendChild( style );
+		}
+		this.revealContainer( container );
+		console.error( `WPConsent: failed to load styles from ${cssUrl}; showing the consent UI with fallback styling.` );
+		window.dispatchEvent( new CustomEvent( 'wpconsent_css_failed', { detail: { url: cssUrl } } ) );
 	},
 
 	// Initialize event listeners
@@ -866,30 +1141,33 @@ window.WPConsent = {
 
 					// If GPC is active, user needs to see preference panel with GPC override
 					if ( wpconsent.respect_gpc && hasGPCSignal && respectGPCInPrefs ) {
-						// Open preference panel
-						this.showPreferences();
-
-						// Pre-check the category/service checkboxes
-						const categoryCheckbox = this.shadowRoot.querySelector( `#cookie-category-${category}` );
-						if ( categoryCheckbox ) {
-							categoryCheckbox.checked = true;
-						}
-
-						if ( service ) {
-							const serviceCheckbox = this.shadowRoot.querySelector( `#cookie-service-${service}` );
-							if ( serviceCheckbox ) {
-								serviceCheckbox.checked = true;
+						// Open preference panel, then pre-check the relevant boxes.
+						// showPreferences is async (it awaits the lazy CSS load and then
+						// restores saved checkbox states), so these overrides must run in
+						// its resolution callback or the restore would clobber them.
+						this.showPreferences().then( () => {
+							// Pre-check the category/service checkboxes
+							const categoryCheckbox = this.shadowRoot.querySelector( `#cookie-category-${category}` );
+							if ( categoryCheckbox ) {
+								categoryCheckbox.checked = true;
 							}
-						}
 
-						// Show and highlight the GPC override toggle
-						const gpcContainer = this.shadowRoot.querySelector( '#wpconsent-gpc-override-container' );
-						if ( gpcContainer ) {
-							gpcContainer.style.display = 'block';
-						}
+							if ( service ) {
+								const serviceCheckbox = this.shadowRoot.querySelector( `#cookie-service-${service}` );
+								if ( serviceCheckbox ) {
+									serviceCheckbox.checked = true;
+								}
+							}
 
-						// Highlight the toggle with attention-grabbing styling
-						this.highlightGPCOverride();
+							// Show and highlight the GPC override toggle
+							const gpcContainer = this.shadowRoot.querySelector( '#wpconsent-gpc-override-container' );
+							if ( gpcContainer ) {
+								gpcContainer.style.display = 'block';
+							}
+
+							// Highlight the toggle with attention-grabbing styling
+							this.highlightGPCOverride();
+						} );
 					} else {
 						// No GPC active, directly save preferences
 						const newPreferences = {
@@ -1029,10 +1307,20 @@ window.WPConsent = {
 						return;
 					}
 
+					// The category name is a <label for> so the checkbox gets an accessible
+					// name, but letting the label activate would flip consent while the
+					// accordion opens - and the animation hides that the toggle moved.
+					// Keep the association, drop the activation: only the toggle sets consent.
+					if ( e.target.closest( 'label[for^="cookie-category-"]' ) ) {
+						e.preventDefault();
+					}
+
 					this.toggleAccordion( accordion, content );
 				} );
 			}
 		} );
+
+		this.syncAccordionInertState();
 	},
 
 	toggleAccordion( accordion, content ) {
@@ -1108,6 +1396,8 @@ window.WPConsent = {
 			const isNowActive = accordion.classList.contains( 'active' );
 			currentToggle.setAttribute( 'aria-expanded', isNowActive ? 'true' : 'false' );
 		}
+
+		this.syncAccordionInertState();
 
 		// Fire accordion toggled event for extensions.
 		const nowActive = accordion.classList.contains( 'active' );
@@ -1252,25 +1542,90 @@ window.WPConsent = {
 
 		// Query all focusable elements within the container
 		const elements = Array.from( container.querySelectorAll( focusableSelectors ) )
-			// Filter out hidden elements
-			                  .filter( el => {
-				                  // Check if element and all its ancestors are visible
-				                  let currentElement = el;
-				                  while ( currentElement && currentElement !== container ) {
-					                  const style = window.getComputedStyle( currentElement );
-					                  if ( style.display === 'none' ||
-					                       style.visibility === 'hidden' ||
-					                       style.opacity === '0' ||
-					                       currentElement.disabled ||
-					                       currentElement.getAttribute( 'aria-hidden' ) === 'true' ) {
-						                  return false;
-					                  }
-					                  currentElement = currentElement.parentElement;
-				                  }
-				                  return true;
-			                  } );
+			// Filter out anything that can't actually be reached.
+			.filter( el => {
+				// Consent toggles are inputs hidden with opacity: 0 on purpose - visually
+				// hidden, still focusable - so the element's own opacity must not rule it
+				// out, otherwise there is no way to set consent from the keyboard at all.
+				// Its ancestors are still checked below, opacity included.
+				if ( el.disabled ||
+				     el.hasAttribute( 'hidden' ) ||
+				     el.getAttribute( 'aria-hidden' ) === 'true' ||
+				     el.closest( '[inert]' ) ||
+				     this.isInCollapsedAccordion( el ) ) {
+					return false;
+				}
+
+				const ownStyle = window.getComputedStyle( el );
+				if ( ownStyle.display === 'none' || ownStyle.visibility === 'hidden' ) {
+					return false;
+				}
+
+				// Check if all the ancestors up to the container are visible
+				let currentElement = el.parentElement;
+				while ( currentElement && currentElement !== container ) {
+					const style = window.getComputedStyle( currentElement );
+					if ( style.display === 'none' ||
+					     style.visibility === 'hidden' ||
+					     style.opacity === '0' ||
+					     currentElement.disabled ||
+					     currentElement.getAttribute( 'aria-hidden' ) === 'true' ) {
+						return false;
+					}
+					currentElement = currentElement.parentElement;
+				}
+				return true;
+			} );
 
 		return elements;
+	},
+
+	// Collapsed panels are hidden with max-height: 0 for the animation, not
+	// display: none, so everything inside a closed category - service toggles,
+	// their checkboxes, the description - would otherwise still take focus.
+	isInCollapsedAccordion: function ( el ) {
+		let content = el.closest( '.wpconsent-preferences-accordion-content' );
+
+		while ( content ) {
+			const item = content.closest( '.wpconsent-preferences-accordion-item' );
+
+			if ( ! item ) {
+				return false;
+			}
+
+			if ( ! item.classList.contains( 'active' ) ) {
+				return true;
+			}
+
+			// Services live inside a category panel, so keep walking outwards.
+			content = item.parentElement ? item.parentElement.closest( '.wpconsent-preferences-accordion-content' ) : null;
+		}
+
+		return false;
+	},
+
+	// Mirror the collapsed state onto the inert attribute so browsers and screen
+	// readers skip closed panels natively, the same way our focus trap does.
+	syncAccordionInertState: function () {
+		const items = this.shadowRoot?.querySelectorAll( '.wpconsent-preferences-accordion-item' );
+
+		if ( ! items ) {
+			return;
+		}
+
+		items.forEach( ( item ) => {
+			const content = item.querySelector( ':scope > .wpconsent-preferences-accordion-content' );
+
+			if ( ! content ) {
+				return;
+			}
+
+			if ( item.classList.contains( 'active' ) ) {
+				content.removeAttribute( 'inert' );
+			} else {
+				content.setAttribute( 'inert', '' );
+			}
+		} );
 	},
 
 	// Check if an element is contained within a container
@@ -1315,14 +1670,19 @@ window.WPConsent = {
 		document.dispatchEvent( event );
 	},
 
-	// Show the floating button if enabled in settings
+	// Show the floating button if enabled in settings.
 	showFloatingButtonIfEnabled: function () {
-		if ( wpconsent.enable_consent_floating ) {
+		if ( !wpconsent.enable_consent_floating ) {
+			return;
+		}
+		// The floating button is part of the shadow root, so it needs the
+		// stylesheet. Load it before revealing to avoid an unstyled flash.
+		this.ensureCSS().then( () => {
 			const floatingButton = this.shadowRoot?.querySelector( '#wpconsent-consent-floating' );
 			if ( floatingButton ) {
 				floatingButton.style.display = 'block';
 			}
-		}
+		} );
 	},
 
 	// Show or hide buttons based on settings
@@ -1368,6 +1728,16 @@ window.WPConsent = {
 
 			// Marketing category.
 			wp_set_consent( 'marketing', preferences.marketing ? 'allow' : 'deny' );
+		}
+
+		// Record per-service consent when manual service toggles are enabled.
+		// Only write services explicitly present in preferences so a partial save never fabricates a deny for an absent (e.g. essential/always-active) service.
+		if ( wpconsent.manual_toggle_services && Array.isArray( wpconsent.wpca_services ) && typeof wp_set_service_consent === 'function' ) {
+			wpconsent.wpca_services.forEach( service => {
+				if ( Object.prototype.hasOwnProperty.call( preferences, service.slug ) ) {
+					wp_set_service_consent( service.slug, preferences[ service.slug ] === true );
+				}
+			} );
 		}
 	}
 };

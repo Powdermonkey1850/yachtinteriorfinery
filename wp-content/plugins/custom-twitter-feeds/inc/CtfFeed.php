@@ -138,6 +138,13 @@ class CtfFeed
 	    //$this->atts = $atts;
         $this->atts = CTF_Settings::filter_atts_for_legacy($atts);
         $this->raw_shortcode_atts = CTF_Settings::filter_atts_for_legacy($atts);
+        // raw_shortcode_atts['feed'] is the feed caches key, and the cron copies that key
+        // into the report the Support page shows. Cast it like feed_id below so a
+        // shortcode or request can only ever name a saved feed (SMASH-2491).
+        if ( ! empty( $this->atts['feed'] ) && 'legacy' !== $this->atts['feed'] ) {
+            $this->atts['feed']               = self::normalize_feed_att( $this->atts['feed'] );
+            $this->raw_shortcode_atts['feed'] = $this->atts['feed'];
+        }
         if( isset($this->atts['feed']) ){
             $atts['feed'] = $this->atts['feed'];
         }
@@ -147,7 +154,12 @@ class CtfFeed
         $this->db_options = get_option( 'ctf_options', array() );
         $this->is_legacy = false;
         if ( ! empty( $atts['feed'] ) && $atts['feed'] !== 'legacy' ) {
-            $this->feed_id = $this->atts['feed'];
+            // The feed id builds the CSS selectors in get_feed_style(), the container
+            // class and a data attribute. The lookup coerces it with %d, so a value like
+            // '1 {} body{display:none}' still resolves to feed 1 while the raw string went
+            // on to close the rule and add a selector. Cast so every consumer sees the
+            // same integer the query used (SMASH-1770).
+            $this->feed_id = absint( $this->atts['feed'] );
             $this->feed_options = CTF_Settings::get_settings_by_feed_id( $atts['feed'], $preview_settings );
             if($this->feed_options == false){
                 $this->feed_options['feederror'] = true;
@@ -188,6 +200,24 @@ class CtfFeed
         $this->feed_options['selfreplies'] = false;
         $this->feed_options['includereplies'] = false;
         $this->feed_options['is_legacy'] = $this->is_legacy;
+    }
+
+    /**
+     * Casts a non-legacy feed att to the integer the settings lookup uses (%d), so the
+     * cache key can only ever be a number.
+     *
+     * Anything that is not a positive ID becomes -1, which names no feed: "-5" or "abc"
+     * still shows "No feed found" as before, instead of loading feed 5 (absint) or
+     * falling through to the legacy feed (0).
+     *
+     * @param mixed $feed
+     *
+     * @return int
+     */
+    public static function normalize_feed_att( $feed ) {
+        $feed_id = is_scalar( $feed ) ? (int) $feed : 0;
+
+        return $feed_id > 0 ? $feed_id : -1;
     }
 
     /**
@@ -1697,10 +1727,11 @@ protected function removeStringFromText( $string, $text) {
         $ctf_data_needed = $this->num_tweets_needed;
         $ctf_feed_type = ! empty ( $feed_options['type'] ) ? esc_attr( $feed_options['type'] ) : 'multiple';
         $ctf_feed_classes = 'ctf ctf-type-' . $ctf_feed_type;
-        $ctf_feed_classes .= ' ' . $feed_options['class'] . ' ctf-styles';
+        $ctf_feed_classes .= ' ' . \ctf_sanitize_css_class_list( $feed_options['class'] ) . ' ctf-styles';
         $ctf_feed_classes .= $feed_options['width_mobile_no_fixed'] ? ' ctf-width-resp' : '';
         if ( $this->check_for_duplicates ) { $ctf_feed_classes .= ' ctf-no-duplicates'; }
         $ctf_feed_classes = apply_filters( 'ctf_feed_classes', $ctf_feed_classes ); //add_filter( 'ctf_feed_classes', function( $ctf_feed_classes ) { return $ctf_feed_classes . ' new-class'; }, 10, 1 );
+        $ctf_feed_classes = esc_attr( $ctf_feed_classes );
         $ctf_feed_html = '';
 
         $flags_att = '';
@@ -1745,7 +1776,7 @@ return $ctf_feed_html;
         $ctf_feed_html .= '</div>'; // closing div for ctf-tweets
 
         if ( $feed_options['showbutton'] ) {
-            $ctf_feed_html .= '<a href="javascript:void(0);" id="ctf-more" class="ctf-more" style="' . $feed_options['buttoncolor'] . $feed_options['buttontextcolor'] . '"><span>' . $feed_options['buttontext'] . '</span></a>';
+            $ctf_feed_html .= '<a href="javascript:void(0);" id="ctf-more" class="ctf-more" style="' . esc_attr( $feed_options['buttoncolor'] . $feed_options['buttontextcolor'] ) . '"><span>' . esc_html( $feed_options['buttontext'] ) . '</span></a>';
         }
 
         if ( $feed_options['creditctf'] ) {
@@ -1809,7 +1840,7 @@ return $ctf_feed_html;
         if ( CTF_GDPR_Integrations::doing_gdpr( $feed_options ) ) {
           $ctf_header_html .= '<span data-avatar="' . esc_url( $tweet_set[0]['user']['profile_image_url_https'] ) . '" data-alt="' . $tweet_set[0]['user']['name'] . '" style="display: none;">Avatar</span>';
       } else {
-          $ctf_header_html .= '<img src="' . $tweet_set[0]['user']['profile_image_url_https'] . '" alt="' . $tweet_set[0]['user']['name'] . '" width="48" height="48">';
+          $ctf_header_html .= '<img src="' . esc_url( $tweet_set[0]['user']['profile_image_url_https'] ) . '" alt="' . esc_attr( $tweet_set[0]['user']['name'] ) . '" width="48" height="48">';
       }
       $ctf_header_html .= '</div>';
       $ctf_header_html .= '</a>';
@@ -2331,7 +2362,7 @@ return $ctf_feed_html;
 
         }
 
-        $feed_style .= '<style type="text/css" data-ctf-style="' . $feed_html_id . '">';
+        $feed_style .= '<style type="text/css" data-ctf-style="' . esc_attr( $feed_html_id ) . '">';
         $feed_style .= CTF_Parse::parse_css_style( $css_array );
         $feed_style .= '</style>';
         echo $feed_style;

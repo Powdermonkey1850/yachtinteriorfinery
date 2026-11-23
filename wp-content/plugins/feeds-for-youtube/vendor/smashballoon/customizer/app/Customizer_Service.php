@@ -17,5 +17,6 @@ class Customizer_Service extends ServiceProvider
     {
         include_once __DIR__ . '/../bootstrap.php';
         $this->builder_customizer->register();
+        add_action('rest_api_init', array(\Smashballoon\Customizer\EmbedTargets::class, 'register_route'));
     }
 }

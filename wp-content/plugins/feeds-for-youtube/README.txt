@@ -5,8 +5,8 @@ Support Website: http://smashballoon/youtube-feed/
 Tags: YouTube, YouTube feed, YouTube widget, YouTube channel, YouTube gallery
 Requires at least: 4.1
 Requires PHP: 7.4
-Tested up to: 6.9
-Stable tag: 2.6.6
+Tested up to: 7.1
+Stable tag: 2.12.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -167,6 +167,65 @@ By default, the plugin retrieves new videos for your YouTube gallery once every 
 6. Embed your YouTube feed using a shortcode you can copy and paste after you are done creating
 
 == Changelog ==
+
+= 2.12.0 =
+* New: The feed builder now uses a new Embed Feed window. Choosing a page under "Add to Page" opens the block editor with your YouTube Feed block already added.
+* Tweak: If you had turned on usage tracking before, your choice now carries over to the Data Sharing setting. If you turned Data Sharing off or skipped it, it stays off.
+* Fix: The feed builder preview now shows your videos after you change a feed setting, including when "Load Initial Posts with AJAX" is turned on.
+* Fix: Saving a feed with no changes no longer shows "Error saving Feed".
+* Fix: Admin pages no longer show PHP warnings when the license server sends an unexpected response.
+* Fix: Links in the plugin's admin menu no longer open a "Sorry, you are not allowed to access this page" screen.
+* Fix: The "Feed saved" message no longer disappears right after you save a feed.
+
+= 2.11.1 =
+* Fix: The data-sharing popup no longer locks you out of your WordPress admin when your choice can't be saved. You can always close it and keep working.
+
+= 2.11.0 =
+* New: Ask AI agents to check and manage your YouTube feeds and settings through the WordPress Abilities API (WordPress 6.9 or later). Agents can only make changes after you turn on the new MCP Write Access setting in Settings > General, and deleting a feed or connecting an account always needs your confirmation in the browser. [See what YouTube Feed Pro adds](https://smashballoon.com/youtube-feed/youtube-lite-upgrade/?utm_source=changelog&utm_medium=aiagents&utm_campaign=youtube-free-readme)
+* Fix: If a security scanner on your host quarantines one of the plugin's files, including the Elementor widget files, the plugin now turns itself off and shows an admin notice listing the missing files instead of breaking your site.
+* Fix: Feeds no longer fail with an error when YouTube returns a consent or CAPTCHA page instead of feed data. The plugin records a connection error and tries again later.
+* Fix: The "No connected account" message, which is meant for site admins only, is no longer shown to visitors.
+
+= 2.10.0 =
+* New: The setup wizard now asks whether you'd like to share usage data and receive notifications, and a new Data Sharing settings tab lets you change your choice at any time. Usage data is only sent when you have given consent.
+* New: Redesigned the About Us page.
+* Fix: Dismissed in-plugin notifications now stay dismissed, and notifications respect your Data Sharing and notification settings.
+* Fix: The deactivation feedback form now works correctly when other Smash Balloon plugins are active.
+* Fix: Plugin security hardening.
+
+= 2.9.0 =
+* Tweak: The upgrade link in the plugin's admin menu now reads "Upgrade to Pro" and opens the YouTube Feed upgrade page.
+* Fix: Improved the colour contrast of the "Upgrade to Pro" button in the admin menu so it meets accessibility requirements.
+* Fix: Colour settings left empty in the feed customizer no longer appear as blank boxes; the swatch again shows its empty-state fill.
+
+= 2.8.3 =
+* Fix: Plugin security hardening.
+
+= 2.8.2 =
+* New: Official support for WordPress 7.1.
+* Fix: On WordPress 7.1, the block editor no longer logs a JavaScript error.
+
+= 2.8.1 =
+* Fix: Plugin hardening.
+
+= 2.8.0 =
+* Tweak: Improved accessibility of the YouTube feed to meet WCAG 2.x requirements, including screen reader landmarks and list semantics, headings for video titles, a visible keyboard focus indicator on the feed, and correct focus handling on Load More.
+* Tweak: The plugin now appears as "Smash Balloon YouTube Feed" on the WordPress Plugins screen so all Smash Balloon plugins group together.
+* Fix: Keyboard focus is now visible on all plugin admin screens, including Settings, About, and Support.
+* Fix: Screen readers now announce a video's title instead of its internal post ID when reading feed video links.
+* Fix: Resolved a "translation loading was triggered too early" notice caused by the custom cron schedule labels.
+* Fix: Plugin security hardening.
+
+= 2.7.0 =
+* New: Added a modern Gutenberg block for the YouTube feed. Existing feeds using the legacy block continue to render without reconfiguration.
+* New: WPConsent integration for GDPR cookie consent compliance, including a GDPR step in the onboarding wizard.
+* New: Added a Help widget for in-app access to documentation and support.
+* Tweak: Compatibility with WP 7.
+* Tweak: Corrected typos and grammar in plugin UI strings.
+* Fix: Feed blocks now render a live preview correctly inside the WP 7.0+ iframed block editor.
+* Fix: Setup wizard tooltips now display correctly in the iframed block editor.
+* Fix: Legacy Elementor widgets are hidden from the element search, and the widget title is now translatable.
+* Fix: Block preview now uses a limited query to prevent unintended data exposure.
 
 = 2.6.6 =
 * Fix: Additional plugin hardening.

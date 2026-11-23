@@ -8,6 +8,7 @@
 
 namespace TwitterFeed\Admin;
 if ( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
+use TwitterFeed\Abilities\CTF_Pro_Upsell;
 use TwitterFeed\Admin\CTF_Response;
 use TwitterFeed\Admin\CTF_Cache_Handler;
 use TwitterFeed\Builder\CTF_Feed_Saver;
@@ -16,6 +17,7 @@ use TwitterFeed\Admin\CTF_HTTP_Request;
 use TwitterFeed\CTF_GDPR_Integrations;
 use TwitterFeed\Pro\CTF_Resizer;
 use TwitterFeed\SB_Twitter_Cron_Updater;
+use TwitterFeed\UsageTracking\Config as SmashTrackingConfig;
 
 class CTF_Global_Settings {
 	//use CTF_Settings;
@@ -71,7 +73,7 @@ class CTF_Global_Settings {
 	 *
 	 * @since 2.0
 	 *
-	 * @return CTF_Response
+	 * @return void Sends a JSON response and exits.
 	 */
 	public function ctf_save_settings() {
 		check_ajax_referer( 'ctf_admin_nonce', 'nonce' );
@@ -120,6 +122,23 @@ class CTF_Global_Settings {
 		$translation = (array) $model['translation'];
 		$advanced = (array) $model['advanced'];
 
+		/**
+		 * Debug Tab — consent toggles.
+		 *
+		 * Routed through the shared Consent package so cron reconciliation and the
+		 * 3-state notification source switch stay consistent. $dismiss_modal is left
+		 * null so a Settings save does not affect the re-prompt-modal state. The
+		 * flags live in top-level wp_options (sbc_data_sharing_consent /
+		 * sbc_in_plugin_notifications), NOT inside ctf_options.
+		 */
+		if ( isset( $model['debug'] ) && class_exists( '\Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+			$debug = (array) $model['debug'];
+			\Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::update(
+				! empty( $debug['sbc_data_sharing_consent'] ),
+				! empty( $debug['sbc_in_plugin_notifications'] )
+			);
+		}
+
 		// Get the values and sanitize
 		$ctf_settings = get_option( 'ctf_options', array() );
 		/**
@@ -165,22 +184,34 @@ class CTF_Global_Settings {
 		$ctf_settings['cron_cache_clear'] 		= sanitize_text_field($advanced['cron_cache_clear']);
 		$ctf_settings['sslonly'] 				= (bool)$advanced['sslonly'];
 		$ctf_settings['curlcards'] 				= (bool)$advanced['curlcards'];
+		// AI write access (Abilities API, AgDR-0503) — fails CLOSED on a stale/missing
+		// key: a missing key means off, not "keep the old value". The settings app
+		// always posts the full shared $model (every tab's fields travel together in
+		// one save), so this never races an unrelated tab's partial save.
+		$ctf_settings['ctf_ai_write_enabled']  = self::reconcile_ai_write_toggle( $advanced, ! empty( $ctf_settings['ctf_ai_write_enabled'] ) );
 
 
-		$usage_tracking = get_option( 'ctf_usage_tracking', array( 'last_send' => 0, 'enabled' => ctf_is_pro_version() ) );
-		if ( isset( $advanced['email_notification_addresses'] ) ) {
-			$usage_tracking['enabled'] = false;
-			if ( isset( $advanced['usage_tracking'] ) ) {
-				if ( ! is_array( $usage_tracking ) ) {
-					$usage_tracking = array(
-						'enabled' => $advanced['usage_tracking'],
-						'last_send' => 0,
-					);
-				} else {
-					$usage_tracking['enabled'] = $advanced['usage_tracking'];
-				}
+		if ( isset( $advanced['usage_tracking'] ) ) {
+			$tracking_enabled = (bool) $advanced['usage_tracking'];
+			$usage_tracking   = get_option(
+				'ctf_usage_tracking',
+				array(
+					'enabled'   => SmashTrackingConfig::DEFAULT_ENABLED,
+					'last_send' => 0,
+				)
+			);
+			$last_send        = is_array( $usage_tracking ) && isset( $usage_tracking['last_send'] ) ? $usage_tracking['last_send'] : 0;
+			update_option(
+				'ctf_usage_tracking',
+				array(
+					'enabled'   => $tracking_enabled,
+					'last_send' => $last_send,
+				),
+				false
+			);
+			if ( ! $tracking_enabled ) {
+				wp_clear_scheduled_hook( SmashTrackingConfig::CRON_HOOK );
 			}
-			update_option( 'ctf_usage_tracking', $usage_tracking, false );
 		}
 
 		// Update the ctf_style_settings option that contains data for translation and advanced tabs
@@ -193,9 +224,26 @@ class CTF_Global_Settings {
 		$cache_handler = new CTF_Cache_Handler();
 		$cache_handler->clear_persistent_cache();
 
-		new CTF_Response( true, array(
-			'cronNextCheck' => $this->get_cron_next_check()
-		) );
+		new CTF_Response( true, self::save_success_data( $ctf_settings, $this->get_cron_next_check() ) );
+	}
+
+	/**
+	 * Data sent back after a successful Settings save.
+	 *
+	 * `aiWriteEnabled` is the toggle as STORED, which can differ from what the
+	 * page posted when a stale ON was refused. The page syncs both the toggle
+	 * and its loaded marker to it, so the next save compares against what is
+	 * really stored (an on, off, on sequence in one tab still works).
+	 *
+	 * @param array  $ctf_settings    Saved ctf_options.
+	 * @param string $cron_next_check Next cron check label.
+	 * @return array
+	 */
+	public static function save_success_data( array $ctf_settings, $cron_next_check ) {
+		return array(
+			'cronNextCheck'  => $cron_next_check,
+			'aiWriteEnabled' => ! empty( $ctf_settings['ctf_ai_write_enabled'] ),
+		);
 	}
 
 	/**
@@ -828,10 +876,32 @@ class CTF_Global_Settings {
 
 		// Extract only license keys and build array for extensions license keys
 
+		// Settings/Debug consent links route through the shared Consent package
+		// (sb-common owns the canonical URLs + per-surface UTM tags). Empty when
+		// the package is absent rather than duplicating the URLs here.
+		$ctf_consent_permissions_url = '';
+		$ctf_consent_terms_url       = '';
+		$ctf_consent_privacy_url     = '';
+		if ( class_exists( '\Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+			$ctf_consent_permissions_url = \Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'permissions', 'twitter' );
+			$ctf_consent_terms_url       = \Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'terms', 'twitter' );
+			$ctf_consent_privacy_url     = \Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'privacy', 'twitter' );
+		}
+
+		$wpvibe             = $this->get_wpvibe_status();
+		$wpvibe_org_url     = 'https://wordpress.org/plugins/vibe-ai/';
+		/* translators: %s: URL to the WPVibe plugin on WordPress.org */
+		$wpvibe_description = sprintf( __( 'Manage Twitter Feed from your favorite AI agent.<br>Works through <a href="%s" target="_blank" rel="noopener">WPVibe</a>, a free plugin you install once.', 'custom-twitter-feeds' ), esc_url( $wpvibe_org_url ) ); // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+
 		$ctf_settings = array(
 			'admin_url' 		=> admin_url(),
 			'ajax_handler'		=> admin_url( 'admin-ajax.php' ),
 			'nonce'             => wp_create_nonce( 'ctf_admin_nonce' ),
+			// The install/activate addon AJAX handlers (inc/Admin/addon-functions.php)
+			// check the 'ctf-admin' action, which does NOT match this settings app's
+			// own 'ctf_admin_nonce' action above. A separate nonce, checked by name,
+			// avoids a 403 on the WPVibe install/activate button (SMASH-1994 finding 5).
+			'addonNonce'        => wp_create_nonce( 'ctf-admin' ),
 			'supportPageUrl'    => admin_url( 'admin.php?page=ctf-support' ),
 			'builderUrl'		=> admin_url( 'admin.php?page=ctf-feed-builder' ),
 			'links'				=> $this->get_links_with_utm(), 
@@ -881,6 +951,45 @@ class CTF_Global_Settings {
 					'deactivate' => __( 'Deactivate', 'custom-twitter-feeds' ),
 					'activate' => __( 'Activate', 'custom-twitter-feeds' ),
 					'installPro' => __( 'Install Pro', 'custom-twitter-feeds' ),
+				),
+				'aiAgents' => array(
+					'title' => __( 'AI Agents', 'custom-twitter-feeds' ),
+					'appsLabel' => __( 'Works with ChatGPT, Cursor and Claude', 'custom-twitter-feeds' ),
+					// "Do more with AI on Pro" strip under the MCP Write Access box (AgDR-9006).
+					// Free edition only: an empty array in Pro, which the Vue v-if hides.
+					'proUpsell' => $this->get_ai_pro_upsell(),
+					'status' => $wpvibe['status'],
+					'basename' => $wpvibe['basename'],
+					'installDownloadUrl' => 'https://downloads.wordpress.org/plugin/vibe-ai.zip',
+					'adminUrl' => admin_url( 'admin.php?page=vibe-ai' ),
+					'states' => array(
+						'not_installed' => array(
+							'heading' => __( 'Use Twitter Feed with Claude, ChatGPT and more.', 'custom-twitter-feeds' ),
+							'description' => $wpvibe_description,
+							'button' => __( 'Install WPVibe for free', 'custom-twitter-feeds' ),
+						),
+						'inactive' => array(
+							'heading' => __( 'Use Twitter Feed with Claude, ChatGPT and more.', 'custom-twitter-feeds' ),
+							'description' => $wpvibe_description,
+							'button' => __( 'Activate WPVibe', 'custom-twitter-feeds' ),
+						),
+						'active' => array(
+							'heading' => __( 'WPVibe is connected to Twitter Feed.', 'custom-twitter-feeds' ),
+							'description' => __( 'Manage Twitter Feed from your favorite AI agent.<br>Connect Claude, ChatGPT, Cursor or any MCP client in WPVibe.', 'custom-twitter-feeds' ), // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+							'button' => __( 'Open WPVibe', 'custom-twitter-feeds' ),
+						),
+						'installFailed' => array(
+							'heading' => __( 'Use Twitter Feed with Claude, ChatGPT and more.', 'custom-twitter-feeds' ),
+							'description' => $wpvibe_description,
+							'button' => __( 'Try again', 'custom-twitter-feeds' ),
+							/* translators: %s: URL to the Plugins screen */
+							'error' => sprintf( __( 'Couldn\'t install WPVibe. <a href="%s">Install it from the Plugins screen</a> instead.', 'custom-twitter-feeds' ), esc_url( admin_url( 'plugins.php' ) ) ),
+						),
+					),
+				),
+				'mcpWrite' => array(
+					'title' => __( 'MCP Write Access', 'custom-twitter-feeds' ),
+					'helpText' => __( 'This will allow your AI agent to make changes to Twitter Feed.', 'custom-twitter-feeds' ),
 				),
 				'manageAccount'	=> array(
 					'title'	=> __( 'Twitter Integration', 'custom-twitter-feeds' ),
@@ -963,6 +1072,7 @@ class CTF_Global_Settings {
 				),
 				'gdprBox' => array(
 					'title'	=> __( 'GDPR', 'custom-twitter-feeds' ),
+					'selectLabel'	=> __( 'GDPR method', 'custom-twitter-feeds' ),
 					'automatic'	=> __( 'Automatic', 'custom-twitter-feeds' ),
 					'yes'	=> __( 'Yes', 'custom-twitter-feeds' ),
 					'no'	=> __( 'No', 'custom-twitter-feeds' ),
@@ -979,7 +1089,7 @@ class CTF_Global_Settings {
 						'headline' => __( 'Features that would be disabled or limited include: ', 'custom-twitter-feeds'),
 						'features' => array(
 							__( 'Only local images (not from Twitter\'s CDN) will be displayed in the feed.', 'custom-twitter-feeds'),
-							__( 'Users will leave your site in order to reply, shre, or like a tweet in your feed.', 'custom-twitter-feeds'),
+							__( 'Users will leave your site in order to reply, share, or like a tweet in your feed.', 'custom-twitter-feeds'),
 						)
 					)
 				),
@@ -1061,6 +1171,7 @@ class CTF_Global_Settings {
 				),
 				'requestMethodBox' => array(
 					'title' => __( 'Request Method', 'custom-twitter-feeds' ),
+					'selectLabel' => __( 'Request method', 'custom-twitter-feeds' ),
 					'helpText' => __( 'Explicitly set the request method. You would only want to change this if you are unable to connect to the Twitter API.', 'custom-twitter-feeds' ),
 					'options' => array(
 						'auto' => __( 'Auto', 'custom-twitter-feeds' ),
@@ -1081,6 +1192,10 @@ class CTF_Global_Settings {
 					'title' => __( 'Use cURL for Retrieval', 'custom-twitter-feeds' ),
 					'helpText' => __( 'This will fix mixed-content warnings when Twitter card links are non-https. After enabling, clear your Twitter cards using the button above.', 'custom-twitter-feeds' ),
 				),
+				'usageBox' => array(
+					'title' => __( 'Usage Tracking', 'custom-twitter-feeds' ),
+					'helpText' => sprintf( __( 'Send a weekly report to Smash Balloon to help improve the product. No sensitive data is collected. You can disable this at any time. %s', 'custom-twitter-feeds' ), '<a href="https://smashballoon.com/custom-twitter-feeds/usage-tracking/" target="_blank">' . __( 'Learn More', 'custom-twitter-feeds' ) . '</a>' ),
+				),
 				'twittercard' => array(
 					'title' => __( 'Twitter Cards', 'custom-twitter-feeds' ),
 					'description' => __( 'Twitter Cards are rich visual previews of the link in your Tweet.', 'custom-twitter-feeds' ),
@@ -1098,6 +1213,21 @@ class CTF_Global_Settings {
 					'helpText' => __( 'Warning: Clicking this button will permanently delete all Twitter data, including all connected accounts, cached posts, and stored images.', 'custom-twitter-feeds' ),
 					'clear' => __( 'Delete all Platform Data', 'custom-twitter-feeds' ),
 				),
+			),
+			'debugTab'             => array(
+				'dataSharingTitle'    => __( 'Data sharing', 'custom-twitter-feeds' ),
+				'dataSharingDesc'     => __( 'We share limited, non-sensitive usage data to keep your plugins updated and improve our products. We never collect your feed content or your visitors’ personal information.', 'custom-twitter-feeds' ),
+				'permissionsLinkText' => __( 'What permissions are being granted?', 'custom-twitter-feeds' ),
+				'termsLinkText'       => __( 'Terms & Conditions', 'custom-twitter-feeds' ),
+				'privacyLinkText'     => __( 'Privacy', 'custom-twitter-feeds' ),
+				'permissionsUrl'      => $ctf_consent_permissions_url,
+				'termsUrl'            => $ctf_consent_terms_url,
+				'privacyUrl'          => $ctf_consent_privacy_url,
+				'notificationsTitle'  => __( 'In-Plugin Notifications', 'custom-twitter-feeds' ),
+				'notificationsDesc'   => __( 'We send you in-plugin notifications about updates, fixes, and new features.', 'custom-twitter-feeds' ),
+				// When any Smash Balloon Pro plugin is active, consent is forced on
+				// and governed centrally — the toggles are hidden on this tab.
+				'lockedByPro'         => class_exists( '\Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) && \Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::is_locked_by_pro(),
 			),
 			'dialogBoxPopupScreen'  => array(
 				'deleteSource' => array(
@@ -1193,6 +1323,28 @@ class CTF_Global_Settings {
 	}
 
 	/**
+	 * Data for the "Do more with AI on Pro" strip in the AI Agents card.
+	 *
+	 * Free edition only; returns an empty array in Pro. Features are picked by popup
+	 * key (CTF_Pro_Upsell::BANNER_FEATURES) from the builder's own Pro-feature copy,
+	 * so the strip carries no text of its own beyond the title and button label.
+	 *
+	 * @return array{title: string, features: string[], button: string, newTab: string, url: string}|array{}
+	 */
+	private function get_ai_pro_upsell() {
+		if ( ! CTF_Pro_Upsell::is_free() ) {
+			return array();
+		}
+		return array(
+			'title'    => __( 'Do more with AI on Pro', 'custom-twitter-feeds' ),
+			'features' => CTF_Pro_Upsell::banner_feature_names(),
+			'button'   => __( 'Upgrade to Pro', 'custom-twitter-feeds' ),
+			'newTab'   => __( '(opens in a new tab)', 'custom-twitter-feeds' ),
+			'url'      => CTF_Pro_Upsell::upgrade_url( 'ai-agents-card', 'settings' ),
+		);
+	}
+
+	/**
 	 * Get Links with UTM
 	 *
 	 * @return array
@@ -1254,7 +1406,6 @@ class CTF_Global_Settings {
 		$ctf_cache_cron_time     	= $ctf_settings['ctf_cache_cron_time'];
 		$ctf_cache_cron_am_pm   	= $ctf_settings['ctf_cache_cron_am_pm'];
 
-		$usage_tracking = get_option( 'ctf_usage_tracking', array( 'last_send' => 0, 'enabled' => \ctf_is_pro_version() ) );
 		$ctf_ajax = $ctf_settings['ajax_theme'];
 		$active_gdpr_plugin = CTF_GDPR_Integrations::gdpr_plugins_active();
 		$ctf_preserve_settings = $ctf_settings['preserve_settings'];
@@ -1267,6 +1418,19 @@ class CTF_Global_Settings {
 		} else {
 			$ctf_site_access_token = isset( $ctf_settings[ CTF_SITE_ACCESS_TOKEN_KEY ] ) ? $ctf_settings[ CTF_SITE_ACCESS_TOKEN_KEY ] : '';
 		}
+
+		// Seed Debug-tab toggles from the central consent flags. These flags live
+		// in top-level options (sbc_data_sharing_consent / sbc_in_plugin_notifications),
+		// not inside ctf_options — see ConsentManager::update().
+		$ctf_consent_flags = wp_parse_args(
+			class_exists( '\Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' )
+				? \Smashballoon\TwitterFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::flags()
+				: array(),
+			array(
+				'dsc'   => false,
+				'notif' => false,
+			)
+		);
 
 		$custom_css = '';
 		$custom_js = '';
@@ -1304,7 +1468,7 @@ class CTF_Global_Settings {
 			),
 			'advanced' => array(
 				'rebranding' => $ctf_settings['rebranding'],
-				'usage_tracking' => $usage_tracking['enabled'],
+				'usage_tracking' => SmashTrackingConfig::is_enabled(),
 				'resizing' => $ctf_settings['resizing'],
 				'persistentcache' => $ctf_settings['persistentcache'],
 				'ajax_theme' => $ctf_settings['ajax_theme'],
@@ -1317,9 +1481,78 @@ class CTF_Global_Settings {
 				'request_method' => $ctf_settings['request_method'],
 				'cron_cache_clear' => $ctf_settings['cron_cache_clear'],
 				'sslonly' => $ctf_settings['sslonly'],
-				'curlcards' => $ctf_settings['curlcards']
-			)
+				'curlcards' => $ctf_settings['curlcards'],
+				'ai_write_enabled' => isset( $ctf_settings['ctf_ai_write_enabled'] ) ? (bool) $ctf_settings['ctf_ai_write_enabled'] : false,
+				// What this page load saw for the toggle; posted back so a stale tab cannot re-enable writes.
+				'ai_write_enabled_loaded' => isset( $ctf_settings['ctf_ai_write_enabled'] ) ? (bool) $ctf_settings['ctf_ai_write_enabled'] : false,
+			),
+			'debug'       => array(
+				'sbc_data_sharing_consent'    => $ctf_consent_flags['dsc'],
+				'sbc_in_plugin_notifications' => $ctf_consent_flags['notif'],
+			),
 		);
+	}
+
+	/**
+	 * Determine WPVibe's install/activation status.
+	 *
+	 * Scans the installed-plugins list for a plugin whose folder is
+	 * `vibe-ai/`, rather than assuming a specific main-file name -- a
+	 * plugin's wp.org slug and its main file are not guaranteed to match.
+	 *
+	 * @return array{status: string, basename: string|null} status is one
+	 *               of 'not_installed' | 'inactive' | 'active'.
+	 * @since 2.10.1
+	 */
+	private function get_wpvibe_status() {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$wpvibe_basename = null;
+		foreach ( array_keys( get_plugins() ) as $plugin_file ) {
+			if ( strtok( $plugin_file, '/' ) === 'vibe-ai' ) {
+				$wpvibe_basename = $plugin_file;
+				break;
+			}
+		}
+
+		if ( null === $wpvibe_basename ) {
+			return array(
+				'status'   => 'not_installed',
+				'basename' => null,
+			);
+		}
+
+		return array(
+			'status'   => is_plugin_active( $wpvibe_basename ) ? 'active' : 'inactive',
+			'basename' => $wpvibe_basename,
+		);
+	}
+
+	/**
+	 * Resolve the MCP Write Access toggle from a posted Advanced model.
+	 *
+	 * The Settings app posts the whole model it loaded, so a tab opened while
+	 * writes were on carries `true` and would, on any later unrelated save,
+	 * switch writes back on over a disable made elsewhere. The page therefore
+	 * posts the value it loaded (`ai_write_enabled_loaded`): a switch to ON is
+	 * accepted only when that page loaded it OFF. Turning writes OFF is always
+	 * honoured. A post with no marker (an older page) can only turn writes off.
+	 *
+	 * @param array $advanced Posted Advanced-tab model.
+	 * @param bool  $stored   The currently stored toggle.
+	 * @return bool
+	 */
+	public static function reconcile_ai_write_toggle( array $advanced, $stored ) {
+		$posted = isset( $advanced['ai_write_enabled'] ) ? (bool) $advanced['ai_write_enabled'] : false;
+		$loaded = array_key_exists( 'ai_write_enabled_loaded', $advanced )
+			? filter_var( $advanced['ai_write_enabled_loaded'], FILTER_VALIDATE_BOOLEAN )
+			: null;
+		if ( $posted && $loaded !== false ) {
+			return (bool) $stored;
+		}
+		return $posted;
 	}
 
 	/**
@@ -1358,6 +1591,8 @@ class CTF_Global_Settings {
 			'cron_cache_clear' => 'unset',
 			'sslonly' => false,
 			'curlcards' => true,
+			// AI write access (Abilities API, AgDR-0503) — off by default (fails CLOSED).
+			'ctf_ai_write_enabled' => false,
 			'retweetedtext' => 'Retweeted',
 			'buttontext' => 'Load More',
 			'inreplytotext' => 'In Reply To',

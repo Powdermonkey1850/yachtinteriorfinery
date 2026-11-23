@@ -3,12 +3,13 @@ Author: WP connect
 Author URI: https://wpconnect.co/
 Contributors: wpconnectco, bryanparmentelot, pskli, staurand
 Tags: forms, sendinblue, brevo, gravity forms, marketing
-Requires at least: 5.5
-Tested up to: 6.9
-Tested with Gravity Forms up to: 2.9.23
-Requires PHP: 7.0
-Stable tag: 2.6.0
+Requires at least: 6.0
+Tested up to: 7.1
+Tested with Gravity Forms up to: 2.10
+Requires PHP: 7.4
+Stable tag: 2.6.2
 License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Connect Gravity Forms to Brevo (Sendinblue). Sync form fields with Brevo attributes and automatically generate contacts in specified lists.
 
@@ -24,7 +25,7 @@ Connect the awesome WordPress Gravity Forms plugin to the relationship marketing
 
 = Customize your feeds swiftly =
 * Map Gravity Forms fields with your Brevo attributes
-* Select the destination list(s) for each of your feeds
+* Select the destination list(s) for each of your feeds ([Pro version](https://wpconnect.co/gravity-forms-sendinblue-add-on/?utm_campaign=free-version&utm_source=wp-org&utm_content=link6))
 
 = Enable double opt-in email =  
 * Activate the double opt-in option
@@ -85,6 +86,20 @@ You don't have to do anything, the synchronization is automatic. Make sure you h
 If you need some assistance, open a ticket on the [Support](https://wordpress.org/support/plugin/addon-gravityforms-sendinblue-free/).
 
 
+== External services ==
+
+This plugin connects to the Brevo API (formerly Sendinblue) to synchronize Gravity Forms submissions with your Brevo account.
+
+**Service:** Brevo (https://www.brevo.com/)
+**API endpoint:** https://api.brevo.com/v3/
+
+**Data sent and when:**
+- When a visitor submits a Gravity Forms form with an active Brevo feed: the contact's email address, the mapped contact attributes (e.g. consent/opt-in fields) and the selected list ID are sent to Brevo to create or update a contact.
+- When an administrator opens the plugin or feed settings pages: the plugin fetches your Brevo account details, contact lists and contact attributes from the Brevo API to populate the configuration screens. No visitor data is sent during this operation.
+
+**Brevo Terms of Use:** https://www.brevo.com/legal/termsofuse/
+**Brevo Privacy Policy:** https://www.brevo.com/legal/privacypolicy/
+
 == Screenshots ==
 
 1. Plugin Settings page
@@ -95,6 +110,23 @@ If you need some assistance, open a ticket on the [Support](https://wordpress.or
 
 [Full changelog](https://wpconnect.co/changelog/changelog-add-on-brevo-for-gravity-forms-free-version/)
 
+= 2.6.2 =
+*Release Date: 24th August 2026*
+
+* Compatibility with WordPress 7.1
+* Improvement: Added GPL license declaration and documented the Brevo external service (wp.org compliance)
+* Improvement: API error messages now include the exact error details returned by Brevo
+* Fix: Pro-only Brevo attributes could still be selected in the Fields mapping; they are now properly disabled and stripped when the feed is saved
+* Fix: Brevo contact lists could not be loaded (API error 404) due to a trailing slash in the lists endpoint
+* Fix: Feed settings now display Brevo API errors or an explanatory message when lists or attributes cannot be loaded, instead of silently hiding the section
+
+= 2.6.1 =
+*Release Date: 21st July 2026*
+
+* Compatibility with WordPress 7.0
+* Improvement: Added support and documentation links to the plugin settings page
+* Improvement: Raised minimum PHP requirement to 7.4 and tested with Gravity Forms up to 2.10
+
 == Support ==
 
 If you need some assistance, open a ticket on the [Support](https://wordpress.org/support/plugin/addon-gravityforms-sendinblue-free/).
@@ -104,4 +136,4 @@ If you need some assistance, open a ticket on the [Support](https://wordpress.or
 If you generate a list while creating an unsaved feed, an error may pop up during the process. Save your feed before reloading the page and your list will appear. To avoid the inconvenience, create your list before your feed.
 Make sure all your Brevo attributes are generated before liking them with Gravity Forms form fields. If you can’t see them, wait a minute: your lists and attributes are cached for optimal performance.
 
-Ticket via the [WordPress support forum](https://wordpress.org/support/plugin/air-wp-sync/)
+Ticket via the [WordPress support forum](https://wordpress.org/support/plugin/addon-gravityforms-sendinblue-free/)

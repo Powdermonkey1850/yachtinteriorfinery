@@ -29,10 +29,28 @@ class FeedDisplay {
 		$header_data = is_array($header_data) ? $header_data : [];
 		$posts = $this->feed->get_post_set_page();
 		$feed_id = $this->feed->get_feed_id();
+		// SMASH-1583: enrich the header with real per-source counts pulled from
+		// the FULL cached review set (get_posts(), not the paginated $posts
+		// above) so providers that report no count — Facebook recommendations
+		// being the canonical case — still contribute to the combined total and
+		// the weighted average. No-op for sources that already report a count.
+		// Gate on non-empty header_data so get_posts() isn't evaluated for
+		// single-manual-review feeds where backfill can never have any effect.
+		if (! empty($header_data)) {
+			$header_data = $this->parser->backfill_review_counts($header_data, $this->feed->get_posts());
+		}
 
 		$shortcode_atts = '{}';
 		$settings = $this->feed->get_settings();
 		$parser = $this->parser;
+
+		// SMASH-2410: a source failed and nothing is stored — visitors get no empty shell (a "no reviews" block during
+		// an outage is a false public claim). Admins see the error box for what they can fix (their key, config, the
+		// site failing to reach the relay); a hidden provider failure leaves it empty (SBR-556). An honestly empty feed
+		// renders as before.
+		if ($this->shows_failed_empty_state()) {
+			return $this->failed_empty_html($posts, $settings, $feed_id);
+		}
 
 		wp_enqueue_script('sbr_scripts');
 
@@ -44,6 +62,39 @@ class FeedDisplay {
 		$html = ob_get_contents();
 		ob_get_clean();
 		return $html;
+	}
+
+	/**
+	 * No posts at all, and the reason is a failed source rather than filters or a source with no reviews.
+	 *
+	 * @return bool
+	 */
+	public function shows_failed_empty_state()
+	{
+		$all_posts = $this->feed->get_posts();
+
+		return empty($all_posts) && $this->feed->has_failed_source();
+	}
+
+	/**
+	 * What a failed, empty feed renders: the error box for admins when there is an error they can fix to show
+	 * (error_html() is admin-gated), nothing for visitors, and the three feed hooks so integrations keep firing.
+	 *
+	 * @param array  $posts
+	 * @param array  $settings
+	 * @param string $feed_id
+	 * @return string
+	 */
+	protected function failed_empty_html($posts, $settings, $feed_id)
+	{
+		ob_start();
+		do_action('sbr_before_feed', $posts, $settings);
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- error_html() escapes its own output
+		echo $this->error_html();
+		do_action('sbr_before_feed_end', $this, $feed_id);
+		do_action('sbr_after_feed', $posts, $settings);
+
+		return (string) ob_get_clean();
 	}
 
 	public function items_only($page = 1)
@@ -100,6 +151,16 @@ class FeedDisplay {
 		if ($element === 'header') {
 			if (empty($item)) {
 				return ! empty($settings['showHeader']);
+			}
+			// SMASH-2084: the header rating is Pro-only, and this class is the FREE
+			// display — Pro\FeedDisplay overrides should_show() outright, so this
+			// branch never runs there. `averagereview` is in the DEFAULT headerContent
+			// for every template (sbr-functions.php:104), so on Free the setting read
+			// as on while templates/frontend/lite/header.php had no markup for it.
+			// Answered here rather than by editing the defaults, so a feed saved before
+			// this release keeps its stored settings and renders exactly as it did.
+			if ($item === 'averagereview') {
+				return false;
 			}
 			if (in_array($item, (array) $settings['headerContent'], true)) {
 				return true;
@@ -197,17 +258,18 @@ class FeedDisplay {
 
 	public function star_rating_display($post, $settings)
 	{
-		$star_rating = intval($this->parser->get_rating($post));
-		if ( $star_rating <= 0 ) {
-			$aria_label = __( 'Not rated', 'reviews-feed' );
+		// SMASH-2467: no rating reads "Not rated" with five grey stars, as the editor preview shows it.
+		$star_rating = $this->parser->has_author_rating($post) ? intval($this->parser->get_rating($post)) : 0;
+		if ($star_rating <= 0) {
+			$aria_label = __('Not rated', 'reviews-feed');
 		} else {
 			$aria_label = sprintf(
 				/* translators: %d: numeric rating out of 5 */
-				__( '%d out of 5 stars', 'reviews-feed' ),
+				__('%d out of 5 stars', 'reviews-feed'),
 				$star_rating
 			);
 		}
-		$return = '<span role="img" aria-label="' . esc_attr( $aria_label ) . '">';
+		$return = '<span role="img" aria-label="' . esc_attr($aria_label) . '">';
 		for ($i = 0; $i < 5; $i++) {
 			$iconClass = $star_rating - $i < 1 ? ' sb-item-rating-icon-dimmed' : '';
 			if ($star_rating - $i === 0.5) {
@@ -227,17 +289,17 @@ class FeedDisplay {
 	public function overall_star_rating_display($business, $settings)
 	{
 		$star_rating = floatval($this->parser->get_average_rating($business));
-		$display_rating = ( floor( $star_rating * 2 ) / 2 );
-		if ( $display_rating <= 0 ) {
-			$aria_label = __( 'Not rated', 'reviews-feed' );
+		$display_rating = ( floor($star_rating * 2) / 2 );
+		if ($display_rating <= 0) {
+			$aria_label = __('Not rated', 'reviews-feed');
 		} else {
 			$aria_label = sprintf(
 				/* translators: %s: numeric rating out of 5 (may include half-stars) */
-				__( '%s out of 5 stars', 'reviews-feed' ),
+				__('%s out of 5 stars', 'reviews-feed'),
 				$display_rating
 			);
 		}
-		$return = '<span role="img" aria-label="' . esc_attr( $aria_label ) . '">';
+		$return = '<span role="img" aria-label="' . esc_attr($aria_label) . '">';
 		for ($i = 0; $i < 5; $i++) {
 			$iconClass = $star_rating - $i < 1 ? ' sb-item-rating-icon-dimmed' : '';
 			if ($star_rating - $i < 1 && $star_rating - $i >= 0.5) {
@@ -258,7 +320,13 @@ class FeedDisplay {
 	{
 		$provider = $this->parser->get_provider_name($post) ;
 		if (! empty($provider)) {
-			return trailingslashit(SBR_PLUGIN_URL) . 'assets/icons/' . $provider . '-provider.svg';
+			// Through provider_asset_slug() like every other icon-path caller:
+			// the data slug keeps its dot ('wordpress.org', WordpressOrg::$name)
+			// but the shipped file is wordpressorg-provider.svg, so the raw slug
+			// asked for a name that has never existed (SMASH-2106).
+			$slug = DisplayElements::provider_asset_slug($provider);
+
+			return trailingslashit(SBR_PLUGIN_URL) . 'assets/icons/' . $slug . '-provider.svg';
 		}
 	}
 
@@ -289,7 +357,7 @@ class FeedDisplay {
 			$weeks 		= $this->feed->is_init_wpml() ? __('weeks', 'reviews-feed') : $translations['weeks'];
 			$month 		= $this->feed->is_init_wpml() ? __('month', 'reviews-feed') : $translations['month'];
 			$months 	= $this->feed->is_init_wpml() ? __('months', 'reviews-feed') : $translations['months'];
-			$year 		= $this->feed->is_init_wpml() ? __('years', 'reviews-feed') : $translations['years'];
+			$year 		= $this->feed->is_init_wpml() ? __('year', 'reviews-feed') : $translations['year'];
 			$years 		= $this->feed->is_init_wpml() ? __('years', 'reviews-feed') : $translations['years'];
 			$ago 		= $this->feed->is_init_wpml() ? __('ago', 'reviews-feed') : $translations['ago'];
 
@@ -459,5 +527,81 @@ class FeedDisplay {
 	{
 		$the_text = isset($this->translations['reviewsHeader']) && !$this->feed->is_init_wpml() ? $this->translations['reviewsHeader'] : __('Over %s Reviews', 'sb-customizer');
 		return !empty($number) ? str_replace('%s', $number, $the_text) : '';
+	}
+
+	/**
+	 * Booking-only feeds show the hotel's REAL Booking general rating
+	 * (review_score 0-10 + review_score_word, e.g. "9.5 Exceptional") in the
+	 * header instead of the converted 5-star average — so the header speaks the
+	 * same scale as the per-card score badge (rating-extras/booking.php).
+	 *
+	 * Only fires when EVERY source carries a native review_score: a single
+	 * non-Booking source (no native score) falls back to stars, as does older
+	 * Booking data cached before the review_score field existed. Strictly
+	 * additive — existing star feeds are untouched.
+	 *
+	 * @param array $businesses Header data (one entry per source).
+	 * @return array{is_booking_only:bool,score:float,word:string}
+	 */
+	public static function get_booking_header_rating($businesses)
+	{
+		$fallback = array('is_booking_only' => false, 'score' => 0.0, 'word' => '');
+		if (! is_array($businesses) || empty($businesses)) {
+			return $fallback;
+		}
+
+		$scores       = array();
+		$words        = array();
+		$weighted_sum = 0.0;
+		$total_count  = 0;
+		foreach ($businesses as $business) {
+			$info = $business['info'] ?? array();
+			if (is_string($info)) {
+				$decoded = json_decode($info, true);
+				$info = is_array($decoded) ? $decoded : array();
+			}
+			$score = $info['review_score'] ?? null;
+			// One source without a native score disqualifies the whole feed.
+			if (! is_numeric($score) || floatval($score) <= 0) {
+				return $fallback;
+			}
+			$score_f  = floatval($score);
+			$scores[] = $score_f;
+			// Count-weight the native 0-10 score by each hotel's review volume so a
+			// 12k-review hotel dominates a 300-review one — the same count-weighted
+			// logic normal feeds use, but kept on Booking's own 0-10 scale (never
+			// normalized to 5). Booking stores the volume in total_rating; some
+			// payloads use review_count. (SMASH-782 follow-up.)
+			$count = (int) ($info['review_count'] ?? $info['total_rating'] ?? 0);
+			if ($count > 0) {
+				$weighted_sum += $score_f * $count;
+				$total_count  += $count;
+			}
+			$word = isset($info['review_score_word']) ? trim((string) $info['review_score_word']) : '';
+			if ($word !== '') {
+				$words[] = $word;
+			}
+		}
+
+		// $scores is guaranteed non-empty here: $businesses is non-empty and any
+		// source missing a native score returns early above, so every iteration
+		// pushed a score. Prefer the count-weighted mean on the 0-10 scale; fall
+		// back to the unweighted mean only when no source reported a usable count
+		// (a single source, or count-less data, still yields its own score). 1 dp.
+		$score = $total_count > 0
+			? round($weighted_sum / $total_count, 1)
+			: round(array_sum($scores) / count($scores), 1);
+
+		// Word shows only when every source carries the same word (a single
+		// source trivially qualifies) — averaging distinct words would fabricate
+		// a rating Booking never gave. reset() avoids an unchecked [0] offset.
+		$first_word = reset($words);
+		$word = ($first_word !== false
+			&& count($words) === count($scores)
+			&& count(array_unique($words)) === 1)
+			? $first_word
+			: '';
+
+		return array('is_booking_only' => true, 'score' => $score, 'word' => $word);
 	}
 }

@@ -13,6 +13,7 @@ namespace SmashBalloon\Reviews\Common\Builder;
 
 use SmashBalloon\Reviews\Common\Clear_Cache;
 use SmashBalloon\Reviews\Common\Customizer\DB;
+use SmashBalloon\Reviews\Common\Parser;
 use SmashBalloon\Reviews\Common\PostAggregator;
 
 class SBR_Sources{
@@ -106,6 +107,10 @@ class SBR_Sources{
 		if (self::exists_in_database($source_data)) {
 			$source_data['last_updated'] = date('Y-m-d H:i:s');
 			self::update($source_data, false);
+			// SMASH-2408: re-adding a source is the admin's fix for a failing one, so its stored failure goes.
+			if (isset($source_data['provider'])) {
+				(new DB())->source_set_fetch_state($source_data['id'], $source_data['provider'], '');
+			}
 		} else {
 			self::insert($source_data);
 		}
@@ -217,15 +222,26 @@ class SBR_Sources{
 
 		$reviews_list = PostAggregator::get_source_all_posts($account_id);
 		$rating = 0;
+		$rated = 0;
 		$total_rating = sizeof($reviews_list);
+		$parser = new Parser();
 
+		// SMASH-2468: a review with no stars counts toward "Over N Reviews" but not the average, like WooCommerce.
 		foreach ($reviews_list as $review) {
-			$rating += isset($review['rating']) ? intval($review['rating']) : 0;
+			if ($parser->has_author_rating($review)) {
+				$rating += $parser->get_rating($review);
+				$rated++;
+			}
 		}
 
 		$info_collection = json_decode($collection['info'], true);
+		$info_collection = is_array($info_collection) ? $info_collection : [];
 		$info_collection['total_rating'] = $total_rating;
-		$info_collection['rating'] = $total_rating > 0 ? ceil($rating / $total_rating) : 0;
+		// SMASH-2477: what the average is over, so multi-source averages can weight by it.
+		$info_collection['rated_count'] = $rated;
+		// SMASH-1685: the real average (two decimals, like Woo/EDD), not ceil(): 5,5,3,5,5 is 4.6, not 5.
+		// Displays round to one decimal and draw stars to the half below.
+		$info_collection['rating'] = $rated > 0 ? round($rating / $rated, 2) : 0;
 
 
 		$collection['last_updated'] = date('Y-m-d H:i:s');

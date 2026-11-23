@@ -3,6 +3,22 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit();
 }
 
+// Ability state tokens + single-pending slots (sb_abilities_ctf_state_*). They are
+// deliberately outside the ctf_ cache-wipe namespace, so remove them explicitly.
+// Runs even when settings are preserved: these are 15-minute secrets, not settings.
+global $wpdb;
+$ctf_options_table = $wpdb->prefix . 'options';
+$wpdb->query( "
+        DELETE
+        FROM $ctf_options_table
+        WHERE `option_name` LIKE ('\_transient\_sb\_abilities\_ctf\_state\_%')
+        " );
+$wpdb->query( "
+        DELETE
+        FROM $ctf_options_table
+        WHERE `option_name` LIKE ('\_transient\_timeout\_sb\_abilities\_ctf\_state\_%')
+        " );
+
 //If the user is preserving the settings then don't delete them
 $options = get_option( 'ctf_options' );
 $ctf_preserve_settings = isset( $options['preserve_settings'] ) ? $options['preserve_settings'] : false;
@@ -19,6 +35,7 @@ if ( ! $ctf_preserve_settings ) {
 	delete_option( 'ctf_rating_notice' );
 	delete_option( 'ctf_notifications' );
 	delete_option( 'ctf_local_avatars' );
+	delete_option( 'ctf_cron_start_jitter' );
 
 	// delete tweet cache in transients
 	global $wpdb;
@@ -48,9 +65,23 @@ if ( ! $ctf_preserve_settings ) {
 	wp_clear_scheduled_hook( 'ctf_cron_job' );
 
 	delete_option( 'ctf_usage_tracking_config' );
-	delete_option( 'ctf_usage_tracking' );
+	// Usage-tracking consent, site token and telemetry are shared with the Pro plugin. Only remove
+	// them when Pro is not active, otherwise deleting the free plugin would reset Pro's consent.
+	$ctf_network_active = is_multisite() ? (array) get_site_option( 'active_sitewide_plugins', array() ) : array();
+	$ctf_pro_active = in_array( 'custom-twitter-feeds-pro/custom-twitter-feed.php', (array) get_option( 'active_plugins', array() ), true )
+		|| isset( $ctf_network_active['custom-twitter-feeds-pro/custom-twitter-feed.php'] );
+	if ( ! $ctf_pro_active ) {
+		delete_option( 'ctf_usage_tracking' );
+		delete_option( 'ctf_smash_usage_tracking' );
+		delete_option( 'ctf_smash_usage_tracking_site_token' );
+		delete_option( 'ctf_smash_usage_tracking_schedule' );
+		delete_option( 'ctf_smash_usage_events' );
+		delete_option( 'ctf_smash_usage_active_dates' );
+		delete_option( 'ctf_smash_usage_session_durations' );
+	}
 
 	wp_clear_scheduled_hook( 'ctf_usage_tracking_cron' );
+	wp_clear_scheduled_hook( 'ctf_free_smash_usage_tracking_cron' );
 	wp_clear_scheduled_hook( 'ctf_feed_update' );
 
 	delete_option( 'ctf_db_version' );
@@ -80,3 +111,9 @@ if ( ! $ctf_preserve_settings ) {
 	$wpdb->query( "DROP TABLE IF EXISTS $feeds_table_name" );
 }
 
+
+// Gate epoch (sb_abilities_ctf_gate_epoch). Removed unconditionally, and deliberately AFTER the
+// ctf_options delete above: deleting ctf_options fires the epoch-recording hook when the plugin
+// is loaded, which would re-create this option. (uninstall.php runs without the plugin loaded,
+// so that is not expected here, but the ordering keeps it correct either way.)
+delete_option( 'sb_abilities_ctf_gate_epoch' );

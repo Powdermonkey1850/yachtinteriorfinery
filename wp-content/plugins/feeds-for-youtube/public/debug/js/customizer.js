@@ -7261,6 +7261,12 @@ SB_Customizer.initPromise = new Promise(function (resolve) {
       channel: sbc_builder.prefilledChannelId,
       playlist: '',
       favorites: sbc_builder.prefilledChannelId,
+      // Seeded even though it starts empty-ish: Vue 2 cannot make a
+      // property reactive after init, so a key missing here would leave
+      // the Shorts source input unbound and the typed channel would never
+      // reach selectedFeedModel on save. Channel-scoped like channel and
+      // favorites, so it takes the same prefill (SMASH-1910).
+      shorts: sbc_builder.prefilledChannelId,
       search: '',
       live: sbc_builder.prefilledChannelId,
       single: '',
@@ -7294,6 +7300,33 @@ SB_Customizer.initPromise = new Promise(function (resolve) {
         self.customizerControlAjaxAction(ajaxAction, settingID);
       }
       self.regenerateLayout(settingID);
+    },
+    /**
+     * Change handler for <select> controls that gate individual options
+     * behind a license tier (control.optionExtension = { value: extension }).
+     * If the chosen option is gated and the extension isn't active, show the
+     * upgrade popup and revert to the control default instead of applying it.
+     *
+     * @since 2.8.2
+     */
+    changeSelectGated: function changeSelectGated(control, model) {
+      var self = this;
+      var value = model[control.id];
+      var cfg = control.optionExtension ? control.optionExtension[value] : false;
+      if (cfg) {
+        // Entitlement uses hasFeature() (the same source shouldShowOverlay
+        // uses), not activeExtensions, which is not tier-aware for license
+        // features and is always false here.
+        var entitled = self.sbyIsPro && !self.sbyLicenseNoticeActive && self.hasFeature(cfg.feature);
+        if (!entitled) {
+          // Show the upgrade popup and revert through the normal change
+          // path so the preview and saved setting stay in sync.
+          self.viewsActive.extensionsPopupElement = cfg.popup;
+          self.changeSettingValue(control.id, control["default"], true, control.ajaxAction ? control.ajaxAction : false);
+          return;
+        }
+      }
+      self.changeSettingValue(control.id, false, false, control.ajaxAction ? control.ajaxAction : false);
     },
     checkExtensionActive: function checkExtensionActive(extension) {
       var self = this;
@@ -7607,9 +7640,9 @@ SB_Customizer.initPromise = new Promise(function (resolve) {
       if (self.customizerFeedData.settings['disable_js_image_loading']) {
         flags.push('imageLoadDisable');
       }
-      if (self.customizerFeedData.settings['ajax_post_load']) {
-        flags.push('ajaxPostLoad');
-      }
+      // No ajaxPostLoad here: the builder preview renders its posts inline and
+      // never defers them. Deferring would POST a feed id built from unsaved
+      // settings, which the server rejects with a 403 (SMASH-2061).
       if (self.customizerFeedData.settings['playerratio'] === '3:4') {
         flags.push('narrowPlayer');
       }

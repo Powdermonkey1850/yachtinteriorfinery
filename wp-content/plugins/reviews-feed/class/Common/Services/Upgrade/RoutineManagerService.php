@@ -12,6 +12,12 @@ use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\UpgradeRoutine;
 use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\V1Routine;
 use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\ClearReviewsDuplicateRoutine;
 use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\NewUserRatingRoutine;
+use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\ReconcileMigratedLicenseRoutine;
+use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\RepairFacebookCollectionRatingsRoutine;
+use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\RecalculateCollectionRatingsRoutine;
+use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\RecalculateUnratedCollectionRatingsRoutine;
+use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\HideCachedProviderFailuresRoutine;
+use SmashBalloon\Reviews\Common\Services\Upgrade\Routines\RemoveBlankErrorReviewsRoutine;
 
 class RoutineManagerService extends ServiceProvider{
 	/**
@@ -30,6 +36,24 @@ class RoutineManagerService extends ServiceProvider{
 		// this URL was tracked, so proactive migration detection works for the
 		// entire install base, not just future registrations.
 		BackfillWebsiteUrlRoutine::class,
+		// SMASH-1585 — one-shot recovery for sites silently wedged by a
+		// pre-2.6.3 migration fork (local license_status 'valid' but the relay
+		// has no active license for the new URL). Runs after the backfill so
+		// website_url is settled first. One ping, flips to Activate on a
+		// confirmed mismatch; never auto-reactivates.
+		ReconcileMigratedLicenseRoutine::class,
+		// SMASH-2288 — manual Facebook collection reviews were stored as 1 star; copy the stars back
+		// from json_data and recalculate each collection's rating.
+		RepairFacebookCollectionRatingsRoutine::class,
+		// SMASH-1685 — collection ratings were saved rounded up (ceil); recalculate every collection once.
+		// After the SMASH-2288 repair, so the recalculation reads the corrected stars.
+		RecalculateCollectionRatingsRoutine::class,
+		// SMASH-2468 — unrated reviews counted as 0 in collection averages; recalculate every collection once more.
+		RecalculateUnratedCollectionRatingsRoutine::class,
+		// SBR-556 — provider failures are no longer shown; drop the ones already sitting in feed caches.
+		HideCachedProviderFailuresRoutine::class,
+		// SMASH-2647 — blank review cards saved from a relay error map up to 2.16.1; remove them once.
+		RemoveBlankErrorReviewsRoutine::class,
 	];
 
 	public function register()

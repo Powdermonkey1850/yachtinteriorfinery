@@ -1,3 +1,69 @@
+/**
+ * Mint the interpolation delimiters used by the customizer preview component.
+ *
+ * The preview is mounted with <component :is="...">, which hands the feed HTML to Vue's
+ * runtime template COMPILER — so a mustache inside it is an evaluated JavaScript
+ * expression, not markup. Braces are not HTML metacharacters, so nothing on the server's
+ * render path (esc_html, esc_attr, wp_kses_post, htmlspecialchars) touches them: a feed
+ * value authored by a third party (a YouTube video title, a channel bio) would otherwise
+ * reach code execution in the administrator's session with no angle bracket, quote or on*
+ * attribute.
+ *
+ * Encoding the braces does NOT fix this. Vue's compiler runs decodeHTMLCached() before
+ * parseText(), so `&#123;&#123;` is back to `{{` one step before the mustache check — and
+ * wp_localize_script() html_entity_decode()s localized scalars, stripping a layer earlier
+ * still. That was the SMASH-1798 approach and it was a no-op.
+ *
+ * The durable control is to move the delimiters instead of the content: the preview
+ * component compiles with a random pair minted fresh on every page load, so stored feed
+ * content cannot match them and `{{ ... }}` in it is inert text. Because this is a
+ * property of the component rather than a transform on the string, it covers every
+ * producer path at once — the initial localized render, every AJAX refresh, and the legacy
+ * feed path. Only the preview component is affected; the package's own templates keep
+ * Vue's default delimiters, which they rely on. SMASH-1907.
+ *
+ * @return {Array} [openDelimiter, closeDelimiter]
+ */
+function sbcBuilderPreviewDelimiters() {
+	var random = new Uint32Array( 4 ),
+		token = '';
+
+	if ( window.crypto && window.crypto.getRandomValues ) {
+		window.crypto.getRandomValues( random );
+		for ( var i = 0; i < random.length; i++ ) {
+			token += random[ i ].toString( 36 );
+		}
+	} else {
+		token = String( new Date().getTime() ) + String( Math.random() ).slice( 2 );
+	}
+
+	return [ '[[sbc' + token, token + 'sbc]]' ];
+}
+
+/**
+ * Split any literal mustache in a builder-preview string with an empty HTML comment.
+ *
+ * Defence in depth only — sbcBuilderPreviewDelimiters() above is the load-bearing control.
+ * This exists so the two producer paths still degrade safely if a consumer ever mounts the
+ * string with Vue's default delimiters.
+ *
+ * The split has to be structural, not textual: Vue's parseHTML() drops comments and emits
+ * the surrounding characters as separate chars() chunks, each run through parseText()
+ * independently, so `{<!---->{` never tokenises as a mustache — whereas an HTML entity is
+ * decoded back to `{` before that check ever happens. The comment renders as nothing, so
+ * the reader still sees the original braces.
+ *
+ * Mirrored server-side by Feed_Builder::neutralize_vue_delimiters().
+ *
+ * @param {string} html Rendered feed HTML destined for the preview.
+ * @return {string}
+ */
+function sbcNeutralizeVueDelimiters(html) {
+	return String(html === null || typeof html === 'undefined' ? '' : html)
+		.split('{{').join('{<!---->{')
+		.split('}}').join('}<!---->}');
+}
+
 import {addAction, applyFilters, createHooks, doAction, hasFilter} from "@wordpress/hooks";
 let Builder,
 	sketch = VueColor.Sketch,
@@ -7,6 +73,19 @@ let Builder,
 SB_Customizer.initPromise.then((customizer) => {
 	const extraMethods =  {
 		...customizer.extraMethods,
+
+		/**
+		 * Options object for the customizer preview <component :is="...">.
+		 *
+		 * A method, not a computed: the old inline `{template}` rebuilt this object on
+		 * every parent render and the preview relies on being recreated that way.
+		 */
+		sbcPreviewComponent : function(){
+			return {
+				template : this.template,
+				delimiters : this.previewDelimiters
+			};
+		},
 		updateColorValue : function(id){
 			var self = this;
 			self.customizerFeedData.settings[id] = (self.customizerFeedData.settings[id].a == 1) ? self.customizerFeedData.settings[id].hex : self.customizerFeedData.settings[id].hex8;
@@ -91,7 +170,7 @@ SB_Customizer.initPromise.then((customizer) => {
 		ajaxPost : function(data, callback){
 			var self = this;
 			data['nonce'] = this.nonce;
-			self.$http.post(self.ajaxHandler,data).then(callback);
+			return self.$http.post(self.ajaxHandler,data).then(callback);
 		},
 
 		/**
@@ -117,9 +196,6 @@ SB_Customizer.initPromise.then((customizer) => {
 				self.viewsActive.feedTemplateElement = null;
 				document.querySelector('body').classList.toggle('overflow-hidden');
 			}
-			if(viewName == 'embedPopup' && ajaxAction == true){
-				self.saveFeedSettings();
-			}
 
 			Builder.$forceUpdate();
 		},
@@ -136,6 +212,34 @@ SB_Customizer.initPromise.then((customizer) => {
 			if( plugin?.class ) {
 				jQuery(plugin.class).parent('a').trigger('click');
 			}
+		},
+		/**
+		 * Roving-tabindex arrow-key navigation for the customizer sidebar
+		 * tablist (Customize / Settings). Ported from instagram-feed-pro.
+		 *
+		 * @since 2.0
+		 */
+		handleCustomizerTabKeydown: function (event, direction) {
+			var self = this,
+				tabIds = Object.keys(self.customizerSidebarBuilder || {}),
+				currentIdx = tabIds.indexOf(self.customizerScreens.activeTab),
+				nextIdx = currentIdx;
+			if (tabIds.length === 0 || currentIdx === -1) return;
+			if (direction === 'right') {
+				nextIdx = (currentIdx + 1) % tabIds.length;
+			} else if (direction === 'left') {
+				nextIdx = (currentIdx - 1 + tabIds.length) % tabIds.length;
+			} else if (direction === 'home') {
+				nextIdx = 0;
+			} else if (direction === 'end') {
+				nextIdx = tabIds.length - 1;
+			}
+			if (nextIdx === currentIdx) return;
+			self.switchCustomizerTab(tabIds[nextIdx]);
+			self.$nextTick(function () {
+				var nextBtn = document.getElementById('sb-customizer-tab-' + tabIds[nextIdx]);
+				if (nextBtn) nextBtn.focus();
+			});
 		},
 		/**
 		 * Switch Customizer Tab
@@ -175,6 +279,7 @@ SB_Customizer.initPromise.then((customizer) => {
 		 * @since 2.0
 		 */
 		saveFeedSettings : function( leavePage = false ){
+			// Resolves true when the feed was stored.
 			var self = this,
 				sources = [],
 				updateFeedData = {
@@ -185,7 +290,7 @@ SB_Customizer.initPromise.then((customizer) => {
 					settings : self.customizerFeedData.settings,
 				};
 			self.loadingBar = true;
-			self.ajaxPost(updateFeedData, function(_ref){
+			var saved = self.ajaxPost(updateFeedData, function(_ref){
 				var data = _ref.data;
 				if(data && data.success === true){
 					self.processNotification('feedSaved');
@@ -195,11 +300,16 @@ SB_Customizer.initPromise.then((customizer) => {
 							window.location.href = self.builderUrl;
 						}, 1500)
 					}
-				}else{
-					self.processNotification('feedSavedError');
+					return true;
 				}
+				self.processNotification('feedSavedError');
+				return false;
+			}).catch(function(){
+				self.processNotification('feedSavedError');
+				return false;
 			});
 			Builder.$forceUpdate();
+			return saved;
 		},
 
 		/**
@@ -260,7 +370,7 @@ SB_Customizer.initPromise.then((customizer) => {
 				var data = _ref.data;
 				if( data !== false ){
 					self.updatedTimeStamp = new Date().getTime();
-					self.template = String("<div>"+data.feed_html+"</div>");
+					self.template = sbcNeutralizeVueDelimiters(String("<div>"+data.feed_html+"</div>"));
 					self.processNotification('cacheCleared');
 				}else{
 					self.processNotification("unkownError");
@@ -318,7 +428,8 @@ SB_Customizer.initPromise.then((customizer) => {
 				text : notification.text,
 				shown : "shown"
 			};
-			setTimeout(function(){
+			clearTimeout(self.notificationTimer);
+			self.notificationTimer = setTimeout(function(){
 				self.notificationElement.shown =  "hidden";
 			}, 5000);
 		},
@@ -481,6 +592,92 @@ SB_Customizer.initPromise.then((customizer) => {
 
 			self.regenerateLayout(settingID);
 		},
+
+		/**
+		 * Roving tabindex + arrow-key navigation for radiogroup-pattern
+		 * controls (toggleset, togglebutton). Walks the rendered DOM so
+		 * we honor v-show / aria-disabled visibility, moves focus to the
+		 * target option, and auto-activates per the WAI-ARIA radio pattern.
+		 *
+		 * Cascade-port of IG Pro builder.js (commit 6f7e8f8b). Calls
+		 * changeSettingValue / checkExtensionActive, which are merged into
+		 * the Vue instance from the host customizer SDK extraMethods.
+		 *
+		 * @param {KeyboardEvent} event   Keyboard event from the current radio.
+		 * @param {Object}        control Control definition (id, options, ajaxAction).
+		 * @param {String}        action  'prev' | 'next' | 'first' | 'last'.
+		 * @since 6.0
+		 */
+		onTogglesetArrowKey: function (event, control, action) {
+			let self = this;
+			let currentEl = event.currentTarget;
+			if (!currentEl) {
+				return;
+			}
+			let group = currentEl.closest('[role="radiogroup"]');
+			if (!group) {
+				return;
+			}
+			// Only options that are currently rendered (v-show keeps the
+			// node but sets display:none) and not aria-disabled.
+			let radios = Array.prototype.filter.call(
+				group.querySelectorAll('[role="radio"]'),
+				function (el) {
+					if (el.getAttribute('aria-disabled') === 'true') {
+						return false;
+					}
+					// v-show toggles inline `display: none`.
+					return el.style.display !== 'none';
+				}
+			);
+			if (radios.length === 0) {
+				return;
+			}
+			let currentIndex = radios.indexOf(currentEl);
+			if (currentIndex === -1) {
+				currentIndex = 0;
+			}
+			let targetIndex;
+			switch (action) {
+				case 'prev':
+					targetIndex = (currentIndex - 1 + radios.length) % radios.length;
+					break;
+				case 'next':
+					targetIndex = (currentIndex + 1) % radios.length;
+					break;
+				case 'first':
+					targetIndex = 0;
+					break;
+				case 'last':
+					targetIndex = radios.length - 1;
+					break;
+				default:
+					return;
+			}
+			let targetEl = radios[targetIndex];
+			if (!targetEl) {
+				return;
+			}
+			let targetValue = targetEl.getAttribute('data-toggle-value');
+			if (targetValue === null) {
+				// Fall back to mapping by visible position in control.options.
+				let visibleOptions = (control.options || []).filter(function (opt) {
+					return opt.condition === undefined || self.checkControlCondition(opt.condition);
+				});
+				if (visibleOptions[targetIndex]) {
+					targetValue = visibleOptions[targetIndex].value;
+				}
+			}
+			targetEl.focus();
+			if (targetValue !== null && targetValue !== undefined) {
+				// Per ARIA radio pattern: arrow keys auto-activate.
+				let opt = (control.options || []).find(function (o) { return String(o.value) === String(targetValue); }) || {};
+				let doProcess = opt.checkExtension !== undefined ? self.checkExtensionActive(opt.checkExtension) : true;
+				let ajaxAction = control.ajaxAction !== undefined ? control.ajaxAction : false;
+				self.changeSettingValue(control.id, opt.value !== undefined ? opt.value : targetValue, doProcess, ajaxAction);
+			}
+		},
+
 		selectedFeedTypeCustomizer : function(feedtype){
 			var self 	= this,
 				result 	= false;
@@ -609,13 +806,69 @@ SB_Customizer.initPromise.then((customizer) => {
 		 *
 		 * @since 4.0
 		 */
-		hideColorPickerPospup : function(){
-			this.customizerScreens.activeColorPicker = null;
+		/**
+		 * Hide Color Picker
+		 *
+		 * a11y (SMASH-1381): when a controlId is passed (keyboard dismissal
+		 * via Esc), focus returns to the swatch button so tab order stays
+		 * predictable. The mouse-driven clickaway path calls this without an
+		 * argument, which skips the refocus so we don't steal focus from
+		 * wherever the user just clicked.
+		 */
+		hideColorPickerPospup : function(controlId){
+			var self = this;
+			self.customizerScreens.activeColorPicker = null;
+			if (typeof controlId === 'string' && controlId) {
+				self.$nextTick(function () {
+					var swatch = document.getElementById('sb-colorpicker-swatch-' + controlId);
+					if (swatch) swatch.focus();
+				});
+			}
+		},
+
+		/**
+		 * Toggle Color Picker (open if closed, close if open)
+		 *
+		 * a11y (SMASH-1381): wired to the swatch button's @click. On open,
+		 * focus moves into the picker dialog (sketch-picker hex input,
+		 * falling back to the dialog itself). showColorPickerPospup is
+		 * supplied by the host plugin's extraMethods SDK, so resolve it on
+		 * the merged instance with a state-mutation fallback.
+		 */
+		toggleColorPickerPospup : function(controlId){
+			var self = this;
+			if (self.customizerScreens.activeColorPicker === controlId) {
+				self.hideColorPickerPospup(controlId);
+				return;
+			}
+			if (typeof self.showColorPickerPospup === 'function') {
+				self.showColorPickerPospup(controlId);
+			} else {
+				self.customizerScreens.activeColorPicker = controlId;
+			}
+			self.$nextTick(function () {
+				var popup = document.getElementById('sb-colorpicker-popup-' + controlId);
+				if (!popup) return;
+				var focusable = popup.querySelector('input, [tabindex]:not([tabindex="-1"]), button');
+				if (focusable && focusable !== popup) {
+					focusable.focus();
+				} else {
+					popup.focus();
+				}
+			});
 		},
 
 		switchScreen: function(screenType, screenName){
 			this.viewsActive[screenType] = screenName;
 			Builder.$forceUpdate();
+			// a11y: when the feed-creation flow swaps steps, move focus to the
+			// step heading so keyboard/SR users aren't stranded (WCAG 2.4.3)
+			if (screenType === 'selectedFeedSection') {
+				this.$nextTick(function () {
+					var stepHeading = document.querySelector('.sbc-creation-step-heading');
+					if (stepHeading) stepHeading.focus();
+				});
+			}
 		},
 
 		/**
@@ -759,6 +1012,42 @@ SB_Customizer.initPromise.then((customizer) => {
 		},
 
 		/**
+		 * Save the feed, then open the sb-customizer Embed Feed modal. A failed
+		 * save shows its error and opens nothing. Without the modal (not
+		 * enqueued, or WordPress older than 5.8) the shortcode is copied instead.
+		 */
+		openEmbedModal : function(){
+			var self = this,
+				feedId = self.customizerFeedData.feed_info.id,
+				notify = function (type, text) {
+					self.notificationElement = {type: type, text: text, shown: 'shown'};
+					clearTimeout(self.notificationTimer);
+					self.notificationTimer = setTimeout(function () {
+						self.notificationElement.shown = 'hidden';
+					}, 3000);
+				};
+			self.saveFeedSettings().then(function (saved) {
+				if (!saved) {
+					return;
+				}
+				var modal = window.SBEmbedModal;
+				if (!modal || typeof modal.open !== 'function' || modal.supported === false) {
+					self.copyToClipBoard('[youtube-feed feed=' + feedId + ']');
+					return;
+				}
+				modal.open({
+					feedId: feedId,
+					onCopy: function (text) {
+						notify('success', text);
+					},
+					onCopyFailed: function () {
+						notify('error', self.genericText.copyFailed);
+					}
+				});
+			});
+		},
+
+		/**
 		 * Copy text to clipboard
 		 *
 		 * @since 2.0
@@ -770,14 +1059,23 @@ SB_Customizer.initPromise.then((customizer) => {
 			el.value = value;
 			document.body.appendChild(el);
 			el.select();
-			document.execCommand('copy');
+			var copied = false;
+			try {
+				copied = document.execCommand('copy');
+			} catch (e) {}
 			document.body.removeChild(el);
+			// The toast renders with v-html and legacy shortcodes carry stored
+			// attributes, so escape the value before showing it.
+			var escaped = String(value).replace(/[&<>"']/g, function (c) {
+				return '&#' + c.charCodeAt(0) + ';';
+			});
 			self.notificationElement =  {
-				type : 'success',
-				text : this.genericText.copiedClipboard,
+				type : copied ? 'success' : 'error',
+				text : copied ? this.genericText.copiedClipboard : this.genericText.copyFailed + '<br>' + escaped,
 				shown : "shown"
 			};
-			setTimeout(function(){
+			clearTimeout(self.notificationTimer);
+			self.notificationTimer = setTimeout(function(){
 				self.notificationElement.shown =  "hidden";
 			}, 3000);
 			Builder.$forceUpdate();
@@ -1228,7 +1526,7 @@ SB_Customizer.initPromise.then((customizer) => {
 						var data = _ref.data;
 						if( data !== false ){
 							self.updatedTimeStamp = new Date().getTime();
-							self.template = String("<div>"+data.feed_html+"</div>");
+							self.template = sbcNeutralizeVueDelimiters(String("<div>"+data.feed_html+"</div>"));
 							// document.querySelector('body').classList.toggle('overflow-hidden');
 							self.setShortcodeGlobalSettings(true);
 							if(!hidePreviewNotification) {
@@ -1256,7 +1554,7 @@ SB_Customizer.initPromise.then((customizer) => {
 						if( data !== false ){
 							self.customizerFeedData.settings = data.customizerDataSettings;
 							self.updatedTimeStamp = new Date().getTime();
-							self.template = String("<div>"+data.feed_html+"</div>");
+							self.template = sbcNeutralizeVueDelimiters(String("<div>"+data.feed_html+"</div>"));
 							document.querySelector('body').classList.toggle('overflow-hidden');
 							self.processNotification("previewUpdated");
 							self.loadingBar = false;
@@ -1283,7 +1581,7 @@ SB_Customizer.initPromise.then((customizer) => {
 						if( data !== false ){
 							self.customizerFeedData.settings = data.customizerDataSettings;
 							self.updatedTimeStamp = new Date().getTime();
-							self.template = String("<div>"+data.feed_html+"</div>");
+							self.template = sbcNeutralizeVueDelimiters(String("<div>"+data.feed_html+"</div>"));
 							self.processNotification("previewUpdated");
 							document.querySelector('body').classList.toggle('overflow-hidden');
 							self.loadingBar = false;
@@ -1309,7 +1607,7 @@ SB_Customizer.initPromise.then((customizer) => {
 						if( data !== false ){
 							self.customizerFeedData.settings = data.customizerDataSettings;
 							self.updatedTimeStamp = new Date().getTime();
-							self.template = String("<div>"+data.feed_html+"</div>");
+							self.template = sbcNeutralizeVueDelimiters(String("<div>"+data.feed_html+"</div>"));
 							setTimeout(function(){
 								self.setShortcodeGlobalSettings(true);
 								self.loadingBar = false;
@@ -1335,7 +1633,7 @@ SB_Customizer.initPromise.then((customizer) => {
 						var data = _ref.data;
 						if( data !== false ){
 							self.updatedTimeStamp = new Date().getTime();
-							self.template = String("<div>"+data.feed_html+"</div>");
+							self.template = sbcNeutralizeVueDelimiters(String("<div>"+data.feed_html+"</div>"));
 							// document.querySelector('body').classList.toggle('overflow-hidden');
 							self.setShortcodeGlobalSettings(true);
 							self.processNotification("previewUpdated");
@@ -1362,7 +1660,7 @@ SB_Customizer.initPromise.then((customizer) => {
 						var data = _ref.data;
 						if( data !== false ){
 							self.updatedTimeStamp = new Date().getTime();
-							self.template = String("<div>"+data.feed_html+"</div>");
+							self.template = sbcNeutralizeVueDelimiters(String("<div>"+data.feed_html+"</div>"));
 							self.setShortcodeGlobalSettings(true);
 							self.customizerFeedData.settings = data.customizerDataSettings;
 							self.processNotification("previewUpdated");
@@ -1448,7 +1746,10 @@ SB_Customizer.initPromise.then((customizer) => {
 		...customizer.extraData,
 		$parent : this,
 		nonce : sbc_builder.nonce,
-		template :  sbc_builder.feedInitOutput,
+		template :  sbcNeutralizeVueDelimiters(sbc_builder.feedInitOutput),
+		// Preview is feed HTML compiled as a template: mustaches in it must never
+		// interpolate. Encoding the braces fails — Vue decodes first. SMASH-1907.
+		previewDelimiters : sbcBuilderPreviewDelimiters(),
 		freeCtaShowFeatures : false,
 		upgradeUrl : sbc_builder.upgradeUrl,
 		supportPageUrl: sbc_builder.supportPageUrl,
@@ -1519,7 +1820,6 @@ SB_Customizer.initPromise.then((customizer) => {
 			'date_styling_title',
 			'description_styling_title',
 		],
-		embedPopupScreen : sbc_builder.embedPopupScreen,
 		customizeScreensText 	: sbc_builder.customizeScreens,
 		highLightedSection : 'all',
 		dummyLightBoxScreen 	: false,
@@ -1565,9 +1865,6 @@ SB_Customizer.initPromise.then((customizer) => {
 			clipboardCopiedNotif : false,
 			legacyFeedsShown : false,
 			editName : false,
-			embedPopup : false,
-			embedPopupScreen : 'step_1',
-			embedPopupSelectedPage : null,
 			// onboarding
 			onboardingPopup : sbc_builder.allFeedsScreen.onboarding.active,
 			onboardingStep : 1,
@@ -1580,7 +1877,6 @@ SB_Customizer.initPromise.then((customizer) => {
 			installPluginPopup : false,
 			installPluginModal: 'facebook'
 		},
-		wordpressPageLists  : sbc_builder.wordpressPageLists,
 		widgetsPageURL : sbc_builder.widgetsPageURL,
 		feedTemplates: sbc_builder.feedTemplates,
 		selectedBulkAction : false,

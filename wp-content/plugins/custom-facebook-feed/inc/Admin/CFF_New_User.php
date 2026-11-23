@@ -166,13 +166,23 @@ class CFF_New_User extends CFF_Notifications
 
 		$option = $this->get_option();
 
+		// SMASH-1245: the new-user 'feed' (review / discount marketing) is remote
+		// data, so gate it on the consent source exactly like the parent
+		// CFF_Notifications::get(). Fetch only when consent permits remote, and
+		// never serve a previously-cached remote feed once consent is revoked
+		// (source flips to 'local'/'none'). 'events' are locally-generated, so
+		// they surface regardless, matching the parent.
+		$source = class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' )
+			? \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+
 		// Only update if does not exist.
-		if (empty($option['update'])) {
+		if ( 'remote' === $source && empty( $option['update'] ) ) {
 			$this->update();
 		}
 
 		$events = ! empty($option['events']) ? $this->verify_active($option['events']) : array();
-		$feed   = ! empty($option['feed']) ? $this->verify_active($option['feed']) : array();
+		$feed   = ( 'remote' === $source && ! empty( $option['feed'] ) ) ? $this->verify_active( $option['feed'] ) : array();
 
 		return array_merge($events, $feed);
 	}
@@ -222,6 +232,16 @@ class CFF_New_User extends CFF_Notifications
 	 */
 	public function update()
 	{
+		// SMASH-1245: gate remote new-user feed fetch on consent. notification_source()
+		// reflects the per-edition default (Pro on by default, Free off until opt-in),
+		// so the remote request only fires once the user has consented.
+		$source = class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' )
+			? \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+		if ( 'remote' !== $source ) {
+			return;
+		}
+
 		$feed   = $this->fetch_feed();
 		$option = $this->get_option();
 
@@ -420,8 +440,8 @@ class CFF_New_User extends CFF_Notifications
 				</div>
 			</div>
 			<div class="cff-notice-dismiss">
-				<a href="<?php echo esc_url($close_href); ?>">
-					<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+				<a href="<?php echo esc_url($close_href); ?>" aria-label="<?php echo esc_attr__('Dismiss this notice', 'custom-facebook-feed'); ?>">
+					<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
 					<path d="M14 1.41L12.59 0L7 5.59L1.41 0L0 1.41L5.59 7L0 12.59L1.41 14L7 8.41L12.59 14L14 12.59L8.41 7L14 1.41Z" fill="#141B38"></path>
 					</svg>
 				</a>

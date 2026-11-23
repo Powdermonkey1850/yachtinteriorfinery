@@ -42,3 +42,6 @@
 Thumbs.db
 *:Zone.Identifier
 node_modules/
+
+# ---- Apache files (Martok is nginx-only; .htaccess has no effect) ----
+.htaccess

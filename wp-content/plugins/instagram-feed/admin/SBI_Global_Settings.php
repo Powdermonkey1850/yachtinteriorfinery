@@ -13,6 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 use DateTime;
+use InstagramFeed\Abilities\SBI_Pro_Upsell;
 use InstagramFeed\Builder\SBI_Db;
 use InstagramFeed\Builder\SBI_Feed_Builder;
 use InstagramFeed\Builder\SBI_Feed_Saver_Manager;
@@ -28,6 +29,7 @@ use SB_Instagram_GDPR_Integrations;
 use function json_decode;
 use function sbi_is_pro_version;
 use function stripslashes;
+use InstagramFeed\UsageTracking\Config as SmashTrackingConfig;
 
 class SBI_Global_Settings
 {
@@ -84,7 +86,7 @@ class SBI_Global_Settings
 	 *
 	 * This will save the data fron the settings page
 	 *
-	 * @return SBI_Response
+	 * @return void
 	 * @since 6.0
 	 */
 	public function sbi_save_settings()
@@ -166,34 +168,70 @@ class SBI_Global_Settings
 		$sbi_settings['disable_admin_notice'] = !(bool)$advanced['enable_admin_notice'];
 		$sbi_settings['enable_email_report'] = (bool)$advanced['enable_email_report'];
 		$sbi_settings['enqueue_legacy_css'] = (bool)$advanced['enqueue_legacy_css'];
+		// AI write-access toggle (AgDR-9005/AgDR-9004): this single AJAX handler
+		// always posts the FULL model (general + feeds + advanced together), so
+		// unlike a genuinely partial per-tab save, !empty() here is fail-closed
+		// without risk of resetting an enabled toggle from an unrelated tab —
+		// a missing/false key on this save legitimately means "off". Never
+		// (bool)$advanced['sbi_ai_write_enabled'] directly: that idiom warns on a
+		// missing key instead of failing closed.
+		$sbi_settings['sb_instagram_ai_write_enabled'] = $this->reconcile_ai_write_toggle($advanced, !empty($sbi_settings['sb_instagram_ai_write_enabled']));
 
 		$sbi_settings['email_notification'] = sanitize_text_field($advanced['email_notification']);
 		$sbi_settings['email_notification_addresses'] = sanitize_text_field($advanced['email_notification_addresses']);
 
-		$usage_tracking = get_option('sbi_usage_tracking', array('last_send' => 0, 'enabled' => sbi_is_pro_version()));
-		if (isset($advanced['email_notification_addresses'])) {
-			$usage_tracking['enabled'] = false;
-			if (isset($advanced['usage_tracking'])) {
-				if (!is_array($usage_tracking)) {
-					$usage_tracking = array(
-						'enabled' => $advanced['usage_tracking'],
-						'last_send' => 0,
-					);
-				} else {
-					$usage_tracking['enabled'] = $advanced['usage_tracking'];
-				}
+		if ( isset( $advanced['usage_tracking'] ) ) {
+			$tracking_enabled = (bool) $advanced['usage_tracking'];
+			$usage_tracking   = get_option(
+				'sbi_usage_tracking',
+				array(
+					'enabled'   => SmashTrackingConfig::DEFAULT_ENABLED,
+					'last_send' => 0,
+				)
+			);
+			$last_send        = is_array( $usage_tracking ) && isset( $usage_tracking['last_send'] ) ? $usage_tracking['last_send'] : 0;
+			update_option(
+				'sbi_usage_tracking',
+				array(
+					'enabled'   => $tracking_enabled,
+					'last_send' => $last_send,
+				),
+				false
+			);
+			if ( ! $tracking_enabled ) {
+				wp_clear_scheduled_hook( SmashTrackingConfig::CRON_HOOK );
 			}
-			update_option('sbi_usage_tracking', $usage_tracking, false);
+		}
+
+		/**
+		 * Debug Tab — consent toggles.
+		 *
+		 * Routed through SBI_Consent::update() so cron reconciliation and the
+		 * 3-state notification source switch stay consistent. Pass null for
+		 * $dismiss_modal so the re-prompt-modal state is not affected by a
+		 * Settings save. The flags are stored as top-level wp_options, NOT in
+		 * sb_instagram_settings, so we do not add them to $sbi_settings.
+		 */
+		if ( isset( $model['debug'] ) && class_exists( 'SBI_Consent' ) ) {
+			$debug = (array) $model['debug'];
+			\SBI_Consent::update(
+				! empty( $debug['sbc_data_sharing_consent'] ),
+				! empty( $debug['sbc_in_plugin_notifications'] ),
+				null
+			);
 		}
 
 		// Update the sbi_style_settings option that contains data for translation and advanced tabs
 		update_option('sb_instagram_settings', $sbi_settings);
 
-		// clear cron caches
-		$this->sbi_clear_cache();
+		// clear cron caches. Not sbi_clear_cache(): it sends its own response and
+		// exits, so the response below (with aiWriteEnabled) would never go out.
+		$this->reset_caches_and_cron();
 
 		$response = new SBI_Response(true, array(
-			'cronNextCheck' => $this->get_cron_next_check()
+			'cronNextCheck' => $this->get_cron_next_check(),
+			// The stored toggle, so the page can resync after a save (a refused stale-tab ON, or a flip back on in the same tab).
+			'aiWriteEnabled' => !empty($sbi_settings['sb_instagram_ai_write_enabled']),
 		));
 		$response->send();
 	}
@@ -241,14 +279,23 @@ class SBI_Global_Settings
 			wp_send_json_error();
 		}
 
-		// Get the updated cron schedule interval and time settings from user input and update the database
-		$model = isset($_POST['model']) ? sanitize_text_field($_POST['model']) : null;
-		if ($model !== null) {
-			$model = (array)json_decode(stripslashes($model));
-			$feeds = (array)$model['feeds'];
-		}
+		$this->reset_caches_and_cron();
 
-		// Now get the updated cron schedule interval and time values
+		$response = new SBI_Response(true, array(
+			'cronNextCheck' => $this->get_cron_next_check()
+		));
+		$response->send();
+	}
+
+	/**
+	 * Clear the feed caches and restart the cache cron, without sending a response.
+	 *
+	 * Shared by the Clear Cache AJAX handler and the Settings save, which sends
+	 * its own response afterwards.
+	 */
+	private function reset_caches_and_cron()
+	{
+		// Get the updated cron schedule interval and time values
 		$sbi_settings = get_option('sb_instagram_settings', array());
 
 		$sbi_cache_cron_interval = $sbi_settings['sbi_cache_cron_interval'];
@@ -264,11 +311,6 @@ class SBI_Global_Settings
 		global $sb_instagram_posts_manager;
 		$sb_instagram_posts_manager->add_action_log('Saved settings on the configure tab.');
 		$sb_instagram_posts_manager->clear_api_request_delays();
-
-		$response = new SBI_Response(true, array(
-			'cronNextCheck' => $this->get_cron_next_check()
-		));
-		$response->send();
 	}
 
 	/**
@@ -315,7 +357,7 @@ class SBI_Global_Settings
 	/**
 	 * SBI Activate License Key
 	 *
-	 * @return SBI_Response
+	 * @return void
 	 * @since 6.0
 	 */
 	public function sbi_activate_license()
@@ -406,7 +448,7 @@ class SBI_Global_Settings
 	/**
 	 * SBI Deactivate License Key
 	 *
-	 * @return SBI_Response
+	 * @return void
 	 * @since 6.0
 	 */
 	public function sbi_deactivate_license()
@@ -440,7 +482,7 @@ class SBI_Global_Settings
 	/**
 	 * SBI Test Connection
 	 *
-	 * @return SBI_Response
+	 * @return void
 	 * @since 6.0
 	 */
 	public function sbi_test_connection()
@@ -484,7 +526,7 @@ class SBI_Global_Settings
 	/**
 	 * SBI Re-Check License
 	 *
-	 * @return SBI_Response
+	 * @return void
 	 * @since 6.0
 	 */
 	public function sbi_recheck_connection()
@@ -560,7 +602,7 @@ class SBI_Global_Settings
 	/**
 	 * SBI Import Feed Settings JSON
 	 *
-	 * @return SBI_Response
+	 * @return void
 	 * @since 6.0
 	 */
 	public function sbi_import_settings_json()
@@ -608,7 +650,7 @@ class SBI_Global_Settings
 	/**
 	 * SBI Export Feed Settings JSON
 	 *
-	 * @return SBI_Response
+	 * @return void
 	 * @since 6.0
 	 */
 	public function sbi_export_settings_json()
@@ -686,6 +728,7 @@ class SBI_Global_Settings
 
 		$user_id = get_current_user_id();
 		update_user_meta($user_id, 'sbi_ignore_new_user_sale_notice', 'always');
+		update_user_meta($user_id, 'sb_notice_discount_dismissed', true);
 		$sbi_notices->remove_notice('discount');
 
 		$sbi_statuses_option = get_option('sbi_statuses', array());
@@ -866,7 +909,7 @@ class SBI_Global_Settings
 		wp_enqueue_style(
 			'settings-style',
 			SBI_PLUGIN_URL . 'admin/assets/css/settings.css',
-			false,
+			array( 'common' ),
 			SBIVER
 		);
 
@@ -878,6 +921,16 @@ class SBI_Global_Settings
 			'settings-app',
 			SBI_PLUGIN_URL . 'admin/assets/js/settings.js',
 			array('feed-builder-svgs'),
+			SBIVER,
+			true
+		);
+		// SMASH-1378 A11Y-004: focus trap for popups declared as role="dialog".
+		// Mirrors SBI_Feed_Builder::builder_enqueue_admin_scripts so the Delete
+		// Source confirm dialog on the Settings page traps focus the same way.
+		wp_enqueue_script(
+			'sbi-popup-focus-trap',
+			SBI_PLUGIN_URL . 'admin/builder/assets/js/popup-focus-trap.js',
+			array(),
 			SBIVER,
 			true
 		);
@@ -900,9 +953,50 @@ class SBI_Global_Settings
 		$usage_tracking_url = 'https://smashballoon.com/instagram-feed/usage-tracking/?utm_campaign=instagram-free&utm_source=settings&utm_medium=docs';
 		$feed_issue_email_url = 'https://smashballoon.com/doc/email-report-is-not-in-my-inbox/?instagram&utm_campaign=instagram-free&utm_source=settings&utm_medium=docs';
 
+		// SMASH-1245 — Settings/Debug consent links route through the shared
+		// Consent package (sb-common owns the canonical URLs + per-surface UTM
+		// tags: utm_source=settings-consent, dynamic {plugin}-free campaign).
+		// Empty when the package is absent rather than duplicating the URLs here.
+		$sbi_consent_permissions_url = '';
+		$sbi_consent_terms_url       = '';
+		$sbi_consent_privacy_url     = '';
+		if ( class_exists( '\InstagramFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+			$sbi_consent_permissions_url = \InstagramFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'permissions', 'instagram' );
+			$sbi_consent_terms_url       = \InstagramFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'terms', 'instagram' );
+			$sbi_consent_privacy_url     = \InstagramFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'privacy', 'instagram' );
+		}
+
+		// SMASH-2484 — when the returned account is already saved (the earlier
+		// pass in global_enqueue_ressources_scripts() saves it), this pass
+		// deletes and re-inserts it under a new id, until SMASH-2488
+		// (awesomemotive/instagram-feed#645) updates the row in place. Read the
+		// list after this pass, or Manage Sources lists an id that no longer
+		// exists. Pro uses this order, and it stays correct after SMASH-2488.
+		$newly_retrieved_source_connection_data = SBI_Source::maybe_source_connection_data();
 		$sources_list = SBI_Feed_Builder::get_source_list();
 
 		// Extract only license keys and build array for extensions license keys
+
+		$wpvibe             = $this->get_wpvibe_status();
+		$wpvibe_org_url     = 'https://wordpress.org/plugins/vibe-ai/';
+		// Minimal allowlist for the AI Agents card copy below: these strings reach
+		// the localize-data array and are rendered with v-html in
+		// admin/views/settings/tab/general.php, so they must be sanitized before
+		// they're placed into $sbi_settings, not trusted as literal markup.
+		$ai_agents_allowed_html = array(
+			'br'     => array(),
+			'strong' => array(),
+			'a'      => array(
+				'href'   => array(),
+				'target' => array(),
+				'rel'    => array(),
+			),
+		);
+		/* translators: %s: URL to the WPVibe plugin on WordPress.org */
+		$wpvibe_description = wp_kses(
+			sprintf(__('Manage Instagram Feed from your favorite AI agent.<br>Works through <a href="%s" target="_blank" rel="noopener">WPVibe</a>, a free plugin you install once.', 'instagram-feed'), esc_url($wpvibe_org_url)), // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+			$ai_agents_allowed_html
+		);
 
 		$sbi_settings = array(
 			'admin_url' => admin_url(),
@@ -955,6 +1049,51 @@ class SBI_Global_Settings
 					'title' => __('Manage Sources', 'instagram-feed'),
 					'description' => __('Add or remove connected Instagram accounts', 'instagram-feed'),
 				),
+				'aiAgents' => array(
+					'title' => __('AI Agents', 'instagram-feed'),
+					'appsLabel' => __('Works with ChatGPT, Cursor and Claude', 'instagram-feed'),
+					// "Do more with AI on Pro" strip under the MCP Write Access box (AgDR-9006).
+					// Free edition only: an empty array in Pro, which the Vue v-if hides.
+					'proUpsell' => $this->get_ai_pro_upsell(),
+					'status' => $wpvibe['status'],
+					'basename' => $wpvibe['basename'],
+					'installDownloadUrl' => 'https://downloads.wordpress.org/plugin/vibe-ai.zip',
+					'adminUrl' => admin_url('admin.php?page=vibe-ai'),
+					'states' => array(
+						'not_installed' => array(
+							'heading' => __('Use Instagram Feed with Claude, ChatGPT and more.', 'instagram-feed'),
+							'description' => $wpvibe_description,
+							'button' => __('Install WPVibe for free', 'instagram-feed'),
+						),
+						'inactive' => array(
+							'heading' => __('Use Instagram Feed with Claude, ChatGPT and more.', 'instagram-feed'),
+							'description' => $wpvibe_description,
+							'button' => __('Activate WPVibe', 'instagram-feed'),
+						),
+						'active' => array(
+							'heading' => __('WPVibe is connected to Instagram Feed.', 'instagram-feed'),
+							'description' => wp_kses(
+								__('Manage Instagram Feed from your favorite AI agent.<br>Connect Claude, ChatGPT, Cursor or any MCP client in WPVibe.', 'instagram-feed'), // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+								$ai_agents_allowed_html
+							),
+							'button' => __('Open WPVibe', 'instagram-feed'),
+						),
+						'installFailed' => array(
+							'heading' => __('Use Instagram Feed with Claude, ChatGPT and more.', 'instagram-feed'),
+							'description' => $wpvibe_description,
+							'button' => __('Try again', 'instagram-feed'),
+							/* translators: %s: URL to the Plugins screen */
+							'error' => wp_kses(
+								sprintf(__('Couldn\'t install WPVibe. <a href="%s">Install it from the Plugins screen</a> instead.', 'instagram-feed'), esc_url(admin_url('plugins.php'))), // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+								$ai_agents_allowed_html
+							),
+						),
+					),
+				),
+				'mcpWrite' => array(
+					'title' => __('MCP Write Access', 'instagram-feed'),
+					'helpText' => __('This will allow your AI agent to make changes to Instagram Feed.', 'instagram-feed'), // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+				),
 				'preserveBox' => array(
 					'title' => __('Preserve settings if plugin is removed', 'instagram-feed'),
 					'description' => __('This will make sure that all of your feeds and settings are still saved even if the plugin is uninstalled', 'instagram-feed'),
@@ -990,7 +1129,9 @@ class SBI_Global_Settings
 					),
 					'am' => __('AM', 'instagram-feed'),
 					'pm' => __('PM', 'instagram-feed'),
-					'clearCache' => __('Clear All Caches', 'instagram-feed')
+					'clearCache' => __('Clear All Caches', 'instagram-feed'),
+					'cronTimeLabel' => __('Caching update time', 'instagram-feed'),
+					'cronAmPmLabel' => __('Caching update time AM/PM', 'instagram-feed')
 				),
 				'gdprBox' => array(
 					'title' => __('GDPR', 'instagram-feed'),
@@ -1040,7 +1181,7 @@ class SBI_Global_Settings
 				),
 				'optimizeBox' => array(
 					'header' => __('Image Optimization (Recommended)', 'instagram-feed'),
-					'helpText' => __('Creates multiple local copies of image in different sizes and uses smallest size based on where it is displayed. ', 'instagram-feed') . '<strong>' . __('Uses local Wordpress storage.', 'instagram-feed') . '</strong>',
+					'helpText' => __('Creates multiple local copies of image in different sizes and uses smallest size based on where it is displayed. ', 'instagram-feed') . '<strong>' . __('Uses local WordPress storage.', 'instagram-feed') . '</strong>',
 					'reset' => __('Reset Image Storage', 'instagram-feed'),
 					'title' => __('Use dynamic sizes', 'instagram-feed'),
 					'formatTitle' => __('Default Image Format', 'instagram-feed'),
@@ -1051,7 +1192,7 @@ class SBI_Global_Settings
 				),
 				'usageBox' => array(
 					'title' => __('Usage Tracking', 'instagram-feed'),
-					'helpText' => sprintf(__('This helps to prevent plugin and theme conflicts by sending a report in the background once per week about your settings and relevant site stats. It does not send sensitive information like access tokens, email addresses, or user info. This will also not affect your site performance. %s', 'instagram-feed'), '<a href="' . $usage_tracking_url . '" target="_blank">' . __('Learn More', 'instagram-feed') . '</a>'),
+					'helpText' => sprintf( __( 'Send a weekly report to Smash Balloon to help improve the product. No sensitive data is collected. You can disable this at any time. %s', 'instagram-feed' ), '<a href="' . $usage_tracking_url . '" target="_blank">' . __( 'Learn More', 'instagram-feed' ) . '</a>' ),
 				),
 				'resetErrorBox' => array(
 					'title' => __('Reset Error Log', 'instagram-feed'),
@@ -1060,7 +1201,7 @@ class SBI_Global_Settings
 				),
 				'ajaxBox' => array(
 					'title' => __('AJAX theme loading fix', 'instagram-feed'),
-					'helpText' => __('Fixes issues caused by Ajax loading themes. It can also be used to workaround JavaScript errors on the page.', 'instagram-feed'),
+					'helpText' => __('Fixes issues caused by Ajax loading themes. It can also be used to work around JavaScript errors on the page.', 'instagram-feed'),
 				),
 				'ajaxInitial' => array(
 					'title' => __('Load Initial Posts with AJAX', 'instagram-feed'),
@@ -1091,7 +1232,8 @@ class SBI_Global_Settings
 					'helpText' => __('If the feed is down due to a critical issue, we will switch to a cached version and notify you based on these settings. <a href="' . $feed_issue_email_url . '" target="_blank">View Documentation</a>', 'instagram-feed'),
 					'sendReport' => __('Send a report every', 'instagram-feed'),
 					'to' => __('to', 'instagram-feed'),
-					'placeholder' => __('Enter one or more email address separated by comma', 'instagram-feed'),
+					'placeholder' => __('Enter one or more email addresses separated by comma', 'instagram-feed'),
+					'emailLabel' => __('Report recipient email addresses', 'instagram-feed'),
 					'weekDays' => array(
 						array(
 							'val' => 'monday',
@@ -1129,6 +1271,22 @@ class SBI_Global_Settings
 					'clear' => __('Delete all Platform Data', 'instagram-feed'),
 				),
 			),
+			'debugTab'             => array(
+				'dataSharingTitle'    => __( 'Data sharing', 'instagram-feed' ),
+				'dataSharingDesc'     => __( 'We share limited, non-sensitive usage data to keep your plugins updated and improve our products. We never collect your feed content or your visitors’ personal information.', 'instagram-feed' ),
+				'permissionsLinkText' => __( 'What permissions are being granted?', 'instagram-feed' ),
+				'termsLinkText'       => __( 'Terms & Conditions', 'instagram-feed' ),
+				'privacyLinkText'     => __( 'Privacy', 'instagram-feed' ),
+				'permissionsUrl'      => $sbi_consent_permissions_url,
+				'termsUrl'            => $sbi_consent_terms_url,
+				'privacyUrl'          => $sbi_consent_privacy_url,
+				'notificationsTitle'  => __( 'In-Plugin Notifications', 'instagram-feed' ),
+				'notificationsDesc'   => __( 'We send you in-plugin notifications about updates, fixes, and new features.', 'instagram-feed' ),
+				// When any Smash Balloon Pro plugin is active, consent is forced on
+				// and governed centrally — the toggles are hidden on this tab.
+				// See SBI_Consent::is_locked_by_pro().
+				'lockedByPro'         => class_exists( 'SBI_Consent' ) && \SBI_Consent::is_locked_by_pro(),
+			),
 			'dialogBoxPopupScreen' => array(
 				'deleteSource' => array(
 					'heading' => __('Delete "#"?', 'instagram-feed'),
@@ -1138,21 +1296,20 @@ class SBI_Global_Settings
 
 			'selectSourceScreen' => SBI_Feed_Builder::select_source_screen_text(),
 			'nextCheck' => $this->get_cron_next_check(),
-			'loaderSVG' => '<svg version="1.1" id="loader-1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="20px" height="20px" viewBox="0 0 50 50" style="enable-background:new 0 0 50 50;" xml:space="preserve"><path fill="#fff" d="M43.935,25.145c0-10.318-8.364-18.683-18.683-18.683c-10.318,0-18.683,8.365-18.683,18.683h6.068c0-8.071,6.543-14.615,14.615-14.615c8.072,0,14.615,6.543,14.615,14.615H43.935z"><animateTransform attributeType="xml" attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.6s" repeatCount="indefinite"/></path></svg>',
-			'checkmarkSVG' => '<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg>',
-			'timesCircleSVG' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!-- Font Awesome Pro 5.15.4 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) --><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 448c-110.5 0-200-89.5-200-200S145.5 56 256 56s200 89.5 200 200-89.5 200-200 200zm101.8-262.2L295.6 256l62.2 62.2c4.7 4.7 4.7 12.3 0 17l-22.6 22.6c-4.7 4.7-12.3 4.7-17 0L256 295.6l-62.2 62.2c-4.7 4.7-12.3 4.7-17 0l-22.6-22.6c-4.7-4.7-4.7-12.3 0-17l62.2-62.2-62.2-62.2c-4.7-4.7-4.7-12.3 0-17l22.6-22.6c4.7-4.7 12.3-4.7 17 0l62.2 62.2 62.2-62.2c4.7-4.7 12.3-4.7 17 0l22.6 22.6c4.7 4.7 4.7 12.3 0 17z"/></svg>',
-			'uploadSVG' => '<svg class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+			'loaderSVG' => '<svg version="1.1" id="loader-1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="20px" height="20px" viewBox="0 0 50 50" style="enable-background:new 0 0 50 50;" xml:space="preserve" aria-hidden="true" focusable="false"><path fill="#fff" d="M43.935,25.145c0-10.318-8.364-18.683-18.683-18.683c-10.318,0-18.683,8.365-18.683,18.683h6.068c0-8.071,6.543-14.615,14.615-14.615c8.072,0,14.615,6.543,14.615,14.615H43.935z"><animateTransform attributeType="xml" attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.6s" repeatCount="indefinite"/></path></svg>',
+			'checkmarkSVG' => '<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" aria-hidden="true" focusable="false"><path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg>',
+			'timesCircleSVG' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><!-- Font Awesome Pro 5.15.4 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) --><path d="M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8zm0 448c-110.5 0-200-89.5-200-200S145.5 56 256 56s200 89.5 200 200-89.5 200-200 200zm101.8-262.2L295.6 256l62.2 62.2c4.7 4.7 4.7 12.3 0 17l-22.6 22.6c-4.7 4.7-12.3 4.7-17 0L256 295.6l-62.2 62.2c-4.7 4.7-12.3 4.7-17 0l-22.6-22.6c-4.7-4.7-4.7-12.3 0-17l62.2-62.2-62.2-62.2c-4.7-4.7-4.7-12.3 0-17l22.6-22.6c4.7-4.7 12.3-4.7 17 0l62.2 62.2 62.2-62.2c4.7-4.7 12.3-4.7 17 0l22.6 22.6c4.7 4.7 4.7 12.3 0 17z"/></svg>',
+			'uploadSVG' => '<svg class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
 			<path d="M0.166748 14.6667H11.8334V13H0.166748V14.6667ZM0.166748 6.33333H3.50008V11.3333H8.50008V6.33333H11.8334L6.00008 0.5L0.166748 6.33333Z" fill="#141B38"/></svg>',
-			'checkmarCircleSVG' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!-- Font Awesome Pro 5.15.4 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) --><path d="M504 256c0 136.967-111.033 248-248 248S8 392.967 8 256 119.033 8 256 8s248 111.033 248 248zM227.314 387.314l184-184c6.248-6.248 6.248-16.379 0-22.627l-22.627-22.627c-6.248-6.249-16.379-6.249-22.628 0L216 308.118l-70.059-70.059c-6.248-6.248-16.379-6.248-22.628 0l-22.627 22.627c-6.248 6.248-6.248 16.379 0 22.627l104 104c6.249 6.249 16.379 6.249 22.628.001z"/></svg>',
-			'exportSVG' => '<svg class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+			'checkmarCircleSVG' => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true" focusable="false"><!-- Font Awesome Pro 5.15.4 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) --><path d="M504 256c0 136.967-111.033 248-248 248S8 392.967 8 256 119.033 8 256 8s248 111.033 248 248zM227.314 387.314l184-184c6.248-6.248 6.248-16.379 0-22.627l-22.627-22.627c-6.248-6.249-16.379-6.249-22.628 0L216 308.118l-70.059-70.059c-6.248-6.248-16.379-6.248-22.628 0l-22.627 22.627c-6.248 6.248-6.248 16.379 0 22.627l104 104c6.249 6.249 16.379 6.249 22.628.001z"/></svg>',
+			'exportSVG' => '<svg class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
 			<path d="M0.166748 14.6667H11.8334V13H0.166748V14.6667ZM11.8334 5.5H8.50008V0.5H3.50008V5.5H0.166748L6.00008 11.3333L11.8334 5.5Z" fill="#141B38"/></svg>',
-			'reloadSVG' => '<svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+			'reloadSVG' => '<svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
 			<path d="M15.8335 3.66667L12.5002 7H15.0002C15.0002 8.32608 14.4734 9.59785 13.5357 10.5355C12.598 11.4732 11.3262 12 10.0002 12C9.16683 12 8.3585 11.7917 7.66683 11.4167L6.45016 12.6333C7.51107 13.3085 8.74261 13.667 10.0002 13.6667C11.7683 13.6667 13.464 12.9643 14.7142 11.714C15.9644 10.4638 16.6668 8.76811 16.6668 7H19.1668L15.8335 3.66667ZM5.00016 7C5.00016 5.67392 5.52695 4.40215 6.46463 3.46447C7.40231 2.52678 8.67408 2 10.0002 2C10.8335 2 11.6418 2.20833 12.3335 2.58333L13.5502 1.36667C12.4893 0.691461 11.2577 0.332984 10.0002 0.333334C8.23205 0.333334 6.53636 1.03571 5.28612 2.28596C6.03587 3.5362 3.3335 5.23189 3.3335 7H0.833496L4.16683 10.3333L7.50016 7" fill="#141B38"/></svg>',
-			'tooltipHelpSvg' => '<svg width="20" height="21" viewBox="0 0 20 21" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.1665 8H10.8332V6.33333H9.1665V8ZM9.99984 17.1667C6.32484 17.1667 3.33317 14.175 3.33317 10.5C3.33317 6.825 6.32484 3.83333 9.99984 3.83333C13.6748 3.83333 16.6665 6.825 16.6665 10.5C16.6665 14.175 13.6748 17.1667 9.99984 17.1667ZM9.99984 2.16666C8.90549 2.16666 7.82186 2.38221 6.81081 2.801C5.79976 3.21979 4.8811 3.83362 4.10728 4.60744C2.54448 6.17024 1.6665 8.28986 1.6665 10.5C1.6665 12.7101 2.54448 14.8298 4.10728 16.3926C4.8811 17.1664 5.79976 17.7802 6.81081 18.199C7.82186 18.6178 8.90549 18.8333 9.99984 18.8333C12.21 18.8333 14.3296 17.9554 15.8924 16.3926C17.4552 14.8298 18.3332 12.7101 18.3332 10.5C18.3332 9.40565 18.1176 8.32202 17.6988 7.31097C17.28 6.29992 16.6662 5.38126 15.8924 4.60744C15.1186 3.83362 14.1999 3.21979 13.1889 2.801C12.1778 2.38221 11.0942 2.16666 9.99984 2.16666ZM9.1665 14.6667H10.8332V9.66666H9.1665V14.6667Z" fill="#434960"/></svg>',
-			'resetSVG' => '<svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.668 3.33317L10.0013 5.99984H12.0013C12.0013 7.0607 11.5799 8.07812 10.8297 8.82826C10.0796 9.57841 9.06217 9.99984 8.0013 9.99984C7.33463 9.99984 6.68797 9.83317 6.13463 9.53317L5.1613 10.5065C6.01003 11.0467 6.99526 11.3335 8.0013 11.3332C9.41579 11.3332 10.7723 10.7713 11.7725 9.77107C12.7727 8.77088 13.3346 7.41432 13.3346 5.99984H15.3346L12.668 3.33317ZM4.0013 5.99984C4.0013 4.93897 4.42273 3.92156 5.17287 3.17141C5.92302 2.42126 6.94044 1.99984 8.0013 1.99984C8.66797 1.99984 9.31464 2.1665 9.86797 2.4665L10.8413 1.49317C9.99257 0.953006 9.00734 0.666224 8.0013 0.666504C6.58681 0.666504 5.23026 1.22841 4.23007 2.2286C3.22987 3.2288 2.66797 4.58535 2.66797 5.99984H0.667969L3.33464 8.6665L6.0013 5.99984" fill="#141B38"/></svg>'
+			'tooltipHelpSvg' => '<svg width="20" height="21" viewBox="0 0 20 21" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path d="M9.1665 8H10.8332V6.33333H9.1665V8ZM9.99984 17.1667C6.32484 17.1667 3.33317 14.175 3.33317 10.5C3.33317 6.825 6.32484 3.83333 9.99984 3.83333C13.6748 3.83333 16.6665 6.825 16.6665 10.5C16.6665 14.175 13.6748 17.1667 9.99984 17.1667ZM9.99984 2.16666C8.90549 2.16666 7.82186 2.38221 6.81081 2.801C5.79976 3.21979 4.8811 3.83362 4.10728 4.60744C2.54448 6.17024 1.6665 8.28986 1.6665 10.5C1.6665 12.7101 2.54448 14.8298 4.10728 16.3926C4.8811 17.1664 5.79976 17.7802 6.81081 18.199C7.82186 18.6178 8.90549 18.8333 9.99984 18.8333C12.21 18.8333 14.3296 17.9554 15.8924 16.3926C17.4552 14.8298 18.3332 12.7101 18.3332 10.5C18.3332 9.40565 18.1176 8.32202 17.6988 7.31097C17.28 6.29992 16.6662 5.38126 15.8924 4.60744C15.1186 3.83362 14.1999 3.21979 13.1889 2.801C12.1778 2.38221 11.0942 2.16666 9.99984 2.16666ZM9.1665 14.6667H10.8332V9.66666H9.1665V14.6667Z" fill="#434960"/></svg>',
+			'resetSVG' => '<svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path d="M12.668 3.33317L10.0013 5.99984H12.0013C12.0013 7.0607 11.5799 8.07812 10.8297 8.82826C10.0796 9.57841 9.06217 9.99984 8.0013 9.99984C7.33463 9.99984 6.68797 9.83317 6.13463 9.53317L5.1613 10.5065C6.01003 11.0467 6.99526 11.3335 8.0013 11.3332C9.41579 11.3332 10.7723 10.7713 11.7725 9.77107C12.7727 8.77088 13.3346 7.41432 13.3346 5.99984H15.3346L12.668 3.33317ZM4.0013 5.99984C4.0013 4.93897 4.42273 3.92156 5.17287 3.17141C5.92302 2.42126 6.94044 1.99984 8.0013 1.99984C8.66797 1.99984 9.31464 2.1665 9.86797 2.4665L10.8413 1.49317C9.99257 0.953006 9.00734 0.666224 8.0013 0.666504C6.58681 0.666504 5.23026 1.22841 4.23007 2.2286C3.22987 3.2288 2.66797 4.58535 2.66797 5.99984H0.667969L3.33464 8.6665L6.0013 5.99984" fill="#141B38"/></svg>'
 		);
 
-		$newly_retrieved_source_connection_data = SBI_Source::maybe_source_connection_data();
 		if ($newly_retrieved_source_connection_data) {
 			$sbi_settings['newSourceData'] = $newly_retrieved_source_connection_data;
 		}
@@ -1169,6 +1326,31 @@ class SBI_Global_Settings
 	}
 
 	/**
+	 * Resolve the MCP Write Access value to store for a Settings save.
+	 *
+	 * The page posts back the whole model it loaded, so a tab opened while the
+	 * toggle was on would, on any later unrelated save, write `true` back over a
+	 * toggle an admin has since turned off. The page therefore carries the value
+	 * it loaded the toggle with (`sbi_ai_write_enabled_loaded`). Turning writes OFF
+	 * is always honoured (so the gate epoch still records the revocation); turning
+	 * them ON is accepted only when this page loaded the toggle OFF. A post with no
+	 * loaded marker (a page rendered by an older version) can never enable writes.
+	 *
+	 * @param array $advanced Posted `advanced` model section.
+	 * @param bool  $stored   Currently stored value.
+	 * @return bool
+	 */
+	private function reconcile_ai_write_toggle(array $advanced, $stored)
+	{
+		$posted = !empty($advanced['sbi_ai_write_enabled']);
+		if (!$posted) {
+			return false;
+		}
+		$loaded_off = array_key_exists('sbi_ai_write_enabled_loaded', $advanced) && empty($advanced['sbi_ai_write_enabled_loaded']);
+		return $loaded_off ? true : (bool) $stored;
+	}
+
+	/**
 	 * The Settings Data
 	 *
 	 * @return array
@@ -1180,7 +1362,6 @@ class SBI_Global_Settings
 		$sbi_cache_cron_interval = $sbi_settings['sbi_cache_cron_interval'];
 		$sbi_cache_cron_time = $sbi_settings['sbi_cache_cron_time'];
 		$sbi_cache_cron_am_pm = $sbi_settings['sbi_cache_cron_am_pm'];
-		$usage_tracking = get_option('sbi_usage_tracking', array('last_send' => 0, 'enabled' => sbi_is_pro_version()));
 		$sbi_ajax = $sbi_settings['sb_instagram_ajax_theme'];
 		$active_gdpr_plugin = SB_Instagram_GDPR_Integrations::gdpr_plugins_active();
 		$sbi_preserve_setitngs = $sbi_settings['sb_instagram_preserve_settings'];
@@ -1196,6 +1377,13 @@ class SBI_Global_Settings
 		$wpconsent_file = 'wpconsent-cookies-banner-privacy-suite/wpconsent.php';
 		$is_wpconsent_installed = file_exists(WP_PLUGIN_DIR . '/' . $wpconsent_file);
 		$is_wpconsent_active = is_plugin_active($wpconsent_file);
+
+		// Seed Debug-tab toggles from the central consent flags. These flags live in
+		// top-level options (sbc_data_sharing_consent / sbc_in_plugin_notifications),
+		// not inside sb_instagram_settings — see ConsentManager::update().
+		$consent_flags = class_exists( 'SBI_Consent' )
+			? \SBI_Consent::flags()
+			: array_fill_keys( array( 'dsc', 'notif' ), (bool) 0 );
 
 		return array(
 			'general' => array(
@@ -1219,7 +1407,7 @@ class SBI_Global_Settings
 			'advanced' => array(
 				'sbi_enable_resize' => !$sbi_settings['sb_instagram_disable_resize'],
 				'image_format' => $sbi_settings['image_format'],
-				'usage_tracking' => $usage_tracking['enabled'],
+				'usage_tracking' => SmashTrackingConfig::is_enabled(),
 				'sbi_ajax' => $sbi_ajax,
 				'sb_ajax_initial' => $sbi_settings['sb_ajax_initial'],
 				'sbi_enqueue_js_in_head' => $sbi_settings['enqueue_js_in_head'],
@@ -1231,7 +1419,15 @@ class SBI_Global_Settings
 				'enable_email_report' => $sbi_settings['enable_email_report'],
 				'email_notification' => $sbi_settings['email_notification'],
 				'email_notification_addresses' => $sbi_settings['email_notification_addresses'],
-			)
+				'sbi_ai_write_enabled' => !empty($sbi_settings['sb_instagram_ai_write_enabled']),
+				// What this page load saw for MCP Write Access; posted back with the
+				// rest of the model so the save handler can tell a real flip from a stale tab.
+				'sbi_ai_write_enabled_loaded' => !empty($sbi_settings['sb_instagram_ai_write_enabled']),
+			),
+			'debug'           => array(
+				'sbc_data_sharing_consent'    => $consent_flags['dsc'],
+				'sbc_in_plugin_notifications' => $consent_flags['notif'],
+			),
 		);
 	}
 
@@ -1268,6 +1464,30 @@ class SBI_Global_Settings
 				'fbProfile' => 'https://www.instagram.com/SmashBalloon/',
 				'twitterProfile' => 'https://twitter.com/smashballoon',
 			),
+		);
+	}
+
+	/**
+	 * Data for the "Do more with AI on Pro" strip in the AI Agents card.
+	 *
+	 * Free edition only; returns an empty array in Pro. Features are picked by popup
+	 * key (SBI_Pro_Upsell::BANNER_FEATURES) from the builder's own Pro-feature copy,
+	 * so the strip never carries text of its own beyond the title and button label.
+	 *
+	 * @return array{title: string, features: string[], button: string, url: string}|array{}
+	 */
+	private function get_ai_pro_upsell()
+	{
+		if (!SBI_Pro_Upsell::is_free()) {
+			return array();
+		}
+		$names = SBI_Pro_Upsell::banner_feature_names();
+		return array(
+			'title' => __('Do more with AI on Pro', 'instagram-feed'),
+			'features' => $names,
+			'button' => __('Upgrade to Pro', 'instagram-feed'),
+			'newTab' => __('(opens in a new tab)', 'instagram-feed'),
+			'url' => SBI_Pro_Upsell::upgrade_url('ai-agents-card', 'settings'),
 		);
 	}
 
@@ -1309,5 +1529,43 @@ class SBI_Global_Settings
 	public function global_settings()
 	{
 		SBI_View::render('settings.page');
+	}
+
+	/**
+	 * Determine WPVibe's install/activation status.
+	 *
+	 * Scans the installed-plugins list for a plugin whose folder is
+	 * `vibe-ai/`, rather than assuming a specific main-file name -- a
+	 * plugin's wp.org slug and its main file are not guaranteed to match.
+	 *
+	 * @return array{status: string, basename: string|null} status is one
+	 *               of 'not_installed' | 'inactive' | 'active'.
+	 * @since 6.14.0
+	 */
+	private function get_wpvibe_status()
+	{
+		if (!function_exists('get_plugins')) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$wpvibe_basename = null;
+		foreach (array_keys(get_plugins()) as $plugin_file) {
+			if (strtok($plugin_file, '/') === 'vibe-ai') {
+				$wpvibe_basename = $plugin_file;
+				break;
+			}
+		}
+
+		if (null === $wpvibe_basename) {
+			return array(
+				'status' => 'not_installed',
+				'basename' => null,
+			);
+		}
+
+		return array(
+			'status' => is_plugin_active($wpvibe_basename) ? 'active' : 'inactive',
+			'basename' => $wpvibe_basename,
+		);
 	}
 }

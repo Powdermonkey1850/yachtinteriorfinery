@@ -556,7 +556,7 @@ class Dsm_Supreme_Modules_For_Divi {
 			</p>
 			<p class="dsm-css-classes-meta-box-options">
 				<label for="dsm-css-classes-meta-box-options" style="display: block; font-weight: bold; margin-bottom: 5px;">CSS Classes:</label>
-				<input name="dsm-css-classes-meta-box-options" style="width:100%;" type="text" value="<?php echo get_post_meta( $post->ID, 'dsm-css-classes-meta-box-options', true ); ?>">
+				<input name="dsm-css-classes-meta-box-options" style="width:100%;" type="text" value="<?php echo esc_attr( dsm_sanitize_css_class_list( get_post_meta( $post->ID, 'dsm-css-classes-meta-box-options', true ) ) ); ?>">
 			</p>
 			<p class="dsm-remove-default-footer-meta-box-options" style="margin-bottom: 0;">
 				<input type="checkbox" name="dsm-remove-default-footer-meta-box-options" id="dsm-remove-default-footer-meta-box-options" value="yes" 
@@ -616,7 +616,7 @@ class Dsm_Supreme_Modules_For_Divi {
 		}
 
 		if ( isset( $_POST['dsm-css-classes-meta-box-options'] ) ) {
-			update_post_meta( $post_id, 'dsm-css-classes-meta-box-options', sanitize_text_field( $_POST['dsm-css-classes-meta-box-options'] ) );
+			update_post_meta( $post_id, 'dsm-css-classes-meta-box-options', dsm_sanitize_css_class_list( wp_unslash( $_POST['dsm-css-classes-meta-box-options'] ) ) );
 		}
 
 		if ( isset( $_POST['dsm-remove-default-footer-meta-box-options'] ) ) {
@@ -681,7 +681,7 @@ class Dsm_Supreme_Modules_For_Divi {
 			$footer_template_css       = get_post_custom( $footer_template_ID );
 
 			if ( $footer_template_css['dsm-css-classes-meta-box-options'][0] != '' ) {
-				$footer_template_css_output = get_post_meta( $footer_css_template->post->ID, 'dsm-css-classes-meta-box-options', true );
+				$footer_template_css_output = dsm_sanitize_css_class_list( get_post_meta( $footer_css_template->post->ID, 'dsm-css-classes-meta-box-options', true ) );
 			} else {
 				$footer_template_css_output = '';
 			}
@@ -697,11 +697,12 @@ class Dsm_Supreme_Modules_For_Divi {
 			}
 
 			if ( ! et_core_is_fb_enabled() ) {
-				$footer_output = sprintf(
+				$footer_class_attribute = '' !== $footer_template_css_output ? 'dsm-footer ' . $footer_template_css_output : 'dsm-footer';
+				$footer_output          = sprintf(
 					'<footer id="dsm-footer" class="%2$s" itemscope="itemscope" itemtype="https://schema.org/WPFooter">%1$s</footer>
                     ',
 					$footer_template_shortcode,
-					( '' !== $footer_template_css_output ? 'dsm-footer ' . $footer_template_css_output : 'dsm-footer' )
+					esc_attr( $footer_class_attribute )
 				);
 				echo $footer_output;
 			}
@@ -1297,4 +1298,34 @@ class Dsm_Supreme_Modules_For_Divi {
 			}
 		}
 	}
+}
+
+/**
+ * Reduce a CSS class string to a space-separated list of valid class tokens.
+ *
+ * Quotes and any other character that is invalid in an HTML class name are removed.
+ *
+ * @param mixed $classes Raw class list.
+ * @return string
+ */
+function dsm_sanitize_css_class_list( $classes ) {
+	if ( ! is_string( $classes ) ) {
+		return '';
+	}
+
+	$tokens = preg_split( '/\s+/', trim( $classes ), -1, PREG_SPLIT_NO_EMPTY );
+	if ( ! is_array( $tokens ) ) {
+		return '';
+	}
+
+	$sanitized = array();
+
+	foreach ( $tokens as $token ) {
+		$class = sanitize_html_class( $token );
+		if ( '' !== $class ) {
+			$sanitized[] = $class;
+		}
+	}
+
+	return implode( ' ', $sanitized );
 }

@@ -25,6 +25,7 @@ use SmashBalloon\TikTokFeeds\Common\Database\FeedCacheTable;
 use SmashBalloon\TikTokFeeds\Common\Database\PostsTable;
 use SmashBalloon\TikTokFeeds\Common\Utils;
 use SmashBalloon\TikTokFeeds\Common\Relay\Relay;
+use SmashBalloon\TikTokFeeds\Common\Services\Upgrade\Routines\RegisterWebsiteRoutine;
 
 /**
  * Class AjaxHandlerService
@@ -64,7 +65,16 @@ class AjaxHandlerService extends ServiceProvider
 		$feed_title    = isset($_POST['feed_title']) ? sanitize_text_field($_POST['feed_title']) : '';
 		$feed_type     = isset($_POST['feedType']) ? sanitize_text_field($_POST['feedType']) : 'own_timeline';
 		$feed_template = isset($_POST['feedTemplate']) ? sanitize_text_field($_POST['feedTemplate']) : 'default';
-		$sources       = isset($_POST['sources']) ? sbtt_sanitize_data($_POST['sources']) : [];
+		$sources       = isset($_POST['sources']) ? (array) sbtt_sanitize_data($_POST['sources']) : [];
+		// is_scalar rather than is_string: sbtt_sanitize_data() coerces numeric values
+		// to int, so an all-digit open_id arrives here as an int and is_string() would
+		// drop it silently, creating a feed with no sources and no error. Booleans are
+		// excluded because (string) true is '1', which would pass the pattern as a
+		// bogus source id. Survivors are cast back to string to match the varchar
+		// open_id column and how every other path stores a source.
+		$sources       = array_map('strval', array_values(array_filter($sources, static function ($id) {
+			return is_scalar($id) && ! is_bool($id) && (bool) preg_match('/^[A-Za-z0-9._-]{1,255}$/', (string) $id);
+		})));
 		$styles        = isset($_POST['feed_style']) ? sanitize_text_field(wp_unslash($_POST['feed_style'])) : '';
 		$settings      = isset($_POST['settings']) ? sbtt_sanitize_data($_POST['settings']) : [];
 
@@ -96,8 +106,20 @@ class AjaxHandlerService extends ServiceProvider
 		if ($feed_id) {
 			$return = [	'feed_id' => $feed_id ];
 
-			if (isset($_POST['get_posts']) && $_POST['get_posts'] == true) {
-				$feed = new Feed($settings, $feed_id, new FeedCache($feed_id));
+			// get_posts arrives as the string 'true' or 'false', and a loose `== true`
+			// treats any non-empty string as true, so every builder Save ran a full
+			// render. Parse it as a real boolean.
+			$get_posts = isset($_POST['get_posts'])
+				&& filter_var(wp_unslash($_POST['get_posts']), FILTER_VALIDATE_BOOLEAN);
+
+			if ($get_posts) {
+				// Suffix explicitly rather than relying on FeedCache's is_admin()
+				// heuristic: this is admin-ajax without previewSettings, so the
+				// heuristic adds nothing and the render would write the unsuffixed
+				// front-end row. Pro's unauthenticated load-more handler treats that
+				// row as proof the feed has been embedded, so a builder save must
+				// never create it.
+				$feed = new Feed($settings, $feed_id, new FeedCache($feed_id . '_CUSTOMIZER'));
 				$feed->init();
 				$feed->get_set_cache();
 				$posts           = $feed->get_post_set_page();
@@ -185,8 +207,11 @@ class AjaxHandlerService extends ServiceProvider
 		$feed_name        = isset($_POST['feedName']) ? sanitize_text_field(wp_unslash($_POST['feedName'])) : '';
 		$preview_settings = isset($_POST['previewSettings']) ? sbtt_sanitize_data($_POST['previewSettings']) : [];
 
-		// Get updated feed info based on settings.
-		$feed_cache = new FeedCache($feed_id, 12 * HOUR_IN_SECONDS);
+		// Get updated feed info based on settings. Suffix explicitly, like
+		// builder_update(): a request with feedID but no previewSettings gets
+		// nothing from FeedCache's heuristic, and would write the unsuffixed row
+		// that Pro's load-more gate treats as proof of an embed.
+		$feed_cache = new FeedCache($feed_id . '_CUSTOMIZER', 12 * HOUR_IN_SECONDS);
 		$feed_cache->clear('posts');
 
 		$feed = new Feed($preview_settings, $feed_id, $feed_cache);
@@ -388,6 +413,10 @@ class AjaxHandlerService extends ServiceProvider
 		update_option('sbtt_global_settings', $global_settings);
 		delete_option('sbtt_resize_images_data');
 
+		// Register now, so a Connect clicked right after this works on a moved site.
+		delete_transient('sbtt_register_website_retry');
+		( new RegisterWebsiteRoutine() )->run();
+
 		wp_send_json_success();
 
 		wp_die();
@@ -475,6 +504,11 @@ class AjaxHandlerService extends ServiceProvider
 		$source = Utils::retrieve_user_info($oauth_data);
 
 		if ($source && ! isset($source['error'])) {
+			// Reconnecting can refresh tokens for an existing source, so clear the
+			// cached feed data (incl. the stale errors entry that blocks refetch)
+			// so the next view pulls fresh posts.
+			(new FeedCacheTable())->clear_feed_cache();
+
 			// Store source data in transient for retrieval after page reload.
 			// This enables the feed creation flow to continue after OAuth redirect.
 			// TTL of 5 minutes allows for slow connections and speed bump confirmation.

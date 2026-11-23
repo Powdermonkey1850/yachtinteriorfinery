@@ -421,7 +421,7 @@ class DSM_ImageAccordionChild extends ET_Builder_Module {
 
 		$image_accordion_icon_image = '' !== $image_accordion_icon_image ? sprintf(
 			'<div class="dsm_image_accordion_image_icon_wrapper"><img src="%1$s" class="dsm_image_accordion_img"></div>',
-			$image_accordion_icon_image
+			esc_url( $image_accordion_icon_image )
 		) : '';
 
 		$ia_icon = 'on' === $use_accordion_icon ? $image_accordion_icon : $image_accordion_icon_image;

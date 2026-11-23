@@ -8,6 +8,7 @@ namespace SmashBalloon\Reviews\Common;
 use SmashBalloon\Reviews\Common\Builder\SBR_Sources;
 use SmashBalloon\Reviews\Common\Customizer\DB;
 use SmashBalloon\Reviews\Common\Helpers\SBR_Error_Handler;
+use SmashBalloon\Reviews\Common\Utils\SourceFetchOutcome;
 use SmashBalloon\Reviews\Pro\Integrations\Providers\EDD;
 
 class Util
@@ -99,8 +100,15 @@ class Util
 				'name' => 'TripAdvisor',
 				'heading' => __('Page URL', 'reviews-feed'),
 				'placeholder' => __('https://tripadvisor.com/...', 'reviews-feed'),
+				// API key is OPTIONAL: the relay falls back to a shared TripAdvisor
+				// Content API key when none is sent, so the add-source flow must keep
+				// the Skip button. 'apiKey' => true still shows the (optional) key step;
+				// dropping 'mandatoryApiKey' stops the customizer from hiding Skip and
+				// gating Next on a non-empty field. (SMASH-1690 / WPSA #71949)
 				'apiKey' => true,
-				'mandatoryApiKey'    => true,
+				// Same shape as google and yelp above. The page itself is being
+				// rewritten for Terra under SMASH-1974 — until it is, it still walks
+				// the reader to the retired ?screen=credentials portal.
 				'docLink' => 'https://smashballoon.com/doc/creating-a-tripadvisor-api-key/?utm_campaign=' . $campaign . '&utm_source=settings&utm_medium=docs'
 			],
 			[
@@ -323,7 +331,196 @@ class Util
 			]);
 		}
 
+		// Unshift, not push. Customizer bundles before SMASH-2411 render
+		// pluginNotices[0] and nothing else, so a later notice is invisible
+		// whenever an earlier one fires. Both
+		// notices above gate on `sbr_apikeys_limit`, which is currently never
+		// populated (SMASH-1901 D3), so appending happened to work; the moment
+		// that bug is fixed it would have silently suppressed this one on exactly
+		// the sites hitting source limits. This has a hard external deadline and
+		// they do not, so it goes first rather than depending on a bug staying
+		// broken.
+		$tripadvisor_sunset = self::get_tripadvisor_sunset_notice();
+		if ($tripadvisor_sunset !== null) {
+			array_unshift($notices, $tripadvisor_sunset);
+		}
+
+		// Last: a bundle older than SMASH-2411 still renders only pluginNotices[0].
+		$failing_sources = self::get_failing_sources_notice();
+		if ($failing_sources !== null) {
+			$notices[] = $failing_sources;
+		}
+
 		return $notices;
+	}
+
+	/**
+	 * A source name as HTML text for PluginNotices' innerHTML: decoded, then escaped, so "I &lt;3 Cafe"
+	 * (sanitize_text_field()'s storage) reads "I <3 Cafe" and a stored tag reads as text. No strip: it cuts
+	 * "I <3 Cafe" to "I". Both transports keep the escape — the JSON responses and wp_localize_script(), which
+	 * decodes only top-level scalars (class-wp-scripts.php:657); pluginNotices is nested.
+	 *
+	 * @param string $text
+	 * @return string
+	 */
+	private static function notice_html($text)
+	{
+		return esc_html(trim(html_entity_decode($text, ENT_QUOTES, 'UTF-8')));
+	}
+
+	/** How many failing source names the notice lists before "and N more". */
+	const FAILING_SOURCES_NOTICE_NAMES = 5;
+
+	/**
+	 * Name the sources a feed uses that the site itself has to fix (SMASH-2411): config states, such as an inactive
+	 * WooCommerce or EDD. Provider failures are never shown to the client; we monitor providers ourselves.
+	 *
+	 * @return array|null Notice in the get_plugin_notices() shape, or null.
+	 */
+	public static function get_failing_sources_notice()
+	{
+		$db = new DB();
+		$failing = [];
+		foreach ($db->sources_with_fetch_state() as $row) {
+			$state = SourceFetchOutcome::decode_state((string) $row['error']);
+			if ($state === null || $state['scope'] !== SourceFetchOutcome::SCOPE_CONFIG) {
+				continue;
+			}
+			$name = self::notice_html((string) $row['name']);
+			$failing[(string) $row['account_id']] = $name !== '' ? $name : self::notice_html((string) $row['account_id']);
+		}
+		if (empty($failing)) {
+			return null;
+		}
+
+		// Exact ids from each feed's settings: a LIKE would let "acme" match "acme-shop".
+		$used = array_values(array_intersect_key($failing, array_flip($db->feed_source_ids())));
+		if (empty($used)) {
+			return null;
+		}
+
+		$names = implode(', ', array_slice($used, 0, self::FAILING_SOURCES_NOTICE_NAMES));
+		$more = count($used) - self::FAILING_SOURCES_NOTICE_NAMES;
+		if ($more > 0) {
+			/* translators: 1: comma-separated source names, 2: how many more sources */
+			$names = sprintf(__('%1$s and %2$d more', 'reviews-feed'), $names, $more);
+		}
+
+		return [
+			'type' => 'error',
+			'heading' => __('Some sources could not fetch new reviews.', 'reviews-feed'),
+			'description' => sprintf(
+				/* translators: %s: comma-separated source names */
+				__('Affected: %s. The plugin or item these sources read reviews from isn\'t available. Reviews already saved still show in your feeds.', 'reviews-feed'),
+				$names
+			),
+		];
+	}
+
+	/**
+	 * Timestamp TripAdvisor deprecates every legacy Content API key.
+	 *
+	 * Verbatim from docs.terra.tripadvisor.com/docs/faq.md: "The legacy Content
+	 * API will be sunset and API keys deprecated on August 31, 2026."
+	 */
+	const TRIPADVISOR_CONTENT_API_SUNSET = '2026-08-31T23:59:59+00:00';
+
+	/**
+	 * Warn only the sites that have to act (SMASH-1835).
+	 *
+	 * A site running its OWN legacy TripAdvisor key loses it on the sunset date,
+	 * and only the site owner can replace it. A keyless site needs no notice: it
+	 * rides the relay's shared credential and moves platforms without any action
+	 * here, so nagging it would be noise about something it cannot fix.
+	 *
+	 * @return array|null Notice in the get_plugin_notices() shape, or null.
+	 */
+	public static function get_tripadvisor_sunset_notice()
+	{
+		$stored_keys = get_option('sbr_apikeys', []);
+		$key = is_array($stored_keys) && isset($stored_keys['tripadvisor']) && is_string($stored_keys['tripadvisor'])
+			? trim($stored_keys['tripadvisor'])
+			: '';
+
+		// No key of their own, or already a Terra key — nothing to do.
+		if ($key === '' || self::is_tripadvisor_terra_key($key)) {
+			return null;
+		}
+
+		// A dying key only matters if something is actually using it.
+		if (empty(SBR_Sources::sources_by_providers(['tripadvisor']))) {
+			return null;
+		}
+
+		$sunset = strtotime(self::TRIPADVISOR_CONTENT_API_SUNSET);
+		$has_passed = $sunset !== false && time() > $sunset;
+
+		// The const is the only place the date lives. It used to be hardcoded in
+		// the copy as well, so moving the const would have left the heading
+		// quoting the old date while the branch flipped. Interpolating also keeps
+		// a date change from invalidating every translation of these strings, and
+		// renders in the site's own format.
+		// get_option() is mixed, and a site can store an empty date_format.
+		// 'F j, Y' is WP's own default and renders the date the copy used to
+		// hardcode.
+		$date_format = get_option('date_format');
+		$date_format = is_string($date_format) && $date_format !== '' ? $date_format : 'F j, Y';
+
+		$sunset_date = $sunset === false
+			? substr(self::TRIPADVISOR_CONTENT_API_SUNSET, 0, 10)
+			: date_i18n($date_format, $sunset);
+
+		$heading = $has_passed
+			? __('Your TripAdvisor API key has stopped working', 'reviews-feed')
+			/* translators: %s: date TripAdvisor retires the legacy Content API. */
+			: sprintf(__('Your TripAdvisor API key stops working on %s', 'reviews-feed'), $sunset_date);
+
+		// Two ways out, and the cheaper one is listed first on purpose: removing
+		// the key falls back to the connection built into the plugin and needs
+		// no account anywhere. No doc link here on purpose: the notice's job is
+		// the two remedies, and the key doc is one click away on the page the
+		// button lands on.
+		$description = $has_passed
+			/* translators: %s: date TripAdvisor retired the legacy Content API. */
+			? sprintf(__('TripAdvisor retired the API this key belongs to on %s. Remove the key on the Settings page to switch back to the connection built into the plugin, or replace it with a key from TripAdvisor\'s new Terra platform.', 'reviews-feed'), $sunset_date)
+			: __('TripAdvisor is retiring the API this key belongs to. Before then, either remove the key on the Settings page to switch back to the connection built into the plugin, or replace it with a key from TripAdvisor\'s new Terra platform.', 'reviews-feed');
+
+		return [
+			// 'error' for both states, not 'warning': the renderer puts this
+			// straight onto data-type (PluginNotices.js:25) and sb-common.css
+			// only styles [data-type=error], so anything else renders unstyled.
+			'type' => 'error',
+			'heading' => $heading,
+			'description' => $description,
+			'actions' => [
+				[
+					'type' => 'primary',
+					'text' => __('Manage API Keys', 'reviews-feed'),
+					// Anchored: the API keys section sits ~1700px down a ~3200px page, so
+					// landing at the top left the remedy off screen. The customizer scrolls
+					// to this id once the section renders (SettingsPage.js).
+					'link' => admin_url('admin.php?page=sbr-settings') . '#sbr-settings-apikeys',
+				],
+			],
+		];
+	}
+
+	/**
+	 * Terra issues UUIDs; legacy Content API keys are 32 hex characters. The two
+	 * sets cannot overlap, which is what lets the relay route per key — mirror of
+	 * TripAdvisor::looksLikeTerraKey() in sb-relay.
+	 *
+	 * @param string $key
+	 *
+	 * @return bool
+	 */
+	public static function is_tripadvisor_terra_key($key)
+	{
+		if (!is_string($key)) {
+			return false;
+		}
+
+		return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $key) === 1;
 	}
 
 	/**
@@ -416,6 +613,53 @@ class Util
 				'type' => $plugins_list['youtube']['type'],
 			]
 		];
+	}
+
+	/**
+	 * Determine WPVibe's install/activation status.
+	 *
+	 * Scans the installed-plugins list for a plugin whose folder is
+	 * `vibe-ai/`, rather than assuming a specific main-file name -- a
+	 * plugin's wp.org slug and its main file are not guaranteed to match.
+	 * Mirrors Instagram Feed Pro's SBI_Global_Settings::get_wpvibe_status()
+	 * (cascaded to Reviews Feed per SBR-499 / SMASH-1994).
+	 *
+	 * @since SBR-499
+	 *
+	 * @return array{status: string, basename: string|null} status is one
+	 *               of 'not_installed' | 'inactive' | 'active'.
+	 */
+	public static function get_wpvibe_status()
+	{
+		if (!function_exists('get_plugins')) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$wpvibe_basename = null;
+		foreach (array_keys(get_plugins()) as $plugin_file) {
+			// get_plugins() keys are always strings (relative plugin file
+			// paths); array_keys() types them int|string only because PHP's
+			// array key type is inherently mixed. The cast keeps phpstan
+			// (local phpstan.neon, level 9) satisfied for strtok() and
+			// is_plugin_active() below without widening the real contract.
+			$plugin_file = (string) $plugin_file;
+			if (strtok($plugin_file, '/') === 'vibe-ai') {
+				$wpvibe_basename = $plugin_file;
+				break;
+			}
+		}
+
+		if (null === $wpvibe_basename) {
+			return array(
+				'status' => 'not_installed',
+				'basename' => null,
+			);
+		}
+
+		return array(
+			'status' => is_plugin_active($wpvibe_basename) ? 'active' : 'inactive',
+			'basename' => $wpvibe_basename,
+		);
 	}
 
 	/**
@@ -581,11 +825,16 @@ class Util
 
 		$output = '## SITE/SERVER INFO: ##' . "</br>";
 		$output .= 'Plugin Version:' . self::get_whitespace(11) . SBR_MENU_SLUG . "</br>";
-		$output .= 'Site URL:' . self::get_whitespace(17) . site_url() . "</br>";
-		$output .= 'Home URL:' . self::get_whitespace(17) . home_url() . "</br>";
-		$output .= 'WordPress Version:' . self::get_whitespace(8) . get_bloginfo('version') . "</br>";
+		$output .= 'Site URL:' . self::get_whitespace(17) . self::support_info_text(site_url()) . "</br>";
+		$output .= 'Home URL:' . self::get_whitespace(17) . self::support_info_text(home_url()) . "</br>";
+		$output .= 'WordPress Version:' . self::get_whitespace(8) . self::support_info_text(get_bloginfo('version')) . "</br>";
 		$output .= 'PHP Version:' . self::get_whitespace(14) . PHP_VERSION . "</br>";
-		$output .= 'Web Server Info:' . self::get_whitespace(10) . esc_html($_SERVER['SERVER_SOFTWARE']) . "</br>";
+		// Not always set — CLI and some FPM/SAPI setups omit it — so an unguarded
+		// read is an "Undefined array key" warning printed into the Support page.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- reading server metadata for the support panel, not form data.
+		$server_software = isset($_SERVER['SERVER_SOFTWARE']) ? wp_unslash($_SERVER['SERVER_SOFTWARE']) : '';
+
+		$output .= 'Web Server Info:' . self::get_whitespace(10) . self::support_info_text($server_software) . "</br>";
 		$output .= 'PHP allow_url_fopen:' . self::get_whitespace(6) . $allow_url_fopen . "</br>";
 		$output .= 'PHP cURL:' . self::get_whitespace(17) . $php_curl . "</br>";
 		$output .= 'JSON:' . self::get_whitespace(21) . $php_json_decode . "</br>";
@@ -610,7 +859,7 @@ class Util
 
 		foreach ($plugins as $plugin_path => $plugin) {
 			if (in_array($plugin_path, $active_plugins)) {
-				$output .= $plugin['Name'] . ': ' . $plugin['Version'] . "</br>";
+				$output .= self::support_info_text($plugin['Name']) . ': ' . self::support_info_text($plugin['Version']) . "</br>";
 			}
 		}
 
@@ -642,7 +891,7 @@ class Util
 		if (Util::sbr_is_pro()) {
 			$output .= 'License key: ';
 			if (isset($sbr_settings['license_key'])) {
-				$output .= esc_html($sbr_settings['license_key']);
+				$output .= self::support_info_text($sbr_settings['license_key']);
 			} else {
 				$output .= ' Not added';
 			}
@@ -650,14 +899,14 @@ class Util
 			$output .= '</br>';
 			$output .= 'License Tier: ';
 			if (isset($statuses['license_tier'])) {
-				$output .= esc_html($statuses['license_tier']);
+				$output .= self::support_info_text($statuses['license_tier']);
 			} else {
 				$output .= ' Not Set';
 			}
 			$output .= '</br>';
 			$output .= 'License status: ';
 			if (isset($sbr_settings['license_status'])) {
-				$output .= $sbr_settings['license_status'];
+				$output .= self::support_info_text($sbr_settings['license_status']);
 			} else {
 				$output .= ' Inactive';
 			}
@@ -671,14 +920,15 @@ class Util
 
 		$output .= '</br>';
 		$output .= 'GDPR: ';
-		$output .= isset($sbr_settings['gdpr']) ? $sbr_settings['gdpr'] : ' Not setup';
+		$output .= isset($sbr_settings['gdpr']) ? self::support_info_text($sbr_settings['gdpr']) : ' Not setup';
 		$output .= '</br>';
 		$output .= 'Optimize Images: ';
-		$output .= isset($sbr_settings['optimize_images']) && $sbr_settings['optimize_images'] === true ? 'Enabled' : 'Disabled';
+		$output .= self::optimize_images_enabled($sbr_settings) ? 'Enabled' : 'Disabled';
 		$output .= '</br>';
 		$output .= 'Usage Tracking: ';
-		$output .= isset($sbr_settings['usagetracking']) && $sbr_settings['usagetracking'] === true ? 'Enabled' : 'Disabled';
+		$output .= \SmashBalloon\Reviews\Common\UsageTracking\Config::is_enabled() ? 'Enabled' : 'Disabled';
 		$output .= '</br>';
+		$output .= self::get_usage_tracking_debug_info();
 		$output .= 'Enqueue in Head: ';
 		$output .= isset($sbr_settings['enqueue_js_in_header']) && $sbr_settings['enqueue_js_in_header'] === true ? 'Enabled' : 'Disabled';
 		$output .= '</br>';
@@ -689,6 +939,38 @@ class Util
 		$output .= isset($sbr_settings['feed_issue_reports']) && $sbr_settings['feed_issue_reports'] === true ? 'Enabled' : 'Disabled';
 		$output .= '</br>';
 		$output .= '</br>';
+		return $output;
+	}
+
+	/**
+	 * Usage-tracking send-state lines for the System Info page, so support
+	 * can tell "never registered" from "registered but sends fail" from
+	 * "cron not firing" at a glance.
+	 *
+	 * @return string
+	 */
+	private static function get_usage_tracking_debug_info()
+	{
+		$state = get_option(\SmashBalloon\Reviews\Common\UsageTracking\Config::OPTION_TRACKING, array());
+		$state = is_array($state) ? $state : array();
+		$next  = wp_next_scheduled(\SmashBalloon\Reviews\Common\UsageTracking\Config::CRON_HOOK);
+		$token = get_option(\SmashBalloon\Reviews\Common\UsageTracking\Config::OPTION_SITE_TOKEN, '');
+
+		$output  = 'Usage Tracking Registered: ';
+		$output .= (is_string($token) && '' !== $token) ? 'Yes' : 'No';
+		$output .= '</br>';
+		$output .= 'Usage Tracking Last Sent: ';
+		$output .= ! empty($state['last_send']) ? gmdate('Y-m-d H:i:s', (int) $state['last_send']) . ' UTC' : 'Never';
+		$output .= '</br>';
+		$output .= 'Usage Tracking Last Attempt: ';
+		$output .= ! empty($state['last_attempt'])
+			? gmdate('Y-m-d H:i:s', (int) $state['last_attempt']) . ' UTC (status ' . (isset($state['last_status']) ? (int) $state['last_status'] : 0) . ', ' . (isset($state['consecutive_failures']) ? (int) $state['consecutive_failures'] : 0) . ' consecutive failures)'
+			: 'Never';
+		$output .= '</br>';
+		$output .= 'Usage Tracking Next Scheduled: ';
+		$output .= $next ? gmdate('Y-m-d H:i:s', (int) $next) . ' UTC' : 'Not scheduled';
+		$output .= '</br>';
+
 		return $output;
 	}
 
@@ -704,7 +986,11 @@ class Util
 		$output = '## SOURCES: ## </br>';
 		$source_list = SBR_Sources::get_sources_list();
 		foreach ($source_list as $feed) {
-			$output .= $feed['name'] . ' ( ' . strtoupper($feed['provider']) . ' => ' . $feed['account_id'] . ' )';
+			// SMASH-2031: this whole string is rendered raw by the Support page.
+			// The name arrives from the provider and is entity-decoded before
+			// storage (SBR_Feed_Saver_Manager.php:993), so a crafted business or
+			// plugin name would otherwise reach that sink as live markup.
+			$output .= self::support_info_text($feed['name']) . ' ( ' . self::support_info_text(strtoupper($feed['provider'])) . ' => ' . self::support_info_text($feed['account_id']) . ' )';
 			$output .= '</br>';
 		}
 		$output .= '</br>';
@@ -723,9 +1009,18 @@ class Util
 	{
 		$output = '## API KEYS: ## </br>';
 		$api_keys = get_option('sbr_apikeys', []);
+		// get_option() returns whatever is stored, so a corrupted row could be
+		// a scalar here and the foreach below would fatal on PHP 8 — same
+		// coercion SBR_Error_Handler::get_errors() does for SMASH-1544.
+		if (! is_array($api_keys)) {
+			$api_keys = [];
+		}
 
 		foreach ($api_keys as $id => $api) {
-			$output .= ucfirst($id) . ' => ' . $api;
+			// sbr_apikeys holds strings today but is a free-form option; a
+			// non-scalar used to concatenate as "Array" plus a PHP notice.
+			$value = is_scalar($api) ? (string) $api : wp_json_encode($api);
+			$output .= self::support_info_text(ucfirst((string) $id)) . ' => ' . self::support_info_text(is_string($value) ? $value : '');
 			$output .= '</br>';
 		}
 		$output .= '</br>';
@@ -753,13 +1048,13 @@ class Util
 			if ($i >= 25) {
 				break;
 			}
-			$output .= $feed['feed_name'];
+			$output .= self::support_info_text($feed['feed_name']);
 			if (isset($feed['settings'])) {
 				$output .= '</br>';
 				if (!empty($feed['sourcesList'])) {
 					foreach ($feed['sourcesList'] as $id => $source) {
-						$output .= esc_html($source['name']);
-						$output .= ' (' . esc_html(ucfirst($source['name'])) . ' => ' . esc_html($source['account_id']) . ')';
+						$output .= self::support_info_text($source['name']);
+						$output .= ' (' . self::support_info_text(ucfirst($source['name'])) . ' => ' . self::support_info_text($source['account_id']) . ')';
 						$output .= '</br>';
 					}
 				}
@@ -768,7 +1063,7 @@ class Util
 			if (isset($feed['location_summary']) && count($feed['location_summary']) > 0) {
 				$first_feed = $feed['location_summary'][0];
 				if (!empty($first_feed['link'])) {
-					$output .= esc_html($first_feed['link']) . '?sb_debug';
+					$output .= self::support_info_text($first_feed['link']) . '?sb_debug';
 					$output .= '</br>';
 				}
 			}
@@ -806,7 +1101,7 @@ class Util
 				$output .= '## FEEDS POSTS TABLE ##</br>';
 				foreach ($last_result as $column) {
 					foreach ($column as $key => $value) {
-						$output .= esc_html($key) . ': ' . esc_html($value) . '</br>';
+						$output .= self::support_info_text($key) . ': ' . self::support_info_text($value) . '</br>';
 					}
 				}
 			} else {
@@ -824,7 +1119,7 @@ class Util
 				$output .= '</br>';
 				foreach ($last_result as $column) {
 					foreach ($column as $key => $value) {
-						$output .= esc_html($key) . ': ' . esc_html($value) . '</br>';
+						$output .= self::support_info_text($key) . ': ' . self::support_info_text($value) . '</br>';
 					}
 				}
 			} else {
@@ -973,7 +1268,75 @@ class Util
 	 */
 	public static function get_api_call_language($settings)
 	{
-		return Util::sbr_is_pro() ? \SmashBalloon\Reviews\Pro\Helpers\SBR_WPML::get_current_language(Util::get_settings_language($settings)) : Util::get_settings_language($settings);
+		$language = Util::sbr_is_pro()
+			? \SmashBalloon\Reviews\Pro\Helpers\SBR_WPML::get_current_language(Util::get_settings_language($settings))
+			: Util::get_settings_language($settings);
+
+		/**
+		 * Filter the language code sent to the provider API (e.g. Google Places).
+		 * Lets a site map an unsupported locale to a supported one, e.g. a WPML
+		 * `es-mx` site forcing `es-419` for Latin American Spanish. SMASH-1617.
+		 * Read the current WPML language inside the callback (apply_filters
+		 * 'wpml_current_language') if you need per-page context.
+		 *
+		 * @since 2.6.6
+		 * @param string $language Resolved language code (or 'default').
+		 */
+		return apply_filters('sbr_google_api_language', $language);
+	}
+
+	/**
+	 * Map a locale / WPML language code to a code the Google Places API accepts.
+	 *
+	 * Google only honours codes from its supported list (get_translation_languages);
+	 * an unsupported value (e.g. WPML's `es-mx`) makes Google return reviews
+	 * untranslated. This normalises common regional codes to a supported one.
+	 * Spanish is special-cased: Spain dialects -> `es`, any other Spanish variant
+	 * (es-mx, es-ar, …) -> `es-419` (Latin America) — region-stripping alone would
+	 * wrongly land on Spain Spanish. Returns null when nothing supported matches,
+	 * so callers can fall back (never send a bogus code). SMASH-1617.
+	 *
+	 * @since 2.6.6
+	 * @param string|null $code Raw locale / WPML code (e.g. 'es-mx', 'pt-br', 'es_MX').
+	 * @return string|null A Google-supported code, or null if unmappable.
+	 */
+	public static function map_wpml_to_google_language($code)
+	{
+		if (! is_string($code) || $code === '') {
+			return null;
+		}
+
+		$allowed = self::get_translation_languages();
+
+		// Already a supported code (exact match) — keep existing behaviour.
+		if (isset($allowed[$code]) && $code !== 'default' && $code !== '') {
+			return $code;
+		}
+
+		$norm = strtolower(str_replace('_', '-', $code));
+
+		// Spanish: Spain -> es; every other variant (es-mx, es-ar, …) -> es-419.
+		if ($norm === 'es' || $norm === 'es-es') {
+			return 'es';
+		}
+		if (strpos($norm, 'es-') === 0) {
+			return 'es-419';
+		}
+
+		// Case-insensitive match for region variants Google does list (pt-br -> pt-BR).
+		foreach (array_keys($allowed) as $supported) {
+			if (strtolower($supported) === $norm) {
+				return $supported;
+			}
+		}
+
+		// Strip the region and fall back to the base language if supported (fr-fr -> fr).
+		$base = strtok($norm, '-');
+		if ($base !== false && isset($allowed[$base])) {
+			return $base;
+		}
+
+		return null;
 	}
 
 	/**
@@ -986,6 +1349,24 @@ class Util
 	public static function sbr_is_pro()
 	{
 		return defined('SBR_PRO') && SBR_PRO === true;
+	}
+
+	/**
+	 * The feed cache matching the feed class this site builds: Pro\FeedCache on Pro, whose set_wpml() Pro\Feed::init()
+	 * calls on WPML sites; Common\FeedCache has none, so pairing it with Pro\Feed fataled (SMASH-2381).
+	 *
+	 * @param string $cache_id Cache id.
+	 * @param int    $cache_time Cache time in seconds.
+	 *
+	 * @return FeedCache
+	 */
+	public static function feed_cache_for_site($cache_id, $cache_time = 0)
+	{
+		if (self::sbr_is_pro() && class_exists('\\SmashBalloon\\Reviews\\Pro\\FeedCache')) {
+			return new \SmashBalloon\Reviews\Pro\FeedCache($cache_id, $cache_time);
+		}
+
+		return new FeedCache($cache_id, $cache_time);
 	}
 
 	/**
@@ -1092,7 +1473,7 @@ class Util
 			'eddProvider' => [
 				'heading' => __('Upgrade to Pro to display Easy Digital Downloads reviews', 'reviews-feed'),
 				'description' => __('Upgrade to our "Plus" tier to display download reviews from your EDD store.', 'reviews-feed'),
-				'image' => 'upsell-woocommerce.png',
+				'image' => 'upsell-edd.png',
 				'buttons' => [
 					'lite' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=edd-modal&utm_content=LiteUsers50OFF',
 					'upgrade' => 'https://smashballoon.com/pricing/reviews-feed/?utm_campaign=reviews-free&utm_source=customizer&utm_medium=edd-modal&utm_content=Upgrade'
@@ -1101,7 +1482,7 @@ class Util
 			],
 			'airbnbProvider' => [
 				'heading' => __('Upgrade to Pro to display Airbnb reviews', 'reviews-feed'),
-				'description' => __('Upgrade to our "Plus" tier to display reviews from the popular accommodation platform.', 'reviews-feed'),
+				'description' => __('Upgrade to our "Elite" tier to display reviews from the popular accommodation platform.', 'reviews-feed'),
 				'image' => 'upsell-airbnb.png',
 				'buttons' => [
 					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=airbnb-modal&utm_content=LiteUsers50OFF',
@@ -1111,7 +1492,7 @@ class Util
 			],
 			'bookingProvider' => [
 				'heading' => __('Upgrade to Pro to display Booking.com reviews', 'reviews-feed'),
-				'description' => __('Upgrade to our "Plus" tier to display reviews from the leading travel booking site.', 'reviews-feed'),
+				'description' => __('Upgrade to our "Elite" tier to display reviews from the leading travel booking site.', 'reviews-feed'),
 				'image' => 'upsell-booking.png',
 				'buttons' => [
 					'lite' => 'https://smashballoon.com/reviews-feed/reviews-lite-upgrade/?utm_campaign=reviews-free&utm_source=all-feeds&utm_medium=booking-modal&utm_content=LiteUsers50OFF',
@@ -1398,6 +1779,187 @@ class Util
 	}
 
 
+	/**
+	 * Coerce a review's `provider`, `reviewer` and `source` into the array shapes
+	 * every reader expects ($review['provider']['name'], $review['reviewer']['name'],
+	 * $review['source']['id'], …). The relay can emit these as scalars (e.g.
+	 * `provider` => 'google', or an error-shaped payload yielding a scalar
+	 * `reviewer`/`source`), and PHP 7-era caches stored them that way in
+	 * `json_data`. On PHP 8.0+ a direct nested read on a scalar fatals with
+	 * "Cannot access offset of type string on string".
+	 *
+	 * This is the single source of truth used by SinglePostCache (both
+	 * constructors) and every raw/DB-decoded read site: the dedup key build in
+	 * PostAggregator::remove_duplicated_posts_list (front-end render, Feed.php:172)
+	 * reads source['id'] + reviewer['name'] + provider['name'] off the raw post,
+	 * parse_single_review reads reviewer/provider, and
+	 * SBR_Feed_Saver_Manager::duplicate_collection reads reviewer/source.
+	 *
+	 * SMASH-1578 guarded whole-review + source shapes at the cache loops, SMASH-1587
+	 * added provider; this also covers a scalar reviewer/source that the
+	 * is_array($single_review)-only cache guard lets through to store()/dedup
+	 * (reachable on WPSA-63160's associative-keyed payload). Healthy array data is
+	 * left intact — missing keys are filled with empty strings (via array union),
+	 * so the dedup key degrades to an empty segment instead of crashing.
+	 *
+	 * @param  mixed  $review
+	 * @return mixed  Untouched when not an array (callers' is_array guards handle that).
+	 */
+	public static function normalize_review_shape($review)
+	{
+		if (!is_array($review)) {
+			return $review;
+		}
+
+		if (isset($review['provider']) && is_string($review['provider'])) {
+			$review['provider'] = ['name' => $review['provider']];
+		} elseif (!isset($review['provider']) || !is_array($review['provider'])) {
+			$review['provider'] = ['name' => ''];
+		}
+		if (!isset($review['reviewer']) || !is_array($review['reviewer'])) {
+			$review['reviewer'] = [];
+		}
+		if (!isset($review['source']) || !is_array($review['source'])) {
+			$review['source'] = [];
+		}
+		// Image containers iterated by resize_images() + add_local_image_urls().
+		// A scalar here would fatal the foreach on PHP 8. Coerce a present
+		// non-array to [] (leave absent untouched — they're optional). Element
+		// shape is guarded at the loop sites (a flat URL-string element).
+		foreach (['media', 'reviews_photos', 'reviewer_photos'] as $image_key) {
+			if (isset($review[$image_key]) && !is_array($review[$image_key])) {
+				$review[$image_key] = [];
+			}
+		}
+
+		// Guarantee the exact keys every reader assumes are present and string,
+		// so a scalar/partial provider, reviewer or source degrades to empty
+		// segments instead of "Cannot access offset…" fatals or "Undefined array
+		// key" notices in the dedup key build / parse_single_review / preview
+		// backfill (SMASH-1587 + PR #484 Copilot review + WPSA-63160 follow-up).
+		$review['provider'] += ['name' => ''];
+		$review['reviewer'] += ['name' => '', 'avatar' => ''];
+		$review['source']   += ['id' => '', 'url' => ''];
+		if (!is_string($review['provider']['name'])) {
+			$review['provider']['name'] = '';
+		}
+		if (!is_string($review['reviewer']['name'])) {
+			$review['reviewer']['name'] = '';
+		}
+		if (!is_string($review['source']['id'])) {
+			// Preserve a numeric id (cast), but never (string)-cast an array/object —
+			// that would emit an "Array to string conversion" notice (PR #482 Copilot).
+			$review['source']['id'] = is_scalar($review['source']['id'])
+				? (string) $review['source']['id']
+				: '';
+		}
+
+		return $review;
+	}
+
+	/**
+	 * Narrow a payload value to a string before handing it to a sanitiser.
+	 *
+	 * Shortcode attributes and JSON-decoded review payloads are `mixed`. A blind
+	 * `(string)` cast is what level 9 objects to, and rightly — an array warns and an
+	 * object without __toString() fatals. Non-scalars become ''.
+	 *
+	 * @param  mixed $value
+	 * @return string
+	 */
+	public static function payload_string($value): string
+	{
+		if (is_string($value)) {
+			return $value;
+		}
+		if (is_scalar($value)) {
+			return (string) $value;
+		}
+		return '';
+	}
+
+	/**
+	 * Sanitise a rating, preserving Facebook's 'positive'/'negative' sentinels.
+	 *
+	 * Parser::get_rating() maps those two strings to 5 and 1, and maps anything falsy
+	 * to 1 — so coercing them (absint('positive') === 0) turns a 5-star recommendation
+	 * into 1 star. Numerics pass through uncast because
+	 * Feed::sort_array_byrating_and_date() compares stored ratings with ===, which a
+	 * 5 -> 5.0 change would break. Values are NOT clamped to 0-5: that matches the
+	 * previous behaviour, and every render sink already bounds the star loop.
+	 *
+	 * @param  mixed $rating
+	 * @return float|int|string
+	 */
+	public static function sanitize_rating($rating)
+	{
+		if ($rating === 'positive' || $rating === 'negative') {
+			return $rating;
+		}
+		if (is_numeric($rating)) {
+			return $rating;
+		}
+		// absint(), not 0 — "3 stars" must stay 3. is_numeric('5 ') is false on PHP 7.4
+		// (our floor), so trailing whitespace reaches this branch too.
+		return absint(trim(self::payload_string($rating)));
+	}
+
+	/**
+	 * Normalise a review time, keeping the non-numeric form.
+	 *
+	 * A date string is supported — SB_Analytics branches on is_numeric() — and
+	 * FeedDisplay drops the date element entirely on a falsy time, so coercing to 0
+	 * makes the date vanish rather than merely look wrong.
+	 *
+	 * @param  mixed $time
+	 * @return int|string
+	 */
+	public static function sanitize_time($time)
+	{
+		if (is_numeric($time)) {
+			return absint($time);
+		}
+		return sanitize_text_field(self::payload_string($time));
+	}
+
+	/**
+	 * Sanitise a provider slug: sanitize_key() semantics, but the dot survives.
+	 *
+	 * The dot matters because 'wordpress.org' is a real slug (WordpressOrg::$name)
+	 * compared as a literal at RemoteRequest:189, Util:274/:319 and
+	 * SBR_Feed_Saver_Manager:743. Everything else sanitize_key() does is load-bearing
+	 * and kept: downstream provider checks are lowercase case-sensitive literals, and
+	 * FeedDisplay::provider_icon_url() concatenates this value into
+	 * `assets/icons/{$provider}-provider.svg`, so the charset has to exclude `/`.
+	 *
+	 * @param  mixed $provider
+	 * @return string
+	 */
+	public static function sanitize_provider_slug($provider): string
+	{
+		$slug = strtolower(trim(self::payload_string($provider)));
+		$slug = (string) preg_replace('/[^a-z0-9._\-]/', '', $slug);
+		// '..' survives the charset above and is never part of a real slug.
+		return str_replace('..', '', $slug);
+	}
+
+	/**
+	 * Narrow an avatar value to a safe URL.
+	 *
+	 * Deliberately a thin wrapper: esc_url_raw() already handles every obfuscation of
+	 * a dangerous scheme, including the entity-encoded ones. Do not reintroduce a
+	 * scheme test to preserve relative paths — the render site (author.php:25) wraps
+	 * the value in esc_url(), which prepends the same `http://`, so a scheme-less
+	 * avatar never worked end-to-end anyway.
+	 *
+	 * @param  mixed $url
+	 * @return string
+	 */
+	public static function sanitize_avatar_url($url): string
+	{
+		return esc_url_raw(trim(wp_strip_all_tags(self::payload_string($url))));
+	}
+
 	 /**
 	 * Transform Single Review for storing purposes
 	 *
@@ -1407,6 +1969,9 @@ class Util
 	 */
 	public static function parse_single_review($review, $provider_id, $review_id)
 	{
+		// Provider can arrive as a scalar slug (SMASH-1587); normalize before the
+		// $review['provider']['name'] read below so it can't fatal on PHP 8.
+		$review = self::normalize_review_shape($review);
 		$name = $review['reviewer']['name'];
 		$name_array = explode(' ', $name);
 		$first_name = isset($review['reviewer']['first_name']) ? $review['reviewer']['first_name'] : $name_array[0];
@@ -1443,6 +2008,27 @@ class Util
 	}
 
 	/**
+	 * The rating to store for a Facebook collection row (SMASH-2288).
+	 *
+	 * Only Facebook's 'positive'/'negative' recommendation sentinels map to 5/1. A star value set by
+	 * hand passes through: mapping every non-'positive' value to 1 stored manual 5-star reviews as 1.
+	 *
+	 * @param  array<string,mixed> $post
+	 * @return mixed
+	 */
+	public static function facebook_collection_rating($post)
+	{
+		$rating = $post['rating'] ?? 0;
+		if ($rating === 'positive') {
+			return 5;
+		}
+		if ($rating === 'negative') {
+			return 1;
+		}
+		return $rating;
+	}
+
+	/**
 	 * Convert Object to Array
 	 *
 	 * @return array
@@ -1475,6 +2061,96 @@ class Util
 	}
 
 	/**
+	 * Decode/strip passes support_info_text() will make before giving up.
+	 *
+	 * Legitimate input needs two or three. The cap exists because the pass count
+	 * is otherwise the caller's nesting depth.
+	 */
+	private const SUPPORT_TEXT_MAX_PASSES = 12;
+
+	/**
+	 * Make a value safe for the Support-page info blob.
+	 *
+	 * SMASH-2031: this blob reaches the page through wp_localize_script(),
+	 * which html_entity_decode()s every scalar it is given
+	 * (wp-includes/class-wp-scripts.php:661), and the customizer then renders
+	 * it with dangerouslySetInnerHTML. esc_html() is therefore undone in
+	 * transit — the same decode-re-arms-the-payload chain as SMASH-1795, one
+	 * layer up.
+	 *
+	 * Both operations have to run to a JOINT fixed point, and the order is why.
+	 * Two ways a single pass leaks:
+	 *
+	 *   - Decode once and a doubly-encoded value is still half-encoded:
+	 *     `&amp;lt;img …&amp;gt;` becomes `&lt;img …&gt;`, which holds no tag to
+	 *     strip, and the transport's decode finishes the job. Hence the decode
+	 *     loop.
+	 *   - Strip last and stripping can *synthesise* the entity it was meant to
+	 *     remove: `&amp;<x>lt;img …` is already a decode fixed point (`&amp;`
+	 *     followed by `<x>lt;` is not an entity), so the loop is a no-op, and
+	 *     then deleting `<x>` joins the halves into `&lt;img …`. Hence looping
+	 *     the strip too. Six shapes did this, including numeric and hex forms
+	 *     and an HTML comment as the filler.
+	 *
+	 * Looping until the whole step stops changing leaves a value that is a
+	 * fixed point of BOTH: no entity left to decode and no tag left to strip.
+	 * The transport then has one decode to spend and nothing to spend it on.
+	 * It terminates because neither operation ever lengthens the string.
+	 *
+	 * Storage really does hold values encoded this deeply — SinglePostCache
+	 * writes `post_content` and `json_data` unsanitised and
+	 * get_posts_table_info() dumps the newest row verbatim, so a publicly
+	 * submitted review reaches here.
+	 *
+	 * @param mixed $value Value destined for the info blob.
+	 *
+	 * @return string
+	 */
+	private static function support_info_text($value): string
+	{
+		if (! is_scalar($value)) {
+			return '';
+		}
+
+		$value = (string) $value;
+		$previous = null;
+		$passes = 0;
+
+		// Capped. Both loops run to a fixed point, and they do terminate — every
+		// pass either shortens the string or leaves it alone — but the number of
+		// passes is the caller's nesting depth and each pass re-scans the whole
+		// string. Stored review content reaches here (see above), so a long value
+		// of deeply layered entities costs O(length x depth) on an admin page
+		// render. Nothing legitimate needs more than a couple of passes: an
+		// entity-encoded tag is decode, strip, decode.
+		while ($value !== $previous && $passes < self::SUPPORT_TEXT_MAX_PASSES) {
+			$previous = $value;
+			$passes++;
+
+			$decoded = null;
+			$decodes = 0;
+
+			while ($value !== $decoded && $decodes < self::SUPPORT_TEXT_MAX_PASSES) {
+				$decoded = $value;
+				$decodes++;
+				$value = html_entity_decode($value, ENT_QUOTES, 'UTF-8');
+			}
+
+			$value = wp_strip_all_tags($value);
+		}
+
+		// Still changing at the cap means the value was built to keep changing.
+		// Returning '' rather than a partially decoded string: this is support
+		// diagnostics, a value like that is not diagnostic, and an empty string
+		// cannot carry anything to a sink whatever the sink does with it.
+		if ($value !== $previous) {
+			return '';
+		}
+
+		return $value;
+	}
+
+	/**
 	 * Get Feeds Settings
 	 *
 	 * @since 1.0
@@ -1487,7 +2163,17 @@ class Util
 		$errors = SBR_Error_Handler::get_errors();
 		$errors = array_reverse($errors);
 		foreach ($errors as $error) {
-			$output .= json_encode($error);
+			// SMASH-2031: the Support page renders this string through
+			// dangerouslySetInnerHTML, so an entry poisoned before this fix
+			// must still come out inert. The JSON_HEX_* flags escape `<`, `>`
+			// and `&` in every key and value at any depth, leaving only JSON's
+			// own structural quotes — inert in this text-node context, and
+			// readable when the Copy button puts it on a support ticket.
+			$encoded = wp_json_encode(
+				$error,
+				JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+			);
+			$output .= false === $encoded ? '' : $encoded;
 			$output .= '</br></br>';
 		}
 		$output .= '</br>';
@@ -1512,11 +2198,95 @@ class Util
 
 	public static function should_store_local_images()
 	{
-		$settings = get_option('sbr_settings', sbr_plugin_settings_defaults());
-		if (! is_array($settings)) {
-			$settings = sbr_plugin_settings_defaults();
-		}
-		return !empty($settings['optimize_images']) ? $settings['optimize_images'] : true;
+		return self::optimize_images_enabled(get_option('sbr_settings', sbr_plugin_settings_defaults()));
 	}
 
+	/**
+	 * The "Optimize Images" switch in a settings array: on when the key is absent (the default in
+	 * sbr_plugin_settings_defaults()), otherwise its boolean value. It used to end in
+	 * `!empty(x) ? x : true`, which turned every falsy value into true, so the switch did nothing.
+	 *
+	 * @param mixed $settings
+	 */
+	public static function optimize_images_enabled($settings): bool
+	{
+		if (! is_array($settings) || ! array_key_exists('optimize_images', $settings)) {
+			return true;
+		}
+		return filter_var($settings['optimize_images'], FILTER_VALIDATE_BOOLEAN);
+	}
+
+	/**
+	 * Convert an ISO-3166 alpha-2 country code to its regional-indicator flag emoji.
+	 *
+	 * Shared by the AliExpress feed author element (post-elements/author.php) and
+	 * the Review Alerts popup (review-alerts/popup.php) so both render the same
+	 * glyph from the same rules. Returns '' when the input is not a 2-letter code,
+	 * or when mbstring is unavailable (some shared hosts ship without it) — callers
+	 * simply skip the flag rather than fataling the render.
+	 *
+	 * @param string $cc Country code (e.g. "US", "de").
+	 * @return string The flag emoji, or '' if not derivable.
+	 */
+	public static function country_flag_emoji($cc)
+	{
+		$cc = trim((string) $cc);
+		// ISO-3166 alpha-2 only. ASCII regex, not ctype_alpha() — ctype_* is
+		// locale-dependent and can accept non-ASCII letters, which would flow
+		// into ord() and produce wrong codepoints (copilot #467).
+		if (! preg_match('/^[A-Za-z]{2}$/', $cc) || ! function_exists('mb_chr')) {
+			return '';
+		}
+		$up     = strtoupper($cc);
+		$offset = 0x1F1E6 - ord('A');
+		// phpcs:ignore PHPCompatibility.FunctionUse.NewFunctions.mb_chrFound -- guarded by the function_exists('mb_chr') check above; the sniff cannot see it
+		return mb_chr(ord($up[0]) + $offset, 'UTF-8') . mb_chr(ord($up[1]) + $offset, 'UTF-8');
+	}
+
+
+	/**
+	 * A cache-busting version for a bundled asset, derived from the FILE.
+	 *
+	 * `SBRVER` alone does not do this, despite comments in two builders saying it
+	 * busts the cache "on a rebuilt bundle". It busts on a VERSION change. Two QA
+	 * builds of the same version produce byte-different bundles behind an identical
+	 * `?ver=` — and the customizer bundle ships `Cache-Control: max-age=2592000`,
+	 * so the stale copy is held for thirty days.
+	 *
+	 * Measured on an InstaQA box 2026-09-09: after swapping in a rebuilt plugin the
+	 * edge answered `cf-cache-status: HIT`, `age: 3008`, with the previous bundle —
+	 * new PHP against old JS, which crashes the app and shows a blank screen nobody
+	 * can reproduce locally.
+	 *
+	 * mtime, not a content hash: it changes whenever the file is replaced, costs one
+	 * stat, and needs no build step to maintain.
+	 *
+	 * @param string $relative Path under the plugin directory.
+	 *
+	 * @return string|false
+	 */
+	public static function asset_version($relative)
+	{
+		$version = defined('SBRVER') ? SBRVER : false;
+
+		if (! defined('SBR_PLUGIN_DIR')) {
+			return $version;
+		}
+
+		$path = SBR_PLUGIN_DIR . ltrim((string) $relative, '/');
+
+		// A missing or unreadable asset is not a reason to fail the enqueue — fall
+		// back to the plugin version, which is what shipped before this existed.
+		if (! is_readable($path)) {
+			return $version;
+		}
+
+		$mtime = filemtime($path);
+
+		if ($mtime === false) {
+			return $version;
+		}
+
+		return (is_string($version) && $version !== '' ? $version : '0') . '.' . $mtime;
+	}
 }

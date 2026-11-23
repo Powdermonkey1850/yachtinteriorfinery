@@ -18,6 +18,8 @@
  */
 
 use SmashBalloon\Reviews\Common\DisplayElements;
+use SmashBalloon\Reviews\Common\ReviewAlerts\SBR_Review_Alert_Frontend;
+use SmashBalloon\Reviews\Common\ReviewAlerts\SBR_Review_Alert_Service;
 
 if (! defined('ABSPATH')) {
 	exit;
@@ -56,7 +58,16 @@ if (! $first_review) {
 // Get total reviews and average rating from config (calculated from ALL matching reviews)
 $total_reviews = $config['totalReviews'] ?? count($reviews);
 $average_rating = $config['averageRating'] ?? 5.0;
-$average_rating_rounded = (int) round($average_rating);
+
+// SMASH-782: a booking-only alert shows Booking's native 0-10 score + word
+// (e.g. "8.4 Very good") in the aggregate header instead of the 0-5 star
+// average, matching the feed header. Computed server-side via the shared
+// FeedDisplay::get_booking_header_rating(); any non-booking source disqualifies
+// it (is_booking_only=false) so mixed/other alerts keep the 0-5 stars.
+$booking_header  = is_array($config['bookingHeader'] ?? null) ? $config['bookingHeader'] : [];
+$is_booking_only = ! empty($booking_header['is_booking_only']);
+$booking_score   = (float) ($booking_header['score'] ?? 0);
+$booking_word    = trim((string) ($booking_header['word'] ?? ''));
 
 // Get reviewer info
 $reviewer_name = $first_review['reviewer']['name'] ?? __('Someone', 'reviews-feed');
@@ -107,6 +118,16 @@ $custom_style = sprintf('--sbr-popup-accent-hue: %s;', esc_attr($accent_hue));
 if ($accent_color) {
 	$custom_style .= sprintf(' --sbr-popup-accent-fallback: %s;', esc_attr($accent_color));
 }
+$exact_accent       = SBR_Review_Alert_Service::exact_accent($settings);
+$exact_accent_class = $exact_accent ? 'sbr-review-alert--exact-accent' : '';
+if ($exact_accent) {
+	$custom_style .= sprintf(
+		' --sbr-popup-accent-exact: %s; --sbr-popup-accent-contrast: %s; --sbr-popup-accent-ink: %s;',
+		esc_attr($exact_accent['color']),
+		esc_attr($exact_accent['contrast']),
+		esc_attr($exact_accent['ink'])
+	);
+}
 
 // Visibility settings with defaults
 $show_avatar = $content_settings['show_avatar'] ?? true;
@@ -120,7 +141,7 @@ $link_url = $content_settings['link_url'] ?? '';
 ?>
 
 <div
-	class="sbr-review-alert <?php echo esc_attr($theme_class); ?> <?php echo esc_attr($position_class); ?> <?php echo esc_attr($powered_by_class); ?> <?php echo esc_attr($popup_type_class); ?>"
+	class="sbr-review-alert <?php echo esc_attr($theme_class); ?> <?php echo esc_attr($position_class); ?> <?php echo esc_attr($powered_by_class); ?> <?php echo esc_attr($popup_type_class); ?> <?php echo esc_attr($exact_accent_class); ?>"
 	style="<?php echo esc_attr($custom_style); ?>"
 	role="complementary"
 	aria-label="<?php esc_attr_e('Customer review notification', 'reviews-feed'); ?>"
@@ -144,23 +165,38 @@ $link_url = $content_settings['link_url'] ?? '';
 				<!-- Content Row - Horizontal Layout for Aggregate -->
 				<div class="sbr-review-alert__content-row sbr-review-alert__content-row--aggregate">
 					<?php if ($show_rating) : ?>
-					<!-- Rating Number (replaces avatar) -->
-					<div class="sbr-review-alert__rating-number">
-						<span class="sbr-review-alert__rating-value"><?php echo esc_html(number_format($average_rating, 1)); ?></span>
+					<!-- Rating Number (replaces avatar). Booking-only: native 0-10 score. -->
+					<div class="sbr-review-alert__rating-number<?php echo $is_booking_only ? ' sbr-review-alert__rating-number--booking' : ''; ?>">
+						<span class="sbr-review-alert__rating-value"><?php echo esc_html(number_format($is_booking_only ? $booking_score : $average_rating, 1)); ?></span>
 					</div>
 					<?php endif; ?>
 
 					<!-- Content Section - Reusing __content class from recent reviews -->
 					<div class="sbr-review-alert__content<?php echo !$show_rating ? ' sbr-review-alert__content--no-rating' : ''; ?>">
 						<?php if ($show_rating) : ?>
-						<!-- Stars -->
-						<div class="sbr-review-alert__stars">
-							<?php for ($i = 1; $i <= 5; $i++) : ?>
-								<span class="sbr-review-alert__star <?php echo esc_attr($i <= $average_rating_rounded ? '' : 'sbr-review-alert__star--empty'); ?>">
-									<?php echo DisplayElements::get_star_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-								</span>
-							<?php endfor; ?>
-						</div>
+							<?php if ($is_booking_only) : ?>
+							<!-- Booking native 0-10 score word (e.g. "Very good") replaces the 0-5 stars -->
+								<?php if ('' !== $booking_word) : ?>
+							<div class="sbr-review-alert__booking-word"><?php echo esc_html($booking_word); ?></div>
+								<?php endif; ?>
+							<?php else : ?>
+							<!-- Stars (decorative — the numeric rating is announced separately) -->
+							<div class="sbr-review-alert__stars" aria-hidden="true">
+								<?php
+								// Half-star fill states come from the one shared formula (full,half,empty),
+								// mirrored by the customizer's React starFillStates() so preview == frontend.
+								foreach (SBR_Review_Alert_Frontend::star_fill_states((float) $average_rating) as $star_fill) :
+									$star_modifier = 'full' === $star_fill ? '' : 'sbr-review-alert__star--' . $star_fill;
+									?>
+									<span class="sbr-review-alert__star <?php echo esc_attr($star_modifier); ?>">
+										<?php echo DisplayElements::get_star_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+										<?php if ('half' === $star_fill) : ?>
+											<span class="sbr-review-alert__star-half"><?php echo DisplayElements::get_star_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+										<?php endif; ?>
+									</span>
+								<?php endforeach; ?>
+							</div>
+							<?php endif; ?>
 						<?php endif; ?>
 
 						<?php if ($show_total_reviews) : ?>
@@ -169,9 +205,9 @@ $link_url = $content_settings['link_url'] ?? '';
 							<span>
 								<?php
 								printf(
-									/* translators: %d: number of reviews */
-									esc_html__('%d Total Reviews', 'reviews-feed'),
-									absint($total_reviews)
+									/* translators: %s: number of reviews, formatted for the site's locale (e.g. 7,133) */
+									esc_html__('%s Total Reviews', 'reviews-feed'),
+									esc_html(number_format_i18n(absint($total_reviews)))
 								);
 								?>
 							</span>
@@ -199,15 +235,17 @@ $link_url = $content_settings['link_url'] ?? '';
 					<!-- Avatar with Provider Badge -->
 					<div class="sbr-review-alert__avatar-wrapper">
 						<?php
-						// Fallback SVG for broken avatar images - using data URI
-						$fallback_svg = 'data:image/svg+xml,' . rawurlencode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><rect fill="#e4e4e7" width="56" height="56"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="24" fill="#71717a">?</text></svg>');
+						// SMASH-782: default avatar for reviewers without a photo — the
+						// same avatar.jpg the single feed falls back to (Parser::
+						// get_reviewer_avatar_url), instead of a "?" placeholder.
+						$fallback_avatar = SB_COMMON_ASSETS . 'sb-customizer/assets/images/avatar.jpg';
 						?>
 					<img
 							class="sbr-review-alert__avatar"
-							src="<?php echo esc_url($reviewer_avatar); ?>"
+							src="<?php echo esc_url('' !== $reviewer_avatar ? $reviewer_avatar : $fallback_avatar); ?>"
 							alt="<?php echo esc_attr($reviewer_name); ?>"
 							loading="lazy"
-							onerror="this.onerror=null;this.src='<?php echo esc_attr($fallback_svg); ?>';"
+							onerror="this.onerror=null;this.src='<?php echo esc_url($fallback_avatar); ?>';"
 						/>
 						<?php if ($show_platform) : ?>
 						<span class="sbr-review-alert__provider-badge" data-provider="<?php echo esc_attr($provider); ?>">
@@ -220,14 +258,39 @@ $link_url = $content_settings['link_url'] ?? '';
 					<!-- Content Section -->
 					<div class="sbr-review-alert__content">
 						<?php if ($show_rating) : ?>
-						<!-- Stars -->
-						<div class="sbr-review-alert__stars">
-							<?php for ($i = 1; $i <= 5; $i++) : ?>
-								<span class="sbr-review-alert__star <?php echo esc_attr($i <= $review_rating ? '' : 'sbr-review-alert__star--empty'); ?>">
-									<?php echo DisplayElements::get_star_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-								</span>
-							<?php endfor; ?>
-						</div>
+							<?php
+							// SMASH-782: Booking shows its native 0-10 score instead of 0-5 stars,
+							// matching the single feed's .sb-item-rating-score badge.
+							//
+							// THIS reviewer's own score, not metadata.review_score — that is the
+							// PROPERTY's rating and the relay stamps the same value onto every
+							// review, so the popup showed one score no matter who was cycled in.
+							// Score and band come from the shared rules in class/sbr-functions.php
+							// (sbr_booking_review_score / sbr_booking_score_word), which the feed
+							// card, the JS cycler and both customizer previews also use.
+							$sbr_bk_score = ('booking' === $provider)
+								? sbr_booking_review_score($first_review)
+								: 0;
+							$sbr_bk_word = $sbr_bk_score > 0 ? sbr_booking_score_word($sbr_bk_score) : '';
+							?>
+							<?php if ($sbr_bk_score > 0) : ?>
+							<!-- Booking native 0-10 score badge + band word -->
+							<div class="sbr-review-alert__score sbr-review-alert__score--booking">
+								<span class="sbr-review-alert__score-badge sbr-review-alert__score-badge--booking"><?php echo esc_html(number_format($sbr_bk_score, 1)); ?></span>
+								<?php if ('' !== $sbr_bk_word) :
+									?><span class="sbr-review-alert__score-label"><?php echo esc_html($sbr_bk_word); ?></span><?php
+								endif; ?>
+							</div>
+							<?php else : ?>
+							<!-- Stars -->
+							<div class="sbr-review-alert__stars">
+								<?php for ($i = 1; $i <= 5; $i++) : ?>
+									<span class="sbr-review-alert__star <?php echo esc_attr($i <= $review_rating ? '' : 'sbr-review-alert__star--empty'); ?>">
+										<?php echo DisplayElements::get_star_icon(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+									</span>
+								<?php endfor; ?>
+							</div>
+							<?php endif; ?>
 						<?php endif; ?>
 
 						<?php if ($show_reviewer_name) : ?>
@@ -248,15 +311,16 @@ $link_url = $content_settings['link_url'] ?? '';
 						<p class="sbr-review-alert__review-text"><?php echo esc_html($review_text); ?></p>
 						<?php endif; ?>
 
+
 						<?php if ($show_total_reviews) : ?>
 						<!-- View All Link -->
 						<a href="<?php echo esc_url($link_url); ?>" class="sbr-review-alert__view-all-link">
 							<span>
 								<?php
 								printf(
-									/* translators: %d: number of reviews */
-									esc_html__('View All %d Reviews', 'reviews-feed'),
-									absint($total_reviews)
+									/* translators: %s: number of reviews, formatted for the site's locale (e.g. 7,133) */
+									esc_html__('View All %s Reviews', 'reviews-feed'),
+									esc_html(number_format_i18n(absint($total_reviews)))
 								);
 								?>
 							</span>

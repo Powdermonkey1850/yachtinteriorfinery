@@ -1,6 +1,23 @@
 == Changelog ==
 === Add-on Brevo for Gravity Forms ===
 
+= 2.6.2 =
+*Release Date: 24th August 2026*
+
+* Compatibility with WordPress 7.1
+* Improvement: Added GPL license declaration and documented the Brevo external service (wp.org compliance)
+* Improvement: API error messages now include the exact error details returned by Brevo
+* Fix: Pro-only Brevo attributes could still be selected in the Fields mapping; they are now properly disabled and stripped when the feed is saved
+* Fix: Brevo contact lists could not be loaded (API error 404) due to a trailing slash in the lists endpoint
+* Fix: Feed settings now display Brevo API errors or an explanatory message when lists or attributes cannot be loaded, instead of silently hiding the section
+
+= 2.6.1 =
+*Release Date: 21st July 2026*
+
+* Compatibility with WordPress 7.0
+* Improvement: Added support and documentation links to the plugin settings page
+* Improvement: Raised minimum PHP requirement to 7.4 and tested with Gravity Forms up to 2.10
+
 = 2.6.0 =
 *Release Date: 09th December 2025*
 

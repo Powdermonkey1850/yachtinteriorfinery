@@ -3,9 +3,9 @@ Contributors: divisupreme, kenng87
 Tags: Divi, Divi Module, Divi Page Builder, divi theme, divi builder, Divi Extensions
 Donate link: https://divisupreme.com/supreme-modules-lite-for-divi/
 Requires at least: 4.5
-Tested up to: 6.9
+Tested up to: 7.1.4
 Requires PHP: 7.4
-Stable tag: 2.5.63
+Stable tag: 2.5.65
 License: GPLv2
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -52,7 +52,7 @@ Many more Divi Modules and Extensions coming soon...
 View [Demo for Divi Supreme](https://divisupreme.com/supreme-modules-lite-for-divi/) or [Demo for Divi Supreme Pro](https://divisupreme.com/features/).
 
 = Divi Supreme Pro =
-[GO Pro](https://divisupreme.com/) Over 40+ Premium Divi Modules and counting to help you speed up your workflow. Packed with everything you need to build amazing website without any effort. Whether you're just starting out with web design or are an accomplished developer with multiple personal and client projects to think about, Divi Supreme Pro will significantly improve the quality of your design work. With 40+ premium Divi modules and Divi extensions to choose from, this plugin is exactly what you need to extend the functionality of your favorite page builder.
+[GO Pro](https://divisupreme.com/) Divi 5! Over 70+ Premium Divi Modules and 16 Extension and counting to help you speed up your workflow. Packed with everything you need to build amazing website without any effort. Whether you're just starting out with web design or are an accomplished developer with multiple personal and client projects to think about, Divi Supreme Pro will significantly improve the quality of your design work. With 70+ premium Divi modules and Divi extensions to choose from, this plugin is exactly what you need to extend the functionality of your favorite page builder.
 
 = About Divi Supreme =
 Divi Supreme is featured on [ElegantThemes](https://www.elegantthemes.com/blog/divi-resources/divi-plugin-highlight-divi-supreme). Divi is a great tool for building website, but without proper addons it might take more time and money. Divi's mission is to help users design websites in the easiest, fastest and most streamlined way.
@@ -111,6 +111,16 @@ This is a common question that we get asked here every now and then which is why
 
 
 == Changelog ==
+= 2.5.65 – 29.10.2026 =
+* Fixed: Typing Effect strings are rendered as text to prevent stored XSS.
+* Fixed: Flip Box heading level is validated, and the title and subtitle are escaped.
+* Fixed: Image Accordion icon image URL is escaped.
+
+= 2.5.64 – 29.09.2026 =
+* Fixed: Sanitized header and footer CSS Classes to prevent stored XSS.
+* Fixed: load_plugin_textdomain() now uses the supreme-modules-for-divi text domain.
+* Improved: Tested up to WordPress 7.1.
+
 = 2.5.63 – 19.12.2025 =
 * Improved: Hardened security for JSON uploads to prevent file upload vulnerabilities via JSON upload bypass.
 

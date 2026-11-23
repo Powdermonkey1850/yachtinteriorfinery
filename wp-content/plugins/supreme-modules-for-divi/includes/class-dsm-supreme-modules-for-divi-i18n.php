@@ -34,7 +34,7 @@ class Dsm_Supreme_Modules_For_Divi_i18n {
 	public function load_plugin_textdomain() {
 
 		load_plugin_textdomain(
-			'dsm-supreme-modules-for-divi',
+			'supreme-modules-for-divi',
 			false,
 			dirname( dirname( plugin_basename( __FILE__ ) ) ) . '/languages/'
 		);

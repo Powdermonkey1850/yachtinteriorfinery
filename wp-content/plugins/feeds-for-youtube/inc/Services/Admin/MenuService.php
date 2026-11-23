@@ -3,6 +3,7 @@
 namespace SmashBalloon\YouTubeFeed\Services\Admin;
 
 use Smashballoon\Customizer\Container;
+use Smashballoon\Customizer\EmbedModal;
 use Smashballoon\Customizer\Feed_Builder;
 use SmashBalloon\YouTubeFeed\Helpers\Util;
 use Smashballoon\Stubs\Services\ServiceProvider;
@@ -27,6 +28,45 @@ class MenuService extends ServiceProvider {
 
 	public function register() {
 		add_action('admin_menu', [$this, 'register_menus']);
+		add_action('customizer_enqueue_scripts', [$this, 'enqueueEmbedModal']);
+		add_action('customizer_enqueue_scripts', function () {
+			// sb-customizer enqueues more builder assets after this action.
+			add_action('admin_enqueue_scripts', [$this, 'versionBuilderAssets'], PHP_INT_MAX);
+		});
+	}
+
+	/**
+	 * The bundled sb-customizer enqueues its builder assets with the fixed
+	 * SBCVER, so a cached builder.min.js from an older release would load
+	 * with the new Embed modal and freeze the tab. Version every builder
+	 * asset this plugin ships by its file instead.
+	 */
+	public function versionBuilderAssets()
+	{
+		foreach (array(wp_scripts(), wp_styles()) as $deps) {
+			foreach ($deps->queue as $handle) {
+				$asset = isset($deps->registered[$handle]) ? $deps->registered[$handle] : null;
+				if ($asset && is_string($asset->src) && strpos($asset->src, SBY_PLUGIN_URL) === 0) {
+					$asset->ver = Util::assetVersion($asset->src);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Enqueue the sb-customizer Embed Feed modal on the feed builder screen.
+	 */
+	public function enqueueEmbedModal()
+	{
+		$capability = current_user_can('manage_youtube_feed_options') ? 'manage_youtube_feed_options' : 'manage_options';
+		EmbedModal::enqueue(
+			array(
+				'capability'  => $capability,
+				'block_title' => __('YouTube Feed', 'feeds-for-youtube'),
+				'wizard_arg'  => 'sby_wizard',
+				'shortcode'   => '[youtube-feed feed=%s]',
+			)
+		);
 	}
 
 	public function register_menus() {
@@ -56,9 +96,9 @@ class MenuService extends ServiceProvider {
 			add_submenu_page(
 				SBY_MENU_SLUG,
 				__( 'Upgrade to Pro', 'feeds-for-youtube' ),
-				__( '<span class="sby_get_pro">Try the Pro Demo</span>', 'feeds-for-youtube' ),
+				__( '<span class="sby_get_pro">Upgrade to Pro</span>', 'feeds-for-youtube' ),
 				$cap,
-				'https://smashballoon.com/youtube-feed/demo/?utm_campaign=youtube-free&utm_source=menu-link&utm_medium=upgrade-link',
+				'https://smashballoon.com/youtube-feed/youtube-lite-upgrade/?utm_campaign=youtube-free&utm_source=menu-link&utm_medium=upgrade-link&utm_content=UpgradeToPro',
 				''
 			);
 		}
@@ -70,6 +110,7 @@ class MenuService extends ServiceProvider {
                 '<span class="sby_get_cff">' . __( 'Facebook Feed', 'feeds-for-youtube' ) . '</span>',
                 'manage_options',
                 'admin.php?page=sby-feed-builder&tab=more',
+                '',
                 5
             );
 		}
@@ -81,6 +122,7 @@ class MenuService extends ServiceProvider {
                 '<span class="sby_get_sbi">' . __( 'Instagram Feed', 'feeds-for-youtube' ) . '</span>',
                 'manage_options',
                 'admin.php?page=sby-feed-builder&tab=more',
+                '',
                 6
             );
 		}
@@ -92,6 +134,7 @@ class MenuService extends ServiceProvider {
                 '<span class="sby_get_ctf">' . __( 'Twitter Feed', 'feeds-for-youtube' ) . '</span>',
                 'manage_options',
                 'admin.php?page=sby-feed-builder&tab=more',
+                '',
                 7
             );
 		}
@@ -103,6 +146,7 @@ class MenuService extends ServiceProvider {
                 '<span class="sby_get_sbtt">' . __( 'Tiktok Feed', 'feeds-for-youtube' ) . '</span>',
                 'manage_options',
                 'admin.php?page=sby-feed-builder&tab=more',
+                '',
                 8
             );
 		}
@@ -114,6 +158,7 @@ class MenuService extends ServiceProvider {
                 '<span class="sby_get_sbr">' . __( 'Reviews Feed', 'feeds-for-youtube' ) . '</span>',
                 'manage_options',
                 'admin.php?page=sby-feed-builder&tab=more',
+                '',
                 9
             );
 		}

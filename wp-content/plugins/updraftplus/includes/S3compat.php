@@ -32,6 +32,7 @@
  */
 // @codingStandardsIgnoreEnd
 // phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.WP.AlternativeFunctions.file_system_operations_fwrite, WordPress.WP.AlternativeFunctions.file_system_operations_fgets, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir, WordPress.WP.AlternativeFunctions.file_system_operations_fread, WordPress.WP.AlternativeFunctions.file_system_operations_chmod, WordPress.WP.AlternativeFunctions.file_system_operations_fputs, WordPress.WP.AlternativeFunctions.file_system_operations_is_writeable, WordPress.WP.AlternativeFunctions.file_system_operations_chown, WordPress.WP.AlternativeFunctions.file_system_operations_chgrp, WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Native PHP fileystem function is used for direct control and performance because it can bypass additional layers of abstraction so that no overhead from the WordPress filesystem API's internal handling
+if (!defined('ABSPATH')) die('No direct access allowed');
 
 // SDK requires PHP 5.5+
 use Aws\Common\RulesEndpointProvider;
@@ -73,7 +74,7 @@ class UpdraftPlus_S3_Compat {
 
 	private $__ssl_key = null;
 
-	public $endpoint = 's3.amazonaws.com';
+	public $endpoint = 's3.amazonaws.com'; // phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- AWS S3 API endpoint used by the remote storage backend, not an offloaded plugin asset.
 
 	public $proxy = null;
 
@@ -315,7 +316,7 @@ class UpdraftPlus_S3_Compat {
 		if (!$host) return;
 
 		$wp_proxy = new WP_HTTP_Proxy();
-		if ($wp_proxy->send_through_proxy('https://s3.amazonaws.com')) {
+		if ($wp_proxy->send_through_proxy('https://s3.amazonaws.com')) { // phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- AWS S3 API endpoint used by the remote storage backend, not an offloaded plugin asset.
 
 			global $updraftplus;
 			$updraftplus->log("setProxy: host=$host, user=$user, port=$port");
@@ -357,7 +358,7 @@ class UpdraftPlus_S3_Compat {
 	public function useDNSBucketName($use = true, $bucket = '') {
 		$this->use_dns_bucket_name = $use;
 		if ($use && $bucket) {
-			$this->setEndpoint($bucket.'.s3.amazonaws.com', $this->region);
+			$this->setEndpoint($bucket.'.s3.amazonaws.com', $this->region); // phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- AWS S3 API endpoint used by the remote storage backend, not an offloaded plugin asset.
 		}
 		return true;
 	}

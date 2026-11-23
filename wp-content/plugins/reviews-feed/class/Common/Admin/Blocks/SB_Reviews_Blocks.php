@@ -50,6 +50,9 @@ class SB_Reviews_Blocks extends ServiceProvider
 	public function load()
 	{
 		$this->hooks();
+
+		$modern_block = new SBR_Modern_Feed_Block();
+		$modern_block->register_hooks();
 	}
 	/**
 	 * Integration hooks.
@@ -71,7 +74,24 @@ class SB_Reviews_Blocks extends ServiceProvider
 			[
 				$this,
 				'enqueue_block_editor_assets'
-			]
+			],
+			SBR_Modern_Feed_Block::EDITOR_ASSETS_PRIORITY
+		);
+
+		// Styles enqueued on enqueue_block_assets are copied into the iframed editor
+		// canvas by core (wp_get_iframed_editor_assets), so this reaches the iframe on
+		// WP 7.0+ and the plain editor on older versions. Do NOT push raw CSS into the
+		// block_editor_settings_all `styles` array instead: entries there are treated
+		// as theme editor styles on every WP version, which suppresses core's default
+		// editor typography and drops the post title/content to the browser's serif
+		// fallback on themes that ship no editor styles. sbr-styles is covered twice
+		// over: sbr_scripts_enqueue() below and the block's registered editor_style.
+		add_action(
+			'enqueue_block_assets',
+			array(
+				$this,
+				'enqueue_block_content_assets',
+			)
 		);
 	}
 
@@ -106,11 +126,27 @@ class SB_Reviews_Blocks extends ServiceProvider
 		register_block_type(
 			'sbr/sbr-feed-block',
 			array(
+				'api_version'     => 3,
 				'attributes'      => $attributes,
 				'render_callback' => [$this, 'get_feed_html'],
 				'editor_style'    => 'sbr-block-styles',
+				'supports'        => array( 'inserter' => false ),
 			)
 		);
+	}
+
+	/**
+	 * Enqueue feed frontend assets so the legacy block preview renders inside
+	 * the WP 6.7+ iframe block editor. Mirrors SB_Feed_Block::enqueue_block_content_assets().
+	 *
+	 * @since 2.5.1
+	 */
+	public function enqueue_block_content_assets()
+	{
+		if (! is_admin()) {
+			return;
+		}
+		sbr_scripts_enqueue(true);
 	}
 
 	/**
@@ -143,24 +179,74 @@ class SB_Reviews_Blocks extends ServiceProvider
 	}
 
 	/**
+	 * The block's shortcode settings for a `sbr_wizard` arg.
+	 *
+	 * Any scalar is read as the feed id it names, so `1` preselects feed 1 and `7`
+	 * preselects feed 7. A value naming no feed answers `feed="0"` rather than '',
+	 * because get_feed_html() treats an empty setting as "no feed named" and
+	 * substitutes the site's first one — a malformed arg would preview an
+	 * unrelated feed.
+	 *
+	 * @param mixed $arg Raw `sbr_wizard` value, unslashed by the caller.
+	 *
+	 * @return string `feed="N"`.
+	 */
+	public static function wizard_shortcode_settings($arg)
+	{
+		return 'feed="' . self::wizard_feed_id($arg) . '"';
+	}
+
+	/**
+	 * The feed id a `sbr_wizard` arg names, 0 when it names none.
+	 *
+	 * @param mixed $arg Raw `sbr_wizard` value, unslashed by the caller.
+	 *
+	 * @return int
+	 */
+	public static function wizard_feed_id($arg)
+	{
+		// Answered before the cast, which would raise "Array to string conversion".
+		// Same '' WP's own _sanitize_text_fields() gives for an array
+		// (wp-includes/formatting.php:5634), so the same 0.
+		if (! is_scalar($arg)) {
+			return 0;
+		}
+
+		// DEPARTURE from the inline version this replaced: it emitted feed="-5" for
+		// `-5`. Clamping is deliberate, a negative names no feed, and absint()
+		// is wrong here because it folds the sign onto real feed 5.
+		return max(0, (int) sanitize_text_field((string) $arg));
+	}
+
+	/**
 	 * Load Reviews Feed Gutenberg block scripts.
 	 *
 	 * @since 2.1
 	 */
 	public function enqueue_block_editor_assets()
 	{
-		sbr_scripts_enqueue(true);
-
 		wp_enqueue_script(
 			'sbr-feed-block',
 			trailingslashit(SBR_PLUGIN_URL) . 'assets/js/sbr-blocks.js',
-			['wp-blocks', 'wp-i18n', 'wp-element'],
+			array( 'wp-blocks', 'wp-i18n', 'wp-element', 'wp-block-editor' ),
 			SBRVER,
 			true
 		);
 
 		$shortcodeSettings = '';
 		$feeds_list_option = $this->get_feed_list_options();
+
+		$is_script_debug = ( defined('SCRIPT_DEBUG') && SCRIPT_DEBUG ) || ! empty($_GET['sb_debug']); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only debug flag, no state change.
+
+		$sbr_js_file = $is_script_debug
+			? 'assets/js/sbr-feed.js'
+			: 'assets/js/sbr-feed.min.js';
+
+		$jquery_file = 'js/jquery/jquery' . ( $is_script_debug ? '' : '.min' ) . '.js';
+
+		$sbr_options = array(
+			'adminAjaxUrl' => admin_url('admin-ajax.php'),
+		);
 
 		$i18n = array(
 			'addSettings'         => esc_html__('Add Settings', 'reviews-feed'),
@@ -170,8 +256,14 @@ class SB_Reviews_Blocks extends ServiceProvider
 			'selectFeedLabel'     => esc_html__('Select a Feed', 'reviews-feed'),
 		);
 
-		if (!empty($_GET['sbr_wizard'])) {
-			$shortcodeSettings = 'feed="' . (int) sanitize_text_field(wp_unslash($_GET['sbr_wizard'])) . '"';
+		// One read, one ignore: the annotation used to sit on the call and left the
+		// `!empty($_GET[...])` test above it reporting the sniff anyway. Read-only —
+		// wizard_shortcode_settings() writes nothing and returns feed="<int>".
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only preselect, validated in the helper.
+		$sbr_wizard_arg = isset($_GET['sbr_wizard']) ? wp_unslash($_GET['sbr_wizard']) : null;
+
+		if (! empty($sbr_wizard_arg)) {
+			$shortcodeSettings = self::wizard_shortcode_settings($sbr_wizard_arg);
 		}
 
 		wp_localize_script(
@@ -184,6 +276,9 @@ class SB_Reviews_Blocks extends ServiceProvider
 				'shortcodeSettings'    	=> $shortcodeSettings,
 				'feedsListOption'    	=> $feeds_list_option,
 				'i18n'     				=> $i18n,
+				'iframeScriptUrl'   => trailingslashit(SBR_PLUGIN_URL) . $sbr_js_file,
+				'jqueryUrl'         => includes_url($jquery_file),
+				'sbrOptions'        => $sbr_options,
 			]
 		);
 	}

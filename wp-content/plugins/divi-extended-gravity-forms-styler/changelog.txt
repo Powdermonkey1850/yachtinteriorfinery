@@ -1,9 +1,5 @@
 == Changelog ==
 
-= 1.0.4 =
-Release date: 5th June 2026
-* IMPROVEMENT: Updated license management system.
-
 = 1.0.3 =
 Release date: 16th August 2024
 * Added: Control for Submit button alignment.

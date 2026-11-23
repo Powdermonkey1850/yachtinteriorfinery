@@ -10,7 +10,7 @@ defined('ABSPATH') || exit;
 
 GFForms::include_feed_addon_framework();
 
-define('DKGFSIB_FREE_ADDON_CACHE_BUSTER', 1);
+define('DKGFSIB_FREE_ADDON_CACHE_BUSTER', 2);
 
 /**
  * This class is in charge of the GF add-on.
@@ -142,6 +142,23 @@ class GF_Addon extends GFFeedAddOn
 						'name'     => 'sib-api-key-field',
 						'type'     => 'custom_html',
 						'callback' => [$this, 'settings_sib_api_key_field'],
+					),
+				),
+			),
+			array(
+				'title'  => esc_html__('Help', 'addon-gravityforms-sendinblue-free'),
+				'fields' => array(
+					array(
+						'name'  => 'help-links',
+						'label' => esc_html__('Resources', 'addon-gravityforms-sendinblue-free'),
+						'type'  => 'html',
+						'html'  => sprintf(
+							'<a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a> &nbsp;|&nbsp; <a href="%3$s" target="_blank" rel="noopener noreferrer">%4$s</a>',
+							esc_url( 'https://wpconnect.co/documentation/gf-to-brevo/user-guide/' ),
+							esc_html__( 'Documentation', 'addon-gravityforms-sendinblue-free' ),
+							esc_url( 'https://wordpress.org/support/plugin/addon-gravityforms-sendinblue-free/' ),
+							esc_html__( 'Support', 'addon-gravityforms-sendinblue-free' )
+						),
 					),
 				),
 			),
@@ -325,8 +342,9 @@ class GF_Addon extends GFFeedAddOn
 				),
 			);
 		} else {
-			$attributes = Helpers\get_sendinblue_attributes();
-			$lists      = Helpers\get_sendinblue_contact_lists();
+			$attributes       = Helpers\get_sendinblue_attributes();
+			$lists            = Helpers\get_sendinblue_contact_lists();
+			$attributes_error = is_wp_error( $attributes ) ? $attributes : null;
 
 			$is_enabled_dependency = array(
 				'live'     => true,
@@ -419,7 +437,52 @@ class GF_Addon extends GFFeedAddOn
 
 			);
 
-			if (is_array($lists) && ! empty($lists)) {
+			if ( $attributes_error ) {
+				$fields[] = array(
+					'name'       => 'sib-attributes-api-error',
+					'label'      => '',
+					'type'       => 'html',
+					'html'       => sprintf(
+						'<p class="description">%1$s</p>',
+						sprintf(
+							/* translators: 1: API error code, 2: API error message */
+							esc_html__( 'Could not load your Brevo attributes. The Brevo API returned an error (%1$s): %2$s', 'addon-gravityforms-sendinblue-free' ),
+							esc_html( $attributes_error->get_error_code() ),
+							esc_html( $attributes_error->get_error_message() )
+						)
+					),
+					'dependency' => $is_enabled_dependency,
+				);
+			}
+
+			if ( is_wp_error( $lists ) ) {
+				$fields[] = array(
+					'name'       => 'sib-lists-api-error',
+					'label'      => esc_html__( 'Add to list', 'addon-gravityforms-sendinblue-free' ),
+					'type'       => 'html',
+					'html'       => sprintf(
+						'<p class="description">%1$s</p>',
+						sprintf(
+							/* translators: 1: API error code, 2: API error message */
+							esc_html__( 'Could not load your Brevo lists. The Brevo API returned an error (%1$s): %2$s', 'addon-gravityforms-sendinblue-free' ),
+							esc_html( $lists->get_error_code() ),
+							esc_html( $lists->get_error_message() )
+						)
+					),
+					'dependency' => $is_enabled_dependency,
+				);
+			} elseif ( empty( $lists ) ) {
+				$fields[] = array(
+					'name'       => 'sib-lists-empty',
+					'label'      => esc_html__( 'Add to list', 'addon-gravityforms-sendinblue-free' ),
+					'type'       => 'html',
+					'html'       => sprintf(
+						'<p class="description">%1$s</p>',
+						esc_html__( 'No contact lists were found in your Brevo account. Create at least one list in Brevo, then reload this page.', 'addon-gravityforms-sendinblue-free' )
+					),
+					'dependency' => $is_enabled_dependency,
+				);
+			} else {
 				$lists_field = array(
 					'name'       => 'add-to-list',
 					'label'      => esc_html__('Add to list', 'addon-gravityforms-sendinblue-free'),
@@ -470,54 +533,54 @@ class GF_Addon extends GFFeedAddOn
 				}
 
 				$fields[] = $lists_field;
-
-				$fields[] = array(
-					'name'       => 'use-double-optin',
-					'label'      => esc_html__('Double opt-in (Pro version)', 'addon-gravityforms-sendinblue-free'),
-					'type'       => 'checkbox',
-					'disabled'   => true,
-					'choices'    => array(
-						array(
-							'label' => esc_html__('Enable double opt-in', 'addon-gravityforms-sendinblue-free') . ' ' . esc_html__('(Pro version)', 'addon-gravityforms-sendinblue-free'),
-							'name'  => 'double-optin-enabled',
-						),
-					),
-					'tooltip'    => esc_html__('By enabling this, Brevo will send a confirmation email to the user before adding them to your list(s).', 'addon-gravityforms-sendinblue-free'),
-					'dependency' => $is_enabled_dependency,
-				);
-
-				$fields[] = array(
-					'name'    => 'enable-note-mapping',
-					'label'   => esc_html__('Create a note (Pro version)', 'addon-gravityforms-sendinblue-free'),
-					'type'    => 'checkbox',
-					'tooltip' => esc_html__('By enabling this feature it will be possible to add notes to a created/updated user', 'addon-gravityforms-sendinblue-free'),
-					'choices' => array(
-						array(
-							'label'   => esc_html__('Enable note creation. (Pro version)', 'addon-gravityforms-sendinblue-free'),
-							'name'    => 'enable-note-mapping-enabled',
-							'disabled' => true, 
-						),
-					),
-					'dependency' => $is_enabled_dependency,
-				);
-				
-				$fields[] = array(
-					'name'    => 'partial-entries-enabled',
-					'label'   => esc_html__('Use partial entries (Pro version)', 'addon-gravityforms-sendinblue-free'),
-					'type'    => 'checkbox',
-					'tooltip' => sprintf(
-						esc_html__("Allows sending partial entries to Brevo. Make sure to enable partial entries for this form in the Gravity Forms settings.", 'addon-gravityforms-sendinblue-free'),
-					),
-					'choices' => array(
-						array(
-							'label'   => esc_html__('Enable partial entries. (Pro version)', 'addon-gravityforms-sendinblue-free'),
-							'name'    => 'partial-entries-enabled',
-							'disabled' => true,
-						),
-					),
-					'dependency' => $is_enabled_dependency,
-				);
 			}
+
+			$fields[] = array(
+				'name'       => 'use-double-optin',
+				'label'      => esc_html__('Double opt-in (Pro version)', 'addon-gravityforms-sendinblue-free'),
+				'type'       => 'checkbox',
+				'disabled'   => true,
+				'choices'    => array(
+					array(
+						'label' => esc_html__('Enable double opt-in', 'addon-gravityforms-sendinblue-free') . ' ' . esc_html__('(Pro version)', 'addon-gravityforms-sendinblue-free'),
+						'name'  => 'double-optin-enabled',
+					),
+				),
+				'tooltip'    => esc_html__('By enabling this, Brevo will send a confirmation email to the user before adding them to your list(s).', 'addon-gravityforms-sendinblue-free'),
+				'dependency' => $is_enabled_dependency,
+			);
+
+			$fields[] = array(
+				'name'    => 'enable-note-mapping',
+				'label'   => esc_html__('Create a note (Pro version)', 'addon-gravityforms-sendinblue-free'),
+				'type'    => 'checkbox',
+				'tooltip' => esc_html__('By enabling this feature it will be possible to add notes to a created/updated user', 'addon-gravityforms-sendinblue-free'),
+				'choices' => array(
+					array(
+						'label'    => esc_html__('Enable note creation. (Pro version)', 'addon-gravityforms-sendinblue-free'),
+						'name'     => 'enable-note-mapping-enabled',
+						'disabled' => true,
+					),
+				),
+				'dependency' => $is_enabled_dependency,
+			);
+
+			$fields[] = array(
+				'name'    => 'partial-entries-enabled',
+				'label'   => esc_html__('Use partial entries (Pro version)', 'addon-gravityforms-sendinblue-free'),
+				'type'    => 'checkbox',
+				'tooltip' => sprintf(
+					esc_html__("Allows sending partial entries to Brevo. Make sure to enable partial entries for this form in the Gravity Forms settings.", 'addon-gravityforms-sendinblue-free'),
+				),
+				'choices' => array(
+					array(
+						'label'    => esc_html__('Enable partial entries. (Pro version)', 'addon-gravityforms-sendinblue-free'),
+						'name'     => 'partial-entries-enabled',
+						'disabled' => true,
+					),
+				),
+				'dependency' => $is_enabled_dependency,
+			);
 		}
 
 		return array(
@@ -553,6 +616,61 @@ class GF_Addon extends GFFeedAddOn
 	// #####  ##     ##    ##    ##   ##     ##
 	//
 	// =================================================
+
+	/**
+	 * Get the attribute keys the free version is allowed to sync: EMAIL plus
+	 * boolean (consent-like) Brevo attributes.
+	 *
+	 * @return array|null Allowed keys, or null when attributes could not be fetched.
+	 */
+	protected function get_free_allowed_attribute_keys()
+	{
+		$attributes = Helpers\get_sendinblue_attributes();
+
+		if (! is_array($attributes)) {
+			return null;
+		}
+
+		$allowed = array('EMAIL');
+
+		foreach ($attributes as $attribute) {
+			if (isset($attribute->type, $attribute->name) && $attribute->type === 'boolean') {
+				$allowed[] = sanitize_text_field($attribute->name);
+			}
+		}
+
+		return $allowed;
+	}
+
+	/**
+	 * Strip Pro-only attribute mappings before saving a feed. The mapping UI disables
+	 * them, but the saved settings are the authoritative layer.
+	 *
+	 * @param integer $feed_id
+	 * @param integer $form_id
+	 * @param array   $settings
+	 * @return integer
+	 */
+	public function save_feed_settings($feed_id, $form_id, $settings)
+	{
+		if (isset($settings['mapped-fields']) && is_array($settings['mapped-fields'])) {
+			$allowed_keys = $this->get_free_allowed_attribute_keys();
+
+			// Fail-open: if attributes cannot be fetched, keep the mapping untouched.
+			if (is_array($allowed_keys)) {
+				$settings['mapped-fields'] = array_values(
+					array_filter(
+						$settings['mapped-fields'],
+						function ($mapping) use ($allowed_keys) {
+							return isset($mapping['key']) && in_array($mapping['key'], $allowed_keys, true);
+						}
+					)
+				);
+			}
+		}
+
+		return parent::save_feed_settings($feed_id, $form_id, $settings);
+	}
 
 	/**
 	 * Initiate processing the feed.

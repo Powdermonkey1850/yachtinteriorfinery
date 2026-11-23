@@ -3,11 +3,13 @@
 namespace SmashBalloon\TikTokFeeds\Common;
 
 use SmashBalloon\TikTokFeeds\Common\Container;
+use SmashBalloon\TikTokFeeds\Common\Abilities\SBTT_Abilities;
 use Smashballoon\Stubs\Services\ServiceProvider;
 use SmashBalloon\TikTokFeeds\Common\Admin\MenuService;
-use SmashBalloon\TikTokFeeds\Common\Admin\AboutBuilder;
 use SmashBalloon\TikTokFeeds\Common\Admin\Blocks;
+use SmashBalloon\TikTokFeeds\Common\Admin\Blocks\SBTT_Modern_Feed_Block;
 use SmashBalloon\TikTokFeeds\Common\Admin\SupportBuilder;
+use SmashBalloon\TikTokFeeds\Common\Integrations\Elementor\SBTT_Elementor_Base;
 use SmashBalloon\TikTokFeeds\Common\Customizer\FeedBuilder;
 use SmashBalloon\TikTokFeeds\Common\Integrations\FeedAnalytics;
 use SmashBalloon\TikTokFeeds\Common\Services\ActivationService;
@@ -22,7 +24,7 @@ use SmashBalloon\TikTokFeeds\Common\Services\ActionHooksService;
 use SmashBalloon\TikTokFeeds\Common\Services\NotificationService;
 use SmashBalloon\TikTokFeeds\Common\Services\ShortcodeService;
 use SmashBalloon\TikTokFeeds\Common\Services\UninstallService;
-use SmashBalloon\TikTokFeeds\Common\Services\UsageTrackingService;
+use SmashBalloon\TikTokFeeds\Common\UsageTracking\SmashUsageTrackingService;
 use SmashBalloon\TikTokFeeds\Common\Services\NewUserService;
 use SmashBalloon\TikTokFeeds\Common\Settings\SettingsBuilder;
 
@@ -47,16 +49,21 @@ class ServiceContainer extends ServiceProvider
 		MenuService::class,
 		FeedBuilder::class,
 		SettingsBuilder::class,
-		AboutBuilder::class,
 		SupportBuilder::class,
 		DBManagerService::class,
 		ShortcodeService::class,
 		AjaxHandlerService::class,
-		UsageTrackingService::class,
+		SmashUsageTrackingService::class,
 		NotificationService::class,
 		NewUserService::class,
 		FeedAnalytics::class,
 		Blocks::class,
+		SBTT_Modern_Feed_Block::class,
+		SBTT_Elementor_Base::class,
+		// SBR-501 / SBR-579 -- WordPress Abilities API integration (AgDR-0503,
+		// AgDR-9005). One module for both editions; the schema is
+		// edition-filtered (SBTT_Edition).
+		SBTT_Abilities::class,
 	];
 
 	/**
@@ -69,7 +76,7 @@ class ServiceContainer extends ServiceProvider
 		$container = Container::get_instance();
 		foreach ($this->services as $service) {
 			// Some services need a Proxy instance to be passed to them.
-			if ($service === AboutBuilder::class || $service === SupportBuilder::class) {
+			if ($service === SupportBuilder::class) {
 				$container->set($service, new $service($container->get('Proxy')));
 				continue;
 			}

@@ -590,9 +590,14 @@ class SBY_Display_Elements
 
 	public static function get_style_att( $context, $settings, $pos = false ) {
 		$style_settings = array();
-		$item_spacing_setting = $settings['itemspacing'];
-		if ( ! preg_match("/(px)|(%)/", $item_spacing_setting ) ) {
-			$item_spacing_setting = $item_spacing_setting . $settings['itemspacingunit'];
+		// itemspacing was used verbatim whenever it already contained px or %, and the unit was
+		// appended unvalidated — both land inside style="…", where esc_attr() prevents escaping
+		// the attribute but not appending another declaration inside it. (SMASH-1799)
+		$item_spacing_setting = sby_css_length( $settings['itemspacing'] );
+		if ( '' === $item_spacing_setting ) {
+			$item_spacing_setting = '0px';
+		} elseif ( ! preg_match( "/(px)|(%)/", $item_spacing_setting ) ) {
+			$item_spacing_setting = $item_spacing_setting . sby_css_unit( $settings, 'itemspacingunit' );
 		}
 		if ( $context === 'player' ) {
 			$style_settings['margin-bottom'] = $item_spacing_setting;
@@ -740,16 +745,16 @@ class SBY_Display_Elements
 		     || ! empty( $settings['height'] ) ) {
 			$styles = ' style="';
 			if ( ! empty( $settings['imagepadding'] ) ) {
-				$styles .= 'padding-bottom: ' . ((int)$settings['imagepadding'] * 2) . esc_attr( $settings['imagepaddingunit'] ) . ';';
+				$styles .= 'padding-bottom: ' . ((int)$settings['imagepadding'] * 2) . sby_css_unit( $settings, 'imagepaddingunit' ) . ';';
 			}
 			if ( ! empty( $bg_color ) ) {
 				$styles .= 'background-color: rgb(' . esc_attr( sby_hextorgb( $bg_color ) ). ');';
 			}
 			if ( ! empty( $settings['width'] ) ) {
-				$styles .= 'width: ' . (int)$settings['width'] . esc_attr( $settings['widthunit'] ) . ';';
+				$styles .= 'width: ' . (int)$settings['width'] . sby_css_unit( $settings, 'widthunit' ) . ';';
 			}
 			if ( ! empty( $settings['height'] ) ) {
-				$styles .= 'height: ' . (int)$settings['height'] . esc_attr( $settings['heightunit'] ) . ';';
+				$styles .= 'height: ' . (int)$settings['height'] . sby_css_unit( $settings, 'heightunit' ) . ';';
 			}
 			$styles .= '"';
 		}
@@ -767,7 +772,7 @@ class SBY_Display_Elements
 	 */
 	public static function get_items_wrap_style( $settings ) {
 		if ( ! empty ( $settings['imagepadding'] ) ) {
-			return 'style="padding: '.(int)$settings['imagepadding'] . esc_attr( $settings['imagepaddingunit'] ) . ';"';
+			return 'style="padding: '.(int)$settings['imagepadding'] . sby_css_unit( $settings, 'imagepaddingunit' ) . ';"';
 		}
 		return '';
 	}
@@ -1116,6 +1121,50 @@ class SBY_Display_Elements
 		} else {
 			return '';
 		}
+	}
+
+	/**
+	 * A RAW count for a data attribute, with "absent" kept distinct from "zero".
+	 *
+	 * SBY_Parse::get_like_count() and its siblings return '' when the statistic is
+	 * genuinely unavailable -- a video whose owner hid its like count, a feed built
+	 * before the statistic was cached -- and a number otherwise. Those are two
+	 * different facts and the swipe viewer renders them differently: an absent
+	 * count shows NO readout at all, while a real 0 shows "0". A hidden like count
+	 * displayed as "0 likes" is a statement about the video that is not true.
+	 *
+	 * intval() destroys that distinction, because intval( '' ) is 0. The raw
+	 * attributes added for the viewer's rail went out doing exactly that, with a
+	 * comment claiming the opposite -- that passing "a clean integer" preserved the
+	 * difference on the JS side. It did not: absent and zero both arrived as "0",
+	 * and the viewer's parseCount(), which does distinguish them, never saw an
+	 * absent value to distinguish.
+	 *
+	 * So: '' stays '', and anything else becomes an integer. The empty string is
+	 * what the reader wants rather than omitting the attribute entirely, because
+	 * parseCount() already maps '' and a missing attribute to the same null -- and
+	 * an attribute that is always present, sometimes empty, keeps the markup shape
+	 * stable for anything else reading these tiles.
+	 *
+	 * Negative values are passed through as-is rather than clamped. They should not
+	 * occur, the viewer already discards them, and inventing a clamp here would
+	 * hide a data problem in the layer least able to explain it.
+	 *
+	 * @param mixed $count Raw count from an SBY_Parse::get_*_count() call.
+	 *
+	 * @return int|string An integer, or '' when the statistic is absent.
+	 *
+	 * @since 2.1.2
+	 */
+	public static function raw_count_att_value( $count ) {
+		if ( $count === '' || $count === null || is_array( $count ) ) {
+			return '';
+		}
+		if ( ! is_numeric( $count ) ) {
+			return '';
+		}
+
+		return intval( $count );
 	}
 
 	public static function escaped_data_att_string( $atts ) {

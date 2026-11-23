@@ -1,6 +1,6 @@
 <div class="sb-onboarding-wizard-step-wrapper sb-onboarding-wizard-step-success sb-fs">
 	<div class="sb-onboarding-wizard-step-top sb-fs" data-large="true">
-		<h4 v-html="onboardingWizardStepContent['success-page'].heading"></h4>
+		<h1 tabindex="-1" class="sb-onboarding-wizard-step-heading" v-html="onboardingWizardStepContent['success-page'].heading"></h1>
 		<span v-html="onboardingWizardStepContent['success-page'].description"></span>
 	</div>
 
@@ -43,7 +43,8 @@
 	<strong><?php echo __('Already have a license key?') ?></strong>
 	<p><?php echo __('Upgrade in a single click by adding your license key below') ?></p>
 	<div class="sb-onboarding-wizard-license-inp-ctn">
-		<input type="text" placeholder="<?php echo __('Paste license key here') ?>" v-model="setupLicencekey"/>
+		<label for="cff-license-key" class="sb-sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;"><?php echo esc_html__('License key', 'custom-facebook-feed') ?></label>
+		<input type="text" id="cff-license-key" placeholder="<?php echo __('Paste license key here') ?>" v-model="setupLicencekey"/>
 		<button class="sb-btn sb-btn-grey" @click.prevent.default="runOneClickUpgrade">
 			<svg v-if="licenseLoading"  version="1.1" id="loader-1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="20px" height="20px" viewBox="0 0 50 50" style="enable-background:new 0 0 50 50;" xml:space="preserve"><path fill="#fff" d="M43.935,25.145c0-10.318-8.364-18.683-18.683-18.683c-10.318,0-18.683,8.365-18.683,18.683h4.068c0-8.071,6.543-14.615,14.615-14.615c8.072,0,14.615,6.543,14.615,14.615H43.935z"><animateTransform attributeType="xml" attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.6s" repeatCount="indefinite"/></path></svg>
 			<svg v-if="!licenseLoading" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M6.46447 9.88868L12.8284 3.52472L14.2426 4.93893L6.46447 12.7171L2.22183 8.47446L3.63604 7.06025L6.46447 9.88868Z" fill="#9295A6"/></svg>
@@ -52,6 +53,38 @@
 	</div>
 	<span class="sb-onboarding-wizard-license-error" v-if="setupLicencekeyError !== null" v-html="setupLicencekeyError"></span>
 </div>
+
+<?php
+/**
+ * Onboarding consent checkbox (Free only — the package template self-guards on
+ * Pro). The checkbox saves through the shared sbcConsent.saveChoice AJAX, which
+ * also marks the re-prompt modal dismissed so it never nags afterwards.
+ */
+// Skip the box when data sharing is already on (accepted in any Smash Balloon plugin).
+if ( class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) && ! \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::is_dsc_enabled() ) {
+	echo '<div class="sb-onboarding-wizard-consent-ctn sb-fs">';
+	\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::render_onboarding_section( 'facebook' );
+	echo '</div>';
+	?>
+	<script>
+	(function () {
+		'use strict';
+		// Delegate from document: the wizard is a Vue template, so Vue replaces
+		// this markup when it mounts and a listener bound to the original
+		// checkbox would be lost, silently dropping the consent choice.
+		document.addEventListener('change', function (e) {
+			var box = e.target;
+			if (!box || box.id !== 'sbc-consent-onboarding-checkbox' || !window.sbcConsent || typeof window.sbcConsent.saveChoice !== 'function') {
+				return;
+			}
+			var on = !!box.checked;
+			window.sbcConsent.saveChoice(on ? 'accept' : 'skip', { dsc: on, notif: on });
+		});
+	})();
+	</script>
+	<?php
+}
+?>
 
 <div class="sb-onboarding-wizard-finish-ctn sb-fs">
 	<button class="sb-btn sb-btn-grey"  @click.prevent.default="dismissOnboardingWizard">

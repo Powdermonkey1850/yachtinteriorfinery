@@ -34,9 +34,7 @@ if (!sbi_js_exists) {
                 if (typeof sb_instagram_js_options.ajax_url !== 'undefined' && typeof window.sbiajaxurl === 'undefined') {
                     window.sbiajaxurl = sb_instagram_js_options.ajax_url;
                 }
-                if (typeof window.sbiajaxurl === 'undefined' || window.sbiajaxurl.indexOf(window.location.hostname) === -1) {
-                    window.sbiajaxurl = location.protocol + '//' + window.location.hostname + '/wp-admin/admin-ajax.php';
-                }
+                window.sbiajaxurl = sbiResolveAjaxUrl(window.sbiajaxurl);
 
                 if ($('#sbi-builder-app').length && typeof window.sbiresizedImages === 'undefined') {
                     if ($('.sbi_resized_image_data').length
@@ -408,6 +406,11 @@ if (!sbi_js_exists) {
                 var $self = $(this.el),
                     feed = this;
                 feed.page++;
+                // Each request starts from a clean status region, so an earlier failure
+                // message can't linger into this request's own announcement.
+                feed.postSetRequest = (feed.postSetRequest || 0) + 1;
+                var sbiRequestId = feed.postSetRequest;
+                $self.find('[data-sbi-feed-status]').text('');
 
                 var locatorNonce = '';
                 if (typeof $self.attr('data-locatornonce') !== 'undefined') {
@@ -427,15 +430,39 @@ if (!sbi_js_exists) {
                         locator_nonce: locatorNonce
                     };
                 var onSuccess = function (data) {
-                    var response = data?.data;
+                    var payload = data;
 
-                    if (typeof data !== 'object' && data.trim().indexOf('{') === 0) {
-                        response = JSON.parse(data.trim());
+                    if (typeof payload === 'string' && payload.trim().indexOf('{') === 0) {
+                        try {
+                            payload = JSON.parse(payload.trim());
+                        } catch (e) {
+                            payload = data;
+                        }
                     }
+
+                    // A rejected request (e.g. a stale locator token in cached HTML)
+                    // returns {success: false} with no feedStatus; never read into it.
+                    if (!feed.isValidPostSetResponse(payload)) {
+                        feed.handlePostSetFailure(payload, false, sbiRequestId);
+                        return;
+                    }
+
+                    var response = payload.data;
                     if (feed.settings.debugEnabled) {
                         console.log(response);
                     }
+                    var sbiPrevCount = $self.find('#sbi_images .sbi_item').length;
                     feed.appendNewPosts(response.html);
+                    var sbiNewCount = $self.find('#sbi_images .sbi_item').length - sbiPrevCount;
+                    if (sbiNewCount > 0) {
+                        var sbiStatusEl = $self.find('[data-sbi-feed-status]');
+                        var sbiAnnounceText = typeof sbiTranslate === 'function'
+                            ? sbiTranslate('new posts loaded')
+                            : 'new posts loaded';
+                        if (sbiStatusEl.length) {
+                            sbiStatusEl.text(sbiNewCount + ' ' + sbiAnnounceText);
+                        }
+                    }
                     feed.addResizedImages(response.resizedImages);
                     if (feed.settings.ajaxPostLoad) {
                         feed.settings.ajaxPostLoad = false;
@@ -446,14 +473,158 @@ if (!sbi_js_exists) {
 
                     if (!response.feedStatus.shouldPaginate) {
                         feed.outOfPages = true;
-                        $self.find('.sbi_load_btn').hide();
+                        var sbiLoadBtn = $self.find('.sbi_load_btn');
+                        var sbiLoadBtnFocused = sbiLoadBtn.is(document.activeElement);
+                        sbiLoadBtn.hide();
+                        var sbiEndStatusEl = $self.find('[data-sbi-feed-status]');
+                        if (sbiEndStatusEl.length) {
+                            var sbiEndText = typeof sbiTranslate === 'function'
+                                ? sbiTranslate('All posts loaded')
+                                : 'All posts loaded';
+                            sbiEndStatusEl.text(sbiNewCount > 0 ? sbiNewCount + ' ' + sbiAnnounceText + '. ' + sbiEndText : sbiEndText);
+                        }
+                        if (sbiLoadBtnFocused) {
+                            var sbiFirstNew = sbiNewCount > 0 ? $self.find('#sbi_images .sbi_item').eq(sbiPrevCount) : $();
+                            if (sbiFirstNew.length) {
+                                sbiFirstNew.attr('tabindex', '-1').focus();
+                            } else {
+                                var sbiFocusFallback = sbiEndStatusEl.length ? sbiEndStatusEl : $self;
+                                sbiFocusFallback.attr('tabindex', '-1').focus();
+                            }
+                        }
                     } else {
                         feed.outOfPages = false;
                     }
                     $('.sbi_no_js').removeClass('sbi_no_js');
 
                 };
-                sbiAjax(submitData, onSuccess);
+                var onError = function (jqXHR) {
+                    feed.handlePostSetFailure(jqXHR, true, sbiRequestId);
+                };
+                sbiAjax(submitData, onSuccess, onError);
+            },
+            isValidPostSetResponse: function (payload) {
+                return !!(payload
+                    && typeof payload === 'object'
+                    && payload.success === true
+                    && payload.data
+                    && typeof payload.data === 'object'
+                    && payload.data.feedStatus
+                    && typeof payload.data.feedStatus === 'object');
+            },
+            handlePostSetFailure: function (payload, isTransportError, requestId) {
+                var $self = $(this.el),
+                    feed = this;
+
+                try {
+                    if (typeof requestId === 'undefined') {
+                        requestId = feed.postSetRequest;
+                    }
+
+                    // A newer request (e.g. a double click) has started since this one was
+                    // sent; its own outcome owns the page counter, button, status and focus.
+                    if (requestId !== feed.postSetRequest) {
+                        if (feed.settings.debugEnabled) {
+                            console.log('Instagram Feed: ignoring superseded post request failure', payload);
+                        }
+                        return;
+                    }
+
+                    if (feed.settings.debugEnabled) {
+                        console.log('Instagram Feed: could not load posts', payload);
+                    }
+
+                    var sbiLoadBtn = $self.find('.sbi_load_btn');
+                    var sbiLoadBtnFocused = sbiLoadBtn.is(document.activeElement);
+                    var sbiStatusEl = $self.find('[data-sbi-feed-status]');
+                    var sbiFailText;
+                    $self.find('.sbi_loader').addClass('sbi_hidden');
+                    $self.find('.sbi_btn_text').removeClass('sbi_hidden');
+
+                    // Load More moved held-back posts to .sbi_transition before the request;
+                    // reveal them as a successful load would, so they don't stay blank.
+                    if (!feed.settings.ajaxPostLoad) {
+                        try {
+                            feed.afterNewImagesLoaded();
+                        } catch (e) {
+                            if (feed.settings.debugEnabled) {
+                                console.log(e);
+                            }
+                        }
+                    }
+
+                    // A transport error (timeout, 5xx, network) on a Load More click can be
+                    // retried: keep the button and give the page number back. A rejected
+                    // request, or a failed AJAX initial load, ends pagination.
+                    if (isTransportError === true && !feed.settings.ajaxPostLoad) {
+                        feed.page = Math.max(1, feed.page - 1);
+                        feed.outOfPages = false;
+                        sbiFailText = typeof sbiTranslate === 'function'
+                            ? sbiTranslate('Couldn\'t load more posts. Please try again.')
+                            : 'Couldn\'t load more posts. Please try again.';
+                        if (sbiLoadBtnFocused) {
+                            sbiLoadBtn.focus();
+                        }
+                    } else {
+                        feed.outOfPages = true;
+                        sbiLoadBtn.hide();
+
+                        if (feed.settings.ajaxPostLoad) {
+                            feed.settings.ajaxPostLoad = false;
+                            try {
+                                feed.afterInitialImagesLoaded();
+                            } catch (e) {
+                                if (feed.settings.debugEnabled) {
+                                    console.log(e);
+                                }
+                            }
+                        }
+
+                        sbiFailText = typeof sbiTranslate === 'function'
+                            ? sbiTranslate('Couldn\'t load more posts.')
+                            : 'Couldn\'t load more posts.';
+                        if (sbiLoadBtnFocused) {
+                            // The status region is visually hidden; focus the last post that is
+                            // actually rendered (not collapsed or still faded out), else the feed.
+                            var sbiFocusTarget = $self;
+                            var sbiItems = $self.find('#sbi_images .sbi_item');
+                            for (var sbiIndex = sbiItems.length - 1; sbiIndex >= 0; sbiIndex--) {
+                                var sbiItemEl = sbiItems[sbiIndex];
+                                var sbiOpacity = '';
+                                try {
+                                    sbiOpacity = window.getComputedStyle(sbiItemEl).opacity;
+                                } catch (e) {
+                                    sbiOpacity = '';
+                                }
+                                if (sbiItemEl.offsetHeight > 0 && sbiOpacity !== '0') {
+                                    sbiFocusTarget = $(sbiItemEl);
+                                    break;
+                                }
+                            }
+                            sbiFocusTarget.attr('tabindex', '-1').focus();
+                        }
+                    }
+
+                    if (sbiStatusEl.length) {
+                        // Clear first so a repeated failure is announced again; skip the write
+                        // if a newer request has started or already announced its own result.
+                        sbiStatusEl.text('');
+                        setTimeout(function () {
+                            try {
+                                if (feed.postSetRequest === requestId && sbiStatusEl.text() === '') {
+                                    sbiStatusEl.text(sbiFailText);
+                                }
+                            } catch (e) {
+                            }
+                        }, 100);
+                    }
+
+                    $('.sbi_no_js').removeClass('sbi_no_js');
+                } catch (e) {
+                    if (feed.settings && feed.settings.debugEnabled) {
+                        console.log(e);
+                    }
+                }
             },
             appendNewPosts: function (newPostsHtml) {
                 var $self = $(this.el),
@@ -896,8 +1067,19 @@ if (!sbi_js_exists) {
                         this.settings.consentGiven = false;
                     }
                 } else if (typeof window.cookieyes !== "undefined") { // CookieYes | GDPR Cookie Consent by CookieYes
-                    if (typeof window.cookieyes._ckyConsentStore.get !== 'undefined') {
-                        this.settings.consentGiven = window.cookieyes._ckyConsentStore.get('functional') === 'yes';
+                    // window.cookieyes can be the bare <script id="cookieyes"> element when the CookieYes
+                    // script did not run (pageview quota exceeded, CDN blocked). Read consent only from a
+                    // usable store; otherwise keep privacy mode on.
+                    try {
+                        var ckyConsentStore = window.cookieyes._ckyConsentStore;
+                        if (ckyConsentStore && typeof ckyConsentStore.get === 'function') {
+                            this.settings.consentGiven = ckyConsentStore.get('functional') === 'yes';
+                        }
+                    } catch (e) {
+                        this.settings.consentGiven = false;
+                        if (this.settings.debugEnabled) {
+                            console.warn('Instagram Feed: could not read CookieYes consent', e);
+                        }
                     }
                 } else if (typeof CLI_Cookie !== "undefined") { // GDPR Cookie Consent by WebToffee
                     if (CLI_Cookie.read(CLI_ACCEPT_COOKIE_NAME) !== null) {
@@ -980,13 +1162,54 @@ if (!sbi_js_exists) {
             return new SbiFeed(feed, index, feedOptions);
         }
 
-        function sbiAjax(submitData, onSuccess) {
-            $.ajax({
+        // Picks the admin-ajax.php URL for every feed request. The localized
+        // admin_url( 'admin-ajax.php' ) has the site's subfolder and port, so it
+        // stays as it is whenever its host is the page's host.
+        function sbiResolveAjaxUrl(localizedUrl) {
+            var parsed;
+            if (typeof localizedUrl !== 'string' || localizedUrl === '') {
+                // No localized URL. WordPress prints ajaxurl on every wp-admin screen
+                // from admin_url( 'admin-ajax.php', 'relative' ), so it keeps the subfolder.
+                if (typeof window.ajaxurl === 'string' && window.ajaxurl !== '') {
+                    return window.ajaxurl;
+                }
+                // Last resort: the page's scheme, host and port. It cannot know a subfolder.
+                return window.location.origin + '/wp-admin/admin-ajax.php';
+            }
+            // The block editor canvas iframe is on blob:, so there is no page host to compare.
+            if (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') {
+                return localizedUrl;
+            }
+            if (typeof window.URL !== 'function') {
+                return localizedUrl;
+            }
+            try {
+                parsed = new window.URL(localizedUrl, window.location.href);
+            } catch (e) {
+                return localizedUrl;
+            }
+            if (parsed.host.toLowerCase() === window.location.host.toLowerCase()) {
+                return localizedUrl;
+            }
+            // The page is on another host than WordPress (www against non-www, a language
+            // or mapped domain, a proxy). admin-ajax.php sends CORS headers only for the
+            // home and admin hosts, and a cross-origin POST carries no login cookies.
+            // So use the page's origin, which also keeps its port, with the localized
+            // path, which keeps the subfolder.
+            return window.location.origin + parsed.pathname + parsed.search;
+        }
+
+        function sbiAjax(submitData, onSuccess, onError) {
+            var ajaxArgs = {
                 url: sbiajaxurl,
                 type: 'post',
                 data: submitData,
                 success: onSuccess
-            });
+            };
+            if (typeof onError === 'function') {
+                ajaxArgs.error = onError;
+            }
+            $.ajax(ajaxArgs);
         }
 
         function sbiCmplzGetCookie(cname) {
@@ -1049,6 +1272,17 @@ if (!sbi_js_exists) {
                     window.sbi.feeds[index].afterConsentToggled();
                 });
             }, 1000);
+        });
+
+        // CookieYes | GDPR Cookie Consent by CookieYes
+        // Its script can run after this one (deferred or delayed), when the handler above found no
+        // banner buttons. Re-check consent on the events CookieYes fires on document instead.
+        ['cookieyes_banner_load', 'cookieyes_consent_update'].forEach(function (eventName) {
+            document.addEventListener(eventName, function () {
+                $.each(window.sbi.feeds, function (index) {
+                    window.sbi.feeds[index].afterConsentToggled();
+                });
+            });
         });
 
         // Cookiebot

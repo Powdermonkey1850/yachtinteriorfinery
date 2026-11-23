@@ -608,11 +608,13 @@ class DSM_FlipBox_Perk_Child extends ET_Builder_Module {
 		}
 
 		if ( '' !== $title ) {
-			$title = sprintf( '<%1$s class="dsm-title et_pb_module_header">%2$s</%1$s>', '' === $header_level ? $parent_header_level : et_pb_process_header_level( $header_level, 'h4' ), $title );
+			$header_tag = '' === $header_level ? $parent_header_level : $header_level;
+			$header_tag = et_pb_process_header_level( $header_tag, 'h4' );
+			$title      = sprintf( '<%1$s class="dsm-title et_pb_module_header">%2$s</%1$s>', $header_tag, esc_html( $title ) );
 		}
 
 		if ( '' !== $subtitle ) {
-			$subtitle = sprintf( '<span class="dsm-subtitle">%1$s</span>', $subtitle );
+			$subtitle = sprintf( '<span class="dsm-subtitle">%1$s</span>', esc_html( $subtitle ) );
 		}
 
 		// Render button

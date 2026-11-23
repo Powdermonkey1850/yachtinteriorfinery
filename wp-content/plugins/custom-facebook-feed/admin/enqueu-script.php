@@ -37,15 +37,21 @@ add_action('admin_enqueue_scripts', 'enqueue_admin_scripts_assets');
 function enqueue_admin_scripts_assets()
 {
 	wp_register_style(
+		'cff-tokens-local',
+		CFF_PLUGIN_URL . 'assets/tokens/cff-tokens-local.css',
+		array(),
+		CFFVER
+	);
+	wp_register_style(
 		'custom_wp_admin_css',
 		CFF_PLUGIN_URL . 'admin/assets/css/cff-admin-style.css',
-		false,
+		array('cff-tokens-local'),
 		CFFVER
 	);
 	wp_enqueue_style('custom_wp_admin_css');
 	wp_enqueue_style(
 		'cff-font-awesome',
-		'https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css',
+		CFF_PLUGIN_URL . 'assets/css/font-awesome.min.css',
 		array(),
 		'4.5.0'
 	);

@@ -61,6 +61,18 @@ class SBR_Advanced_Tab extends SB_SettingsPage_Tab {
 					]
 				]
 			],
+			// SMASH-1756 — toggle schema.org rich-snippet output (default on).
+			'schema_section' => [
+				'id'        => 'enableSchema',
+				'type'      => 'switcher',
+				'heading'   => __('Rich Snippets (SEO Schema)', 'reviews-feed'),
+				'info'      => __('Add schema.org markup (star ratings + reviews) so your feeds can appear as rich snippets in Google search results. When All in One SEO is active the markup is merged into its schema. Turn this off if another plugin or your theme already outputs review schema for the page.', 'reviews-feed'),
+				'options' => [
+					'enabled' => true,
+					'disabled' => false
+				],
+				'separator' => true
+			],
 			/*
 			'reseterrorlogs_section' => [
 				'heading'       => __('Reset Error Log', 'reviews-feed'),
@@ -80,17 +92,17 @@ class SBR_Advanced_Tab extends SB_SettingsPage_Tab {
 			],
 			 */
 			'usagetracking_section' => [
-				'id'        => 'usagetracking',
-				'type'      => 'switcher',
-				'heading'   => __('Usage Tracking', 'reviews-feed'),
-				'info'      => sprintf(
-				/* translators: %s: Opening and closing anchor HTML tags */
-					__('This helps us prevent plugin and theme conflicts by sending a report in the background once per week about your settings and relevant site stats. It does not send sensitive information like access tokens, email addresses, or user info. This will not affect your site performace as well. %sLearn More%s', 'reviews-feed'),
+				'id'      => 'usagetracking',
+				'type'    => 'switcher',
+				'heading' => __('Usage Tracking', 'reviews-feed'),
+				/* translators: %1$s and %2$s: opening and closing anchor HTML tags for the "Learn More" link. */
+				'info'    => sprintf(
+					__('This helps us prevent plugin and theme conflicts by sending a report to Smash Balloon in the background once per week about your settings and relevant site stats. It does not send sensitive information like access tokens, email addresses, or user info. You can disable this at any time. %1$sLearn More%2$s', 'reviews-feed'),
 					'<a href="https://smashballoon.com/doc/usage-tracking-reviews/?utm_campaign=reviews-free&utm_source=settings&utm_medium=docs" target="_blank" rel="noopener noreferrer">',
 					'</a>'
 				),
 				'options' => [
-					'enabled' => true,
+					'enabled'  => true,
 					'disabled' => false
 				],
 				'separator' => true
@@ -104,8 +116,10 @@ class SBR_Advanced_Tab extends SB_SettingsPage_Tab {
 				'options' => [
 					'enabled' => true,
 					'disabled' => false
-				]
+				],
+				'separator' => true
 			],
+			// SBR-499 — moved to the General tab, above Manage Sources (SBR-195).
 			/*
 			'adminnoticeerror_section' => [
 				'id'        => 'admin_error_notices',

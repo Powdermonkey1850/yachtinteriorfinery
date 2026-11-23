@@ -12,6 +12,41 @@ function ctf_should_rebrand_to_x() {
 }
 
 /**
+ * Reduces a user-supplied value to a whitespace-separated list of CSS class names.
+ *
+ * Characters that carry meaning in HTML markup are removed rather than encoded, so the
+ * result is safe to concatenate into a class list. Characters that are legal in modern
+ * class names -- ':' (variant prefixes), '/', '.', '-' and '_' -- are preserved so
+ * utility-framework and namespaced class names survive unchanged.
+ *
+ * @param mixed $value Raw class list.
+ *
+ * @return string Sanitized, whitespace-normalized class list.
+ *
+ * @since 2.7.1
+ */
+function ctf_sanitize_css_class_list( $value ) {
+	if ( ! is_scalar( $value ) ) {
+		return '';
+	}
+
+	$value = wp_strip_all_tags( (string) $value );
+
+	// Control characters become separators rather than being deleted, so that a newline
+	// or tab between two class names cannot silently merge them into one.
+	// Bails to an empty class list on malformed UTF-8.
+	$stripped = preg_replace( '/[^\P{C}]/u', ' ', $value );
+	if ( null === $stripped ) {
+		return '';
+	}
+
+	$stripped = preg_replace( '/[<>"\'`=\\\\]/', '', $stripped );
+	$stripped = preg_replace( '/\s+/', ' ', (string) $stripped );
+
+	return trim( (string) $stripped );
+}
+
+/**
  * May include support for templates in theme folders in the future
  *
  * @return string full path to template
@@ -169,6 +204,47 @@ function ctf_clear_cache_sql() {
 
 
 
+/**
+ * Whether a value is a feed ID the feed caches table can legitimately hold: a saved
+ * feed's numeric ID or "legacy", optionally with the customizer suffix CtfCache adds
+ * (Pro also writes "_CUSTOMIZER_MODMODE…", so a Pro-to-Free cleanup keeps those).
+ *
+ * @param mixed $feed_id
+ *
+ * @return bool
+ */
+function ctf_is_valid_feed_cache_id( $feed_id ) {
+	if ( is_int( $feed_id ) ) {
+		return $feed_id > 0;
+	}
+
+	return is_string( $feed_id ) && 1 === preg_match( '/^(?:[1-9][0-9]*|legacy)(?:_CUSTOMIZER(?:_MODMODE\w*)?)?\z/', $feed_id );
+}
+
+/**
+ * Removes feed cache rows whose feed ID no request should have been able to create,
+ * and the cron report that copied them, so sites injected before SMASH-2491 are clean.
+ */
+function ctf_remove_invalid_feed_caches() {
+	global $wpdb;
+	$cache_table_name = $wpdb->prefix . 'ctf_feed_caches';
+
+	if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $cache_table_name ) ) === $cache_table_name ) {
+		// By primary key, not feed_id: the default collation ignores case and trailing
+		// spaces, so "LEGACY" or "1 " would match the real feed's rows and survive
+		// DISTINCT. The cron runs this on each batch it finds one in (SMASH-1707).
+		$rows = $wpdb->get_results( "SELECT id, feed_id FROM $cache_table_name", ARRAY_A );
+		foreach ( $rows as $row ) {
+			if ( ! ctf_is_valid_feed_cache_id( $row['feed_id'] ) ) {
+				$wpdb->delete( $cache_table_name, array( 'id' => $row['id'] ), array( '%d' ) );
+			}
+		}
+	}
+
+	// Rebuilt on the next cron run, so nothing of value is lost.
+	delete_option( 'ctf_cron_report' );
+}
+
 function ctf_background_processing() {
 
 	if ( ! isset( $_POST['feed_id'] ) ) {
@@ -178,11 +254,18 @@ function ctf_background_processing() {
 
 	$atts_raw = isset( $_POST['atts'] ) ? json_decode( stripslashes( $_POST['atts'] ), true ) : array();
 	if ( is_array( $atts_raw ) ) {
-		array_map( 'sanitize_text_field', $atts_raw );
+		$atts_raw = array_map( 'sanitize_text_field', $atts_raw );
 	} else {
 		$atts_raw = array();
 	}
 	$atts = $atts_raw; // now sanitized
+
+	// This action is public and atts.feed becomes a feed cache ID, which the cron copies
+	// into ctf_cron_report and the Support page renders. Only a real feed ID may get
+	// that far (SMASH-2491).
+	if ( isset( $atts['feed'] ) && '' !== $atts['feed'] && ! ctf_is_valid_feed_cache_id( $atts['feed'] ) ) {
+		wp_die();
+	}
 
 	$location     = isset( $_POST['location'] ) && in_array( $_POST['location'], array( 'header', 'footer', 'sidebar', 'content' ), true ) ? sanitize_text_field( $_POST['location'] ) : 'unknown';
 	$post_id      = isset( $_POST['post_id'] ) && $_POST['post_id'] !== 'unknown' ? (int) $_POST['post_id'] : 'unknown';
@@ -363,3 +446,4 @@ function parse_json_data($data)
 	}
 	return is_array($json) ? $json : [];
 }
+

@@ -103,16 +103,17 @@ get_header();
         $footer_template_css = get_post_custom($footer_template_ID);
 
         if ( $footer_template_css['dsm-css-classes-meta-box-options'][0] != '' ) {
-            $footer_template_css_output = get_post_meta( $footer_css_template->post->ID, 'dsm-css-classes-meta-box-options', true );
+            $footer_template_css_output = dsm_sanitize_css_class_list( get_post_meta( $footer_css_template->post->ID, 'dsm-css-classes-meta-box-options', true ) );
         } else {
             $footer_template_css_output = '';
         }
         if ( !et_core_is_fb_enabled() ) {
+            $footer_class_attribute = '' !== $footer_template_css_output ? 'dsm-footer ' . $footer_template_css_output : 'dsm-footer';
             $footer_output = sprintf(
                 '<footer id="dsm-footer" class="%2$s" itemscope="itemscope" itemtype="https://schema.org/WPFooter">%1$s</footer>
                 ',
                 $footer_template_shortcode,
-                ( '' !== $footer_template_css_output ? 'dsm-footer ' . $footer_template_css_output : 'dsm-footer' )
+                esc_attr( $footer_class_attribute )
             );
             echo $footer_output;
         }

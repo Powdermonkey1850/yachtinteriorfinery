@@ -4,13 +4,17 @@
 
 namespace Composer\Autoload;
 
-class ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426
+class ComposerStaticInited310848f698c665dd5d2585b6ce7525
 {
     public static $files = array (
         '6c592737b91137905268e9a0eb968869' => __DIR__ . '/..' . '/wp-media/apply-filters-typed/functions.php',
     );
 
     public static $prefixLengthsPsr4 = array (
+        'W' =>
+        array (
+            'WPMedia\\MCP\\OAuth\\' => 18,
+        ),
         'I' =>
         array (
             'Imagify\\ThirdParty\\WPRocket\\' => 28,
@@ -21,6 +25,7 @@ class ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426
             'Imagify\\ThirdParty\\AS3CF\\' => 25,
             'Imagify\\Deprecated\\Traits\\' => 26,
             'Imagify\\Dependencies\\WPMedia\\PluginFamily\\' => 42,
+            'Imagify\\Dependencies\\WPMedia\\Mixpanel\\' => 38,
             'Imagify\\Dependencies\\Psr\\Container\\' => 35,
             'Imagify\\Dependencies\\League\\Container\\' => 38,
             'Imagify\\' => 8,
@@ -32,6 +37,10 @@ class ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426
     );
 
     public static $prefixDirsPsr4 = array (
+        'WPMedia\\MCP\\OAuth\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/wp-media/mcp-oauth/inc',
+        ),
         'Imagify\\ThirdParty\\WPRocket\\' =>
         array (
             0 => __DIR__ . '/../..' . '/inc/3rd-party/wp-rocket/classes',
@@ -63,6 +72,10 @@ class ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426
         'Imagify\\Dependencies\\WPMedia\\PluginFamily\\' =>
         array (
             0 => __DIR__ . '/..' . '/wp-media/plugin-family/src',
+        ),
+        'Imagify\\Dependencies\\WPMedia\\Mixpanel\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src',
         ),
         'Imagify\\Dependencies\\Psr\\Container\\' =>
         array (
@@ -128,6 +141,16 @@ class ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426
         'Imagify_Settings' => __DIR__ . '/../..' . '/inc/classes/class-imagify-settings.php',
         'Imagify_User' => __DIR__ . '/../..' . '/inc/deprecated/classes/class-imagify-user.php',
         'Imagify_Views' => __DIR__ . '/../..' . '/inc/classes/class-imagify-views.php',
+        'Imagify_WPMedia_Base_MixpanelBase' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/Base/MixpanelBase.php',
+        'Imagify_WPMedia_ConsumerStrategies_AbstractConsumer' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/ConsumerStrategies/AbstractConsumer.php',
+        'Imagify_WPMedia_ConsumerStrategies_CurlConsumer' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/ConsumerStrategies/CurlConsumer.php',
+        'Imagify_WPMedia_ConsumerStrategies_FileConsumer' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/ConsumerStrategies/FileConsumer.php',
+        'Imagify_WPMedia_ConsumerStrategies_SocketConsumer' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/ConsumerStrategies/SocketConsumer.php',
+        'Imagify_WPMedia_Mixpanel' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/Mixpanel.php',
+        'Imagify_WPMedia_Producers_MixpanelBaseProducer' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/Producers/MixpanelBaseProducer.php',
+        'Imagify_WPMedia_Producers_MixpanelEvents' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/Producers/MixpanelEvents.php',
+        'Imagify_WPMedia_Producers_MixpanelGroups' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/Producers/MixpanelGroups.php',
+        'Imagify_WPMedia_Producers_MixpanelPeople' => __DIR__ . '/..' . '/wp-media/wp-mixpanel/src/Classes/Producers/MixpanelPeople.php',
         'Imagify_WP_Async_Request' => __DIR__ . '/..' . '/deliciousbrains/wp-background-processing/classes/wp-async-request.php',
         'Imagify_WP_Background_Process' => __DIR__ . '/..' . '/deliciousbrains/wp-background-processing/classes/wp-background-process.php',
     );
@@ -135,9 +158,9 @@ class ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
-            $loader->prefixLengthsPsr4 = ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426::$prefixLengthsPsr4;
-            $loader->prefixDirsPsr4 = ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426::$prefixDirsPsr4;
-            $loader->classMap = ComposerStaticInit743cee0e98cc6e9f2df502ceee97c426::$classMap;
+            $loader->prefixLengthsPsr4 = ComposerStaticInited310848f698c665dd5d2585b6ce7525::$prefixLengthsPsr4;
+            $loader->prefixDirsPsr4 = ComposerStaticInited310848f698c665dd5d2585b6ce7525::$prefixDirsPsr4;
+            $loader->classMap = ComposerStaticInited310848f698c665dd5d2585b6ce7525::$classMap;
 
         }, null, ClassLoader::class);
     }

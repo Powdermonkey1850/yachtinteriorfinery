@@ -1,5 +1,5 @@
 <?php
-if (!defined('UPDRAFTPLUS_DIR')) die('No direct access allowed');
+if (!defined('ABSPATH')) die('No direct access allowed');
 
 /**
  * Handles the UpdraftPlus deactivation popup modal.
@@ -73,7 +73,7 @@ class UpdraftPlus_Deactivation {
 		$enqueue_version = $updraftplus->use_unminified_scripts() ? $updraftplus->version.'.'.time() : $updraftplus->version;
 		$updraft_min_or_not = $updraftplus->get_updraftplus_file_version();
 		wp_enqueue_style('updraft-deactivation-popup', UPDRAFTPLUS_URL.'/css/updraftplus-deactivation'.$updraft_min_or_not.'.css', array('updraft-jquery-ui'), $enqueue_version);
-		wp_enqueue_script('udp-deactivation-js', UPDRAFTPLUS_URL.'/js/updraftplus-deactivation'.$updraft_min_or_not.'.js', array('jquery'), $enqueue_version);
+		wp_enqueue_script('udp-deactivation-js', UPDRAFTPLUS_URL.'/js/updraftplus-deactivation'.$updraft_min_or_not.'.js', array('jquery'), $enqueue_version, false);
 		wp_localize_script('udp-deactivation-js', 'upraftplusdialog', array(
 			'deactivate' => esc_html__('Deactivate', 'updraftplus'),
 			'remove' => esc_html__('Remove and deactivate', 'updraftplus'),
@@ -102,6 +102,7 @@ class UpdraftPlus_Deactivation {
 				'template_file'    => UPDRAFTPLUS_DIR . '/templates/deactivation-popup-modal.php',
 				'show_on_network_admin' => true,
 				'show_on_subsites' => false,
+				'custom_css' => true,
 			));
 		}
 	}
@@ -112,7 +113,7 @@ class UpdraftPlus_Deactivation {
 	 */
 	public function handle_user_choice() {
 
-		$choice = UpdraftPlus_Manipulation_Functions::fetch_superglobal('post', 'updraft_deinstall_option', 'no', true, null, 'sanitize_text_field');
-		UpdraftPlus_Options::update_updraft_option('updraftplus_deinstall_option', $choice);
+		$choice = UpdraftPlus_Manipulation_Functions::fetch_superglobal('post', 'updraftplus_deinstall_option', 'no', true, null, 'sanitize_text_field');
+		update_site_option('updraftplus_deinstall_option', $choice);
 	}
 }

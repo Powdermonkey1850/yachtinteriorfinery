@@ -29,11 +29,11 @@ if (!function_exists('humbug_phpscoper_expose_class')) {
         }
     }
 }
-humbug_phpscoper_expose_class('ComposerAutoloaderInit374e8b068c2434a98684079770360d31', 'FacebookFeed\Vendor\ComposerAutoloaderInit374e8b068c2434a98684079770360d31');
+humbug_phpscoper_expose_class('ComposerAutoloaderInit217f76536316d99ca119968d574c5be0', 'FacebookFeed\Vendor\ComposerAutoloaderInit217f76536316d99ca119968d574c5be0');
 
 // Function aliases. For more information see:
 // https://github.com/humbug/php-scoper/blob/master/docs/further-reading.md#function-aliases
-if (!function_exists('do_action')) { function do_action() { return \FacebookFeed\Vendor\do_action(...func_get_args()); } }
-if (!function_exists('wp_get_environment_type')) { function wp_get_environment_type() { return \FacebookFeed\Vendor\wp_get_environment_type(...func_get_args()); } }
+if (!function_exists('sbc_about_us_icon')) { function sbc_about_us_icon() { return \FacebookFeed\Vendor\sbc_about_us_icon(...func_get_args()); } }
+if (!function_exists('sbc_about_us_kses')) { function sbc_about_us_kses() { return \FacebookFeed\Vendor\sbc_about_us_kses(...func_get_args()); } }
 
 return $loader;

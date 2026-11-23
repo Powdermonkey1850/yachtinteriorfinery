@@ -29,6 +29,15 @@ require_once 'wpconsent.php';
 wp_clear_scheduled_hook( 'wpconsent_auto_scanner' );
 wp_clear_scheduled_hook( 'wpconsent_cleanup_scan_history' );
 wp_clear_scheduled_hook( 'wpconsent_usage_tracking_cron' );
+wp_clear_scheduled_hook( 'wpconsent_consent_logs_cleanup' );
+wp_clear_scheduled_hook( 'wpconsent_consent_logs_cleanup_continue' );
+wp_clear_scheduled_hook( 'wpconsent_analytics_aggregate' );
+// Legal Documents: the daily check, and a translation job still queued (WP cron, or Action Scheduler when another plugin loads it).
+wp_clear_scheduled_hook( 'wpconsent_legal_documents_status_check' );
+wp_unschedule_hook( 'wpconsent_process_document_translation' );
+if ( function_exists( 'as_unschedule_all_actions' ) ) {
+	as_unschedule_all_actions( 'wpconsent_process_document_translation', array(), 'wpconsent_translation' );
+}
 
 // Remove notifications.
 if ( class_exists( 'WPConsent_Notifications' ) ) {
@@ -40,13 +49,30 @@ $wpconsent_settings = get_option( 'wpconsent_settings', array() );
 
 if ( ! empty( $wpconsent_settings['uninstall_data'] ) ) {
 
-	// Remove custom post types and taxonomies.
 	global $wpdb;
+
+	delete_option( 'wpconsent_usage_counters' );
+	// A per-site user option: only this site's flag goes.
+	delete_metadata( 'user', 0, $wpdb->get_blog_prefix() . 'wpconsent_legal_locked_seen', '', true );
+
+	// Remove custom post types and taxonomies.
 
 	// Let's make sure our post type and taxonomy are registered.
 	wpconsent()->load_components();
 	wpconsent()->cookies->register_post_type();
 	wpconsent()->cookies->register_taxonomy();
+
+	// Legal Documents: the store reads its record through the settings component, which exists only now.
+	// The service forgets this site too (answers, versions, audit) when the owner removes the plugin's data.
+	if ( class_exists( 'WPConsent_Legal_Documents_Client' ) && class_exists( 'WPConsent_Legal_Documents_Store' ) && WPConsent_Legal_Documents_Store::has_published() ) {
+		( new WPConsent_Legal_Documents_Client() )->erase_site();
+	}
+	// Legal Documents: the stored documents (the published pages are the owner's content and stay).
+	if ( class_exists( 'WPConsent_Legal_Documents_Store' ) ) {
+		foreach ( WPConsent_Legal_Documents_Store::option_names() as $wpconsent_legal_option ) {
+			delete_option( $wpconsent_legal_option );
+		}
+	}
 
 	// Delete all posts of our custom post type.
 	$wpconsent_cookies = get_posts(
@@ -131,4 +157,10 @@ if ( ! empty( $wpconsent_settings['uninstall_data'] ) ) {
 	// Drop the scan history table.
 	$wpconsent_scan_history_table = esc_sql( $wpdb->prefix . 'wpconsent_scan_history' );
 	$wpdb->query( "DROP TABLE IF EXISTS `{$wpconsent_scan_history_table}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+	// Drop the banner analytics tables.
+	foreach ( array( 'wpconsent_analytics_events', 'wpconsent_analytics_daily' ) as $wpconsent_analytics_table ) {
+		$wpconsent_analytics_table = esc_sql( $wpdb->prefix . $wpconsent_analytics_table );
+		$wpdb->query( "DROP TABLE IF EXISTS `{$wpconsent_analytics_table}`" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
 }

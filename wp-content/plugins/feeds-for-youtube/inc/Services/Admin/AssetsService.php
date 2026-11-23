@@ -20,20 +20,24 @@ class AssetsService extends ServiceProvider {
 		}
 		wp_enqueue_script(
 			'feed-builder-vue',
-			'https://cdn.jsdelivr.net/npm/vue@2.6.12',
+			SBY_PLUGIN_URL . 'public/libs/js/vue.min.js',
 			null,
 			'2.6.12',
 			true
 		);
 	}
 	public function sby_admin_style() {
+		// SMASH-1378: design-token mirror providing --sb-focus-ring. Enqueued
+		// as a dependency of the admin stylesheet so the :focus-visible ring
+		// in css/admin.css always has the token defined ahead of it.
+		wp_register_style( 'sby_tokens_local', trailingslashit( SBY_PLUGIN_URL ) . 'assets/tokens/sby-tokens-local.css', array(), SBYVER );
 		wp_enqueue_style( SBY_SLUG . '_admin_notices_css', Util::getPluginAssets('css', 'sby-notices'), array(), SBYVER );
-		wp_enqueue_style( SBY_SLUG . '_admin_css', Util::getPluginAssets('css', 'admin'), array(), SBYVER );
+		wp_enqueue_style( SBY_SLUG . '_admin_css', Util::getPluginAssets('css', 'admin'), array( 'sby_tokens_local' ), SBYVER );
 		if ( ! sby_is_admin_page() ) {
 			return;
 		}
 		wp_enqueue_style( 'sb_font_awesome',
-			'https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css' );
+			SBY_PLUGIN_URL . 'public/libs/css/font-awesome.min.css', array(), '4.7.0' );
 		wp_enqueue_style( 'wp-color-picker' );
 	}
 

@@ -2,8 +2,8 @@
 Contributors: smashballoon, craig-at-smash-balloon, am, smub
 Tags: Instagram, Instagram feed, Instagram photos, Instagram widget, Instagram gallery
 Requires at least: 4.1
-Tested up to: 7.0
-Stable tag: 6.11.0
+Tested up to: 7.1
+Stable tag: 6.17.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -308,6 +308,76 @@ For more FAQs related to the Instagram Feed plugin please visit the [FAQ section
 
 == Changelog ==
 
+= 6.17.0 =
+* Tweak: Activating Instagram Feed Pro no longer deactivates this plugin. It stays on standby while Pro is active and runs your feeds again if you deactivate Pro.
+* Fix: Fixed a fatal error on activation on password-protected or firewalled sites.
+* Fix: Fixed a fatal error when a post image could not be downloaded.
+* Fix: A newly connected account now shows in Settings > Manage Sources without reloading the page.
+* Fix: In the feed customizer, Add Another Source Type no longer lists Public Hashtag, Tagged Posts and Social Wall twice. Picking one now shows what the Pro version adds, instead of a setup form that does nothing in the free version.
+* Fix: Manage Sources no longer asks a working Business or Creator account without a profile picture to reconnect.
+* Fix: Load More now works on sites installed in a subfolder or on a non-standard port when visitors reach the site on another domain or port than the WordPress Address, such as www against non-www.
+* Fix: The "Get more features with Instagram Feed Pro" box on the Settings and All Feeds pages now states the 14-day money-back guarantee.
+
+= 6.16.0 =
+* New: The Embed button in the feed builder now opens a new Embed Feed window. Search for a page or post and add your feed to it, show it on every page through the Site Editor or in a widget, or copy the shortcode. On WordPress versions older than 5.8 the Embed button shows the feed shortcode instead.
+* Tweak: If you had opted in to usage tracking, that choice now carries over to the Data Sharing setting.
+* Fix: Choosing "Add to Page" now opens the page with the Instagram Feed block already added for your feed.
+* Fix: Feed errors are now shown to admins in the block editor instead of an empty box.
+* Fix: Feeds no longer stay hidden when the CookieYes cookie banner script fails to load.
+* Fix: The feed builder no longer freezes when a connected account can no longer be read, for example after your site's security keys change. The account is flagged with a Reconnect link instead.
+* Fix: Saving a feed with no changes no longer shows an "Error saving Feed" message.
+* Fix: With several Smash Balloon plugins active, admin-only notices on your site no longer cover each other.
+* Fix: Plugin security hardening.
+
+= 6.15.1 =
+* Fix: The data-sharing popup no longer locks you out of your WordPress admin when your choice can't be saved. You can always close it and keep working.
+* Fix: Deactivating the plugin before WordPress has finished loading (for example with WP-CLI) no longer causes a fatal error.
+
+= 6.15.0 =
+* New: Ask AI assistants like Claude, ChatGPT and Cursor about your Instagram feeds and settings, through the WordPress Abilities API (WordPress 6.9 and newer). They can also make changes once you turn on "MCP Write Access" under Settings > General. Connect an assistant with the free WPVibe plugin, linked from the settings page. [See what Instagram Feed Pro adds](https://smashballoon.com/instagram-feed/instagram-lite-upgrade/?utm_source=changelog&utm_medium=aiagents&utm_campaign=instagram-free-readme)
+
+= 6.14.0 =
+* New - You can now choose whether to share anonymous usage data. The setup wizard asks for your consent, and a new Data Sharing tab under Settings lets you review or change your data-sharing and in-plugin notification preferences at any time.
+* Tweak - The About Us page has been refreshed.
+* Fix - Feeds on pages served from a long-lived page cache no longer show up empty, and Load More works again.
+* Fix - Dismissed in-plugin notifications no longer come back after a page reload.
+* Fix - Deactivation feedback is no longer lost when another Smash Balloon plugin is active.
+
+= 6.13.1 =
+* Fix - The Instagram feed block preview in the WordPress editor is styled again on WordPress 7.0 and newer, instead of showing unstyled content with oversized icons.
+
+= 6.13.0 =
+* New - A notice now warns you when a feed has quietly been showing an older saved copy of its posts because Instagram could not be reached, so you find out before your visitors do. The notice becomes more urgent if the connection stays broken.
+* Tweak - Confirmed compatibility with WordPress 7.1.
+* Tweak - The weekly Feed Issue Email Report now also tells you when a feed has quietly been showing an older saved copy of its posts for days, not just when there is an outright connection error.
+* Fix - Rate limits and temporary throttling from Instagram no longer make a working connection look broken or ask you to reconnect. Your feed keeps showing its saved posts and retries on its own once the limit clears.
+* Fix - Repeated failures to refresh a connected account's access token are now recorded properly, so a connection that keeps failing no longer appears up to date.
+* Fix - Keyboard navigation in the feed customizer no longer gets stuck: with a color picker open, Tab moves through the page normally, switching settings sections no longer pulls focus into the open picker, and tabbing no longer detours into the feed preview.
+* Fix - The connection error notice no longer keeps showing an out-of-date message - including a warning that your Instagram data would be deleted within 7 days - after the problem has changed or been resolved. It now reflects the current state of your connection and clears when there is nothing wrong.
+* Fix - Plugin security hardening.
+
+= 6.12.0 =
+* New - The feed builder and your feeds are now far easier to use with a keyboard and a screen reader. Controls are properly labelled and reachable by Tab, popups can be closed with Escape, feeds announce newly loaded posts, and focus outlines are visible throughout.
+* Fix - Corrected a number of typos and grammatical errors in text throughout the settings and admin screens, including three places that referred to "tweets" instead of Instagram posts.
+* Fix - Plugin security hardening.
+
+= 6.11.4 =
+* New - Photos, Videos, and Reels filter toggles are now available in Instagram Feed Free.
+* Fix - Instagram images now honor the intended image quality, and the Thumbnail feed size now uses the cached thumbnail file.
+* Fix - Resolved an editor typography issue on WordPress versions below 7.0 caused by legacy block iframe styles.
+* Fix - Additional plugin hardening.
+
+= 6.11.3 =
+* Fix - Notices now stay dismissed once closed, including on sites with multiple administrators.
+
+= 6.11.2 =
+* Fix - Additional plugin hardening.
+
+= 6.11.1 =
+* New - Added a Help widget to the feed builder for in-app access to documentation and support.
+* Fix - The legacy Instagram Feed block now renders a live preview correctly inside the WP 7.0+ iframed block editor, and the legacy Elementor widget now renders correctly inside the Elementor preview.
+* Fix - The Elementor widget title is now translatable.
+
 = 6.11.0 =
 * New - Added a modern Gutenberg block and Elementor widget for the Instagram feed. Existing feeds using the legacy block continue to render without reconfiguration.
 * Tweak - Compatibility with WP 7.
@@ -543,6 +613,10 @@ This plugin connects to three external sites:
 * **Smashballoon.com**: Used for connecting and authenticating your sources. Occasionally, it sends dynamic notices to users. These notices can include information about major API changes, critical updates, and marketing messages.
 
 * **Instagram.com and Facebook.com**: Used to fetch posts so your visitors can view them directly on your site without needing to leave.
+
+=**Optional Data Sharing and In-Plugin Notifications**=
+
+Sharing anonymous usage data with Smash Balloon and receiving in-plugin notifications are both off until you opt in, either in the setup wizard, in the one-time data sharing prompt, or under Instagram Feed > Settings > Data Sharing. You can turn them off again at any time on that tab. When off, no usage data is sent, and in-plugin notifications and About Us page content are not loaded from Smash Balloon. See what is shared: https://smashballoon.com/data-sharing-permissions/
 
 =**Data Usage**=
 

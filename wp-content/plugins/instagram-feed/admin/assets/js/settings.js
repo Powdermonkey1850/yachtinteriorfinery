@@ -1,5 +1,10 @@
 var sbiSettings;
 
+// Tab index → template id. Advanced must remain 'app-3' so the existing
+// v-if="selected === 'app-3'" in tab/advanced.php keeps matching; the new
+// Debug tab gets 'app-4'.
+var SBI_TAB_ID_MAP = { 0: 'app-1', 1: 'app-2', 2: 'app-4', 3: 'app-3' };
+
 // Declaring as global variable for quick prototyping
 var settings_data = {
     adminUrl: sbi_settings.admin_url,
@@ -15,7 +20,6 @@ var settings_data = {
     wpconsentScreen: sbi_settings.wpconsentScreen,
     socialWallActivated: sbi_settings.socialWallActivated,
     socialWallLinks: sbi_settings.socialWallLinks,
-    stickyWidget: false,
     exportFeed: 'none',
     locales: sbi_settings.locales,
     timezones: sbi_settings.timezones,
@@ -24,6 +28,7 @@ var settings_data = {
     feedsTab: sbi_settings.feedsTab,
     translationTab: sbi_settings.translationTab,
     advancedTab: sbi_settings.advancedTab,
+    debugTab: sbi_settings.debugTab,
     footerUpgradeUrl: sbi_settings.footerUpgradeUrl,
     upgradeUrl: sbi_settings.upgradeUrl,
     supportPageUrl: sbi_settings.supportPageUrl,
@@ -40,7 +45,7 @@ var settings_data = {
     currentView: null,
     selected: null,
     current: 0,
-    sections: ["General", "Feeds", "Advanced"],
+    sections: ["General", "Feeds", "Data Sharing", "Advanced"],
     indicator_width: 0,
     indicator_pos: 0,
     forwards: true,
@@ -116,13 +121,14 @@ var settings_data = {
     loadingBar: true,
     wpconsentBtnStatus: 'normal',
     disableWPConsentBtn: false,
+    wpvibeInstallStatus: null, // null | 'loading' | 'failed'
 };
 
 // The tab component
 Vue.component("tab", {
     props: ["section", "index"],
     template: `
-        <a class='tab' :id='section.toLowerCase().trim()' @click='emitWidth($el);changeComponent(index);activeTab(section)'>{{section}}</a>
+        <button type="button" class="tab" :id="'sbi-settings-tab-' + section.toLowerCase().trim().split(' ').join('-')" role="tab" :aria-selected="section === $parent.currentTab ? 'true' : 'false'" :aria-controls="'sbi-panel-' + section.toLowerCase().trim().split(' ').join('-')" :tabindex="section === $parent.currentTab ? 0 : -1" @click="emitWidth($el);changeComponent(index);activeTab(section)" @keydown="onTabKeydown">{{section}}</button>
     `,
     created: () => {
         let urlParams = new URLSearchParams(window.location.search);
@@ -146,15 +152,37 @@ Vue.component("tab", {
             } else if (prev > index) {
                 settings_data.forwards = true;
             }
-            settings_data.selected = "app-" + (index + 1);
+            settings_data.selected = SBI_TAB_ID_MAP[index];
             settings_data.current = index;
         },
         activeTab: function (section) {
-            this.setView(section.toLowerCase().trim());
+            this.setView(section.toLowerCase().trim().split(' ').join('-'));
             settings_data.currentTab = section;
         },
         setView: function (section) {
             history.replaceState({}, null, settings_data.adminUrl + 'admin.php?page=sbi-settings&view=' + section);
+        },
+        // WAI-ARIA Authoring Practices tablist keyboard interaction.
+        onTabKeydown: function (e) {
+            var tabs = Array.prototype.slice.call(
+                document.querySelectorAll('#sb-tabs-container [role="tablist"] [role="tab"]')
+            );
+            var idx = tabs.indexOf(e.currentTarget);
+            if (idx === -1) return;
+            var next = null;
+            if (e.key === 'ArrowRight' || e.keyCode === 39) {
+                next = tabs[(idx + 1) % tabs.length];
+            } else if (e.key === 'ArrowLeft' || e.keyCode === 37) {
+                next = tabs[(idx - 1 + tabs.length) % tabs.length];
+            } else if (e.key === 'Home' || e.keyCode === 36) {
+                next = tabs[0];
+            } else if (e.key === 'End' || e.keyCode === 35) {
+                next = tabs[tabs.length - 1];
+            }
+            if (!next) return;
+            e.preventDefault();
+            next.focus();
+            next.click();
         }
     }
 });
@@ -167,6 +195,9 @@ var sbiSettings = new Vue({
     },
     data: settings_data,
     created: function () {
+        // Snapshot the consent toggles as loaded so a save only writes consent
+        // when the user actually changed them (never re-submits a stale value).
+        this.loadedConsent = JSON.stringify(this.model.debug);
         this.$nextTick(function () {
             let tabEl = document.querySelector('.tab');
             settings_data.indicator_width = tabEl.offsetWidth;
@@ -178,15 +209,47 @@ var sbiSettings = new Vue({
     mounted: function () {
         var self = this;
         // set the current view page on page load
-        let activeEl = document.querySelector('a.tab#' + settings_data.currentView);
-        // we have to uppercase the first letter
-        let currentView = settings_data.currentView.charAt(0).toUpperCase() + settings_data.currentView.slice(1);
-        let viewIndex = settings_data.sections.indexOf(currentView) + 1;
-        settings_data.indicator_width = activeEl.offsetWidth;
-        settings_data.indicator_pos = activeEl.offsetLeft;
-        settings_data.selected = "app-" + viewIndex;
+        let viewIndex = settings_data.sections.findIndex(function (s) { return s.toLowerCase().trim().split(' ').join('-') === settings_data.currentView; });
+        // The Data Sharing tab is hidden when a Pro plugin locks consent; a direct
+        // ?view=data-sharing link must not open its panel either.
+        if (settings_data.debugTab && settings_data.debugTab.lockedByPro && settings_data.currentView === 'data-sharing') {
+            viewIndex = -1;
+        }
+        // Fall back to the first tab when the ?view= URL param is unknown, e.g. a
+        // legacy ?view=debug bookmark after the tab was renamed to "data-sharing".
+        // Without this guard querySelector() returns null and reading offsetWidth
+        // throws a TypeError that blanks the entire settings page.
+        if (viewIndex < 0) {
+            viewIndex = 0;
+            settings_data.currentView = settings_data.sections[0].toLowerCase().trim().split(' ').join('-');
+        }
+        let activeEl = document.querySelector('button.tab#sbi-settings-tab-' + settings_data.currentView);
+        if (activeEl) {
+            settings_data.indicator_width = activeEl.offsetWidth;
+            settings_data.indicator_pos = activeEl.offsetLeft;
+        }
+
+        // On a hard refresh, the measurement above can run before the tab web
+        // font swaps in, leaving the underline indicator narrower/offset (worst
+        // on later tabs). Re-measure the active tab once fonts/layout settle and
+        // on resize. Keyed off currentTab so it stays correct after navigation.
+        var sbReindicateTab = function () {
+            var active = settings_data.currentTab;
+            if (!active) { return; }
+            var el = document.querySelector('button.tab#sbi-settings-tab-' + active.toLowerCase().trim().split(' ').join('-'));
+            if (el) {
+                settings_data.indicator_width = el.offsetWidth;
+                settings_data.indicator_pos = el.offsetLeft;
+            }
+        };
+        if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+            document.fonts.ready.then(function () { sbReindicateTab(); });
+        }
+        window.addEventListener('load', sbReindicateTab);
+        window.addEventListener('resize', sbReindicateTab);
+        settings_data.selected = SBI_TAB_ID_MAP[viewIndex] || 'app-1';
         settings_data.current = viewIndex;
-        settings_data.currentTab = currentView;
+        settings_data.currentTab = settings_data.sections[viewIndex];
 
         setTimeout(function () {
             settings_data.appLoaded = true;
@@ -205,6 +268,23 @@ var sbiSettings = new Vue({
         },
         chooseDirection: function () {
             return "slide-fade";
+        }
+    },
+    watch: {
+        // Invariant: when data-sharing consent is on, in-plugin notifications
+        // must also be on. The template disables the notifications checkbox
+        // while DSC is true, but the inverse direction (forcing notifications
+        // on whenever DSC flips on, or reconciling a stale-on-load model)
+        // needs reactive enforcement — a stale model where DSC=true but
+        // notifications=false would otherwise display a disabled-but-unchecked
+        // box and persist that inconsistency on next save.
+        'model.debug.sbc_data_sharing_consent': {
+            immediate: true,
+            handler: function (newVal) {
+                if (newVal && this.model && this.model.debug) {
+                    this.model.debug.sbc_in_plugin_notifications = true;
+                }
+            }
         }
     },
     methods: {
@@ -579,7 +659,14 @@ var sbiSettings = new Vue({
             this.pressedBtnName = 'saveChanges';
             let data = new FormData();
             data.append('action', 'sbi_save_settings');
-            data.append('model', JSON.stringify(this.model));
+            // Snapshot what is actually sent, so a toggle flipped while this save is
+            // in flight is still treated as a change on the next save.
+            let sentConsent = JSON.stringify(this.model.debug);
+            data.append('model', JSON.stringify(Object.assign({}, this.model, {
+                // Omit consent unless the user changed it on this page, so a stale
+                // tab can never silently turn data sharing back on.
+                debug: sentConsent !== this.loadedConsent ? this.model.debug : undefined
+            })));
             data.append('sbi_license_key', this.licenseKey);
             data.append('extensions_license_key', JSON.stringify(this.extensionsLicenseKey));
             data.append('nonce', this.nonce);
@@ -597,6 +684,13 @@ var sbiSettings = new Vue({
 
                     this.cronNextCheck = data.data.cronNextCheck;
                     this.btnStatus = 'success';
+                    this.loadedConsent = sentConsent;
+                    if (typeof data.data.aiWriteEnabled !== 'undefined') {
+                        // Resync MCP Write Access with what the server stored, and
+                        // refresh the loaded marker so a later flip in this tab counts.
+                        this.model.advanced.sbi_ai_write_enabled = !!data.data.aiWriteEnabled;
+                        this.model.advanced.sbi_ai_write_enabled_loaded = !!data.data.aiWriteEnabled;
+                    }
                     setTimeout(function () {
                         this.btnStatus = null;
                         this.pressedBtnName = null;
@@ -774,15 +868,6 @@ var sbiSettings = new Vue({
             } else if (this.dpaResetStatus == 'error') {
                 return this.timesCircleSVG;
             }
-        },
-
-        /**
-         * Toggle Sticky Widget view
-         *
-         * @since 4.0
-         */
-        toggleStickyWidget: function () {
-            this.stickyWidget = !this.stickyWidget;
         },
 
         printUsedInText: function (usedInNumber) {
@@ -1142,6 +1227,82 @@ var sbiSettings = new Vue({
                 return this.checkmarCircleSVG;
             }
             return this.model.wpconsentScreen.installSVG;
+        },
+
+        /**
+         * AI Agents card state, including a client-only 'installFailed'
+         * state on top of the server-reported status.
+         *
+         * @since 6.14.0
+         *
+         * @return string 'not_installed' | 'inactive' | 'active' | 'installFailed'
+         */
+        aiAgentsState: function () {
+            if (this.wpvibeInstallStatus === 'failed') {
+                return 'installFailed';
+            }
+            return this.generalTab.aiAgents.status;
+        },
+
+        /**
+         * Open WPVibe's own admin page.
+         *
+         * @since 6.14.0
+         */
+        openWPVibe: function () {
+            window.location.href = this.generalTab.aiAgents.adminUrl;
+        },
+
+        /**
+         * Install or activate WPVibe for the AI Agents card.
+         *
+         * Reuses the same sbi_install_addon / sbi_activate_addon AJAX
+         * actions as the WPConsent integration above -- no new installer,
+         * capability, or nonce is introduced.
+         *
+         * @since 6.14.0
+         */
+        installOrActivateWPVibe: function () {
+            let self = this,
+                aiAgents = self.generalTab.aiAgents,
+                isInstalled = aiAgents.status !== 'not_installed',
+                action = isInstalled ? 'sbi_activate_addon' : 'sbi_install_addon',
+                pluginParam = isInstalled ? aiAgents.basename : aiAgents.installDownloadUrl;
+
+            self.wpvibeInstallStatus = 'loading';
+
+            let data = new FormData();
+            data.append('action', action);
+            data.append('nonce', self.nonce);
+            data.append('type', 'plugin');
+            data.append('plugin', pluginParam);
+            fetch(self.ajaxHandler, {
+                method: "POST",
+                credentials: 'same-origin',
+                body: data
+            })
+                .then(response => response.json())
+                .then(function (response) {
+                    if (response.success !== true) {
+                        self.wpvibeInstallStatus = 'failed';
+                        return;
+                    }
+
+                    self.wpvibeInstallStatus = null;
+
+                    if (action === 'sbi_install_addon') {
+                        if (response.data && response.data.basename) {
+                            aiAgents.basename = response.data.basename;
+                        }
+                        aiAgents.status = (response.data && response.data.is_activated) ? 'active' : 'inactive';
+                        return;
+                    }
+
+                    aiAgents.status = 'active';
+                })
+                .catch(function () {
+                    self.wpvibeInstallStatus = 'failed';
+                });
         }
     }
 });

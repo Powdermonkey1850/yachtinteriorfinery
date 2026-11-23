@@ -14,6 +14,8 @@ namespace SmashBalloon\Reviews\Common;
 use SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager;
 use SmashBalloon\Reviews\Common\Builder\SBR_Sources;
 use SmashBalloon\Reviews\Common\Helpers\Data_Encryption;
+use SmashBalloon\Reviews\Common\Customizer\DB;
+use SmashBalloon\Reviews\Common\Utils\SourceFetchOutcome;
 
 class Feed
 {
@@ -45,6 +47,13 @@ class Feed
 	 * @var array|string[]
 	 */
 	protected $providers_no_media = [];
+
+	/**
+	 * Provider failures recorded but not shown to the client (SourceFetchOutcome::is_provider_failure()).
+	 *
+	 * @var int
+	 */
+	private $hidden_failures = 0;
 
 
 	public function __construct($settings, $feed_id, FeedCache $feed_cache)
@@ -79,7 +88,7 @@ class Feed
 			return;
 		}
 		if (empty($this->settings['sources']) && ! $this->is_single_manual_review()) {
-			$this->add_error(sprintf(__('No sources available for this feed.', 'reviews-feed'), $this->feed_id), sprintf(__('Please go to the %sReviews Feed%s settings page add sources for this feed to use.', 'reviews-feed'), '<a href="' . esc_url(admin_url('admin.php?page=sbr')) . '" target="_blank" rel="noopener noreferrer">', '</a>'));
+			$this->add_error(sprintf(__('No sources available for this feed.', 'reviews-feed'), $this->feed_id), sprintf(__('Please go to the %sReviews Feed%s settings page to add sources for this feed to use.', 'reviews-feed'), '<a href="' . esc_url(admin_url('admin.php?page=sbr')) . '" target="_blank" rel="noopener noreferrer">', '</a>'));
 			return;
 		}
 		if (! $this->is_single_manual_review()) {
@@ -102,12 +111,46 @@ class Feed
 		$this->statuses['errors'] = $errors_array;
 	}
 
-	public function add_error($message, $instructions)
+	/**
+	 * @param string $message      Error HTML shown to admins.
+	 * @param string $instructions Directions HTML.
+	 * @param string $error_id     Relay error id (e.g. `freeReviewsLimitExceeded`) when the error came from the relay.
+	 * @param string $summary      Plain-text reason, for surfaces that don't render HTML (the feed editor).
+	 */
+	public function add_error($message, $instructions, $error_id = '', $summary = '')
 	{
-		$this->statuses['errors'][] = array(
+		$error = array(
 			'message' => $message,
 			'directions' => $instructions
 		);
+		if ($error_id !== '') {
+			$error['error_id'] = $error_id;
+			$error['summary'] = $summary;
+		}
+		$this->statuses['errors'][] = $error;
+	}
+
+	/**
+	 * Errors the relay returned while fetching reviews (SMASH-1610), plain text, for the feed editor.
+	 * Survives the feed cache because it is derived from the cached error list.
+	 *
+	 * No Settings link: whether an API key fixes a refusal depends on the provider too (several have no key field).
+	 *
+	 * @return array<int, array{id: string, message: string}>
+	 */
+	public function get_relay_errors()
+	{
+		$relay_errors = array();
+		foreach ((array) $this->get_errors() as $error) {
+			if (! is_array($error) || empty($error['error_id'])) {
+				continue;
+			}
+			$relay_errors[] = array(
+				'id' => self::clean_error_id($error['error_id']),
+				'message' => wp_strip_all_tags((string) ($error['summary'] ?? '')),
+			);
+		}
+		return $relay_errors;
 	}
 
 	public function get_feed_id()
@@ -182,11 +225,11 @@ class Feed
 	}
 
 	/**
-	 * Acquire a per-feed single-flight refresh lock using `add_option` for
-	 * MySQL-level atomicity (UNIQUE constraint on `option_name` makes the
-	 * underlying INSERT a CAS — only one concurrent worker wins, the rest
-	 * see false). Stores `time()` as the lock value so a crashed worker's
-	 * orphaned lock can be detected and re-taken after the TTL elapses.
+	 * Acquire a per-feed single-flight refresh lock: only one worker gets it (SMASH-2437). The take is an INSERT IGNORE
+	 * that must insert exactly one row, not add_option(), which upserts (INSERT … ON DUPLICATE KEY UPDATE,
+	 * wp-includes/option.php:1142) and so answers true to two racing workers. The lock holds `time()`; once it is older
+	 * than $ttl it's a crashed worker's, and a takeover is a conditional UPDATE on the value just read, so only one of
+	 * two workers seeing the same stale lock wins. The table is read directly, never through an object-cache copy.
 	 *
 	 * @param string $lock_key  Unique key per feed_id + cache_type.
 	 * @param int    $ttl       Seconds after which a held lock is considered stale.
@@ -196,17 +239,26 @@ class Feed
 	 */
 	private function acquire_refresh_lock(string $lock_key, int $ttl): bool
 	{
-		if (add_option($lock_key, time(), '', 'no')) {
+		global $wpdb;
+		$now = (string) time();
+
+		$inserted = $wpdb->query($wpdb->prepare("INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", $lock_key, $now));
+		if ($inserted === 1) {
 			return true;
 		}
-		// Option already exists. Check whether the lock is stale.
-		$held_since = (int) get_option($lock_key, 0);
+
+		$held = $wpdb->get_var($wpdb->prepare("SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", $lock_key));
+		if (!is_string($held)) {
+			// Released between the two statements; the next render takes it.
+			return false;
+		}
+		$held_since = (int) $held;
 		if ($held_since > 0 && (time() - $held_since) < $ttl) {
 			return false;
 		}
-		// Stale lock — likely a crashed prior worker. Take it over.
-		update_option($lock_key, time(), false);
-		return true;
+
+		$taken = $wpdb->query($wpdb->prepare("UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $now, $lock_key, $held));
+		return $taken === 1;
 	}
 
 	/**
@@ -234,27 +286,36 @@ class Feed
 		// round-trip and return whatever's locally available. The lock holder
 		// will populate the cache and the next render will see warm data.
 		//
-		// TTL is 60s — covers cold-staging upstream worst case observed at 46s
-		// with comfortable headroom. On lock-held, returns posts_from_db()
-		// which reads `wp_sbr_reviews_posts` (review rows preserved across
-		// clear_plugin_cache, only the images_done flag is reset, so the
-		// lock-loser still serves real review text/ratings).
+		// The TTL is sized to the feed (Utils\RefreshLockTtl, SMASH-2434): api_request()
+		// calls each source in turn, each up to its own timeout, so a slow-but-alive
+		// lock holder isn't mistaken for stale and double-fetched. On lock-held,
+		// returns posts_from_db() which reads
+		// `wp_sbr_reviews_posts` (review rows preserved across clear_plugin_cache,
+		// only the images_done flag is reset, so the lock-loser still serves real
+		// review text/ratings).
 		$lock_key = 'sbr_refresh_lock_posts_' . $this->feed_id;
-		if (! $this->acquire_refresh_lock($lock_key, 60)) {
+		if (! $this->acquire_refresh_lock($lock_key, Utils\RefreshLockTtl::for_sources($settings['sources'], 'reviews'))) {
 			return $this->posts_from_db();
 		}
 
 		try {
-			$remote_posts = $this->get_remote_posts($settings);
+			$refused_before = count($this->get_relay_errors()) + $this->hidden_failures;
+			$remote_posts   = $this->get_remote_posts($settings);
 
 			foreach ($remote_posts as $provider_remote_posts) {
-				if (isset($provider_remote_posts['data']['reviews'])) {
+				// Only dispatch when the reviews payload is actually a list. An
+				// error-shaped relay response can leave 'reviews' as a scalar,
+				// which would otherwise foreach-warn / fatal downstream (SMASH-1578).
+				if (isset($provider_remote_posts['data']['reviews']) && is_array($provider_remote_posts['data']['reviews'])) {
 					$this->cache_single_posts_from_set($provider_remote_posts['data']['reviews'], $provider_remote_posts['provider_id']);
 				}
 			}
 
 			$posts = $this->posts_from_db();
-			if (empty($posts)) {
+			// Every source refused (SMASH-1610) is not "no reviews": those errors are already recorded.
+			// A mixed feed keeps the generic reason, since its other sources' emptiness is otherwise unexplained.
+			$refused = count($this->get_relay_errors()) + $this->hidden_failures - $refused_before;
+			if (empty($posts) && ! ( $refused > 0 && $refused >= count($settings['sources']) )) {
 				$no_posts_found = __('No Posts Found.', 'reviews-feed');
 				if ($this->statuses['post_found_before_filter']) {
 					$this->add_error($no_posts_found, sprintf(__('There were no posts that fit your filters. Try modifying the filters set or add more sources with reviews that fit the filter by %sediting your feed%s', 'reviews-feed'), '<a href="' . esc_url(admin_url('admin.php?page=sbr')) . '" target="_blank" rel="noopener noreferrer">', '</a>'));
@@ -297,19 +358,53 @@ class Feed
 		$aggregator = new PostAggregator();
 		// Pass limit from settings (default 150 for backward compatibility)
 		$limit = isset($settings['numPostDesktop']) ? max(150, (int) $settings['numPostDesktop']) : 150;
-		$posts = $aggregator->db_post_set($settings['sources'], $this->settings['apiCallLanguage'], $limit);
+		// SMASH-2407: a Google source with no row in the feed's language reads its newest stored language instead of
+		// going blank until the next allowed fetch (up to 7 days on Pro, until Clear All Caches on Free).
+		$read_sources = $this->db_read_sources($aggregator);
+		$posts = $aggregator->db_post_set($read_sources, $this->settings['apiCallLanguage'], $limit);
 		$posts = $aggregator->normalize_db_post_set($posts);
 		if ($aggregator->missing_media_found()) {
 			$this->flag_media_check = true;
 		}
 
-		$aggregator->update_last_requested($settings['sources']);
+		$aggregator->update_last_requested($read_sources);
 
 		if (! empty($posts)) {
 			$this->statuses['post_found_before_filter'] = true;
 		}
 
 		return $this->filter_posts($posts, $settings, true);
+	}
+
+	/**
+	 * The sources every DB read of this feed uses — posts_from_db(), moderation and the Pro media pass, so they agree
+	 * on what is shown. A Google source with no row in its language is swapped to the newest language it has rows in;
+	 * decided per source, with a raw probe (before dedup), and one language only: the display dedup keys on
+	 * md5(text), so reading every language would show each translation of a review as its own card (SMASH-2407).
+	 *
+	 * @param PostAggregator $aggregator
+	 * @return array
+	 */
+	protected function db_read_sources($aggregator)
+	{
+		$settings = $this->get_settings();
+		$sources  = is_array($settings) && isset($settings['sources']) && is_array($settings['sources']) ? $settings['sources'] : [];
+
+		foreach ($sources as $key => $source) {
+			// Only Google sources carry `lang` (hydrate_sources); '' is the default language, so it is checked too.
+			if (!is_array($source) || !isset($source['lang']) || !is_string($source['lang']) || !isset($source['account_id'])) {
+				continue;
+			}
+			if ($aggregator->has_rows_in_lang($source['account_id'], $source['lang'])) {
+				continue;
+			}
+			$stored = $aggregator->newest_stored_lang($source['account_id']);
+			if ($stored !== null) {
+				$sources[ $key ]['lang'] = $stored;
+			}
+		}
+
+		return $sources;
 	}
 
 	public function update_cache($posts)
@@ -326,9 +421,9 @@ class Feed
 			return array();
 		}
 
-		// Single-flight: see update_posts_cache() for rationale.
+		// Single-flight: see update_posts_cache(); the header call is per source too (get_remote_header_data()).
 		$lock_key = 'sbr_refresh_lock_header_' . $this->feed_id;
-		if (! $this->acquire_refresh_lock($lock_key, 60)) {
+		if (! $this->acquire_refresh_lock($lock_key, Utils\RefreshLockTtl::for_sources($settings['sources'], 'sources'))) {
 			return $this->update_header_cache_from_source();
 		}
 
@@ -342,6 +437,7 @@ class Feed
 				foreach ($remote_header_data as $key => $entry) {
 					$remote_header_data[$key]['info']['feed_total_review_count'] = $feed_aggregate['count'];
 					$remote_header_data[$key]['info']['feed_average_rating']     = $feed_aggregate['rating'];
+					$remote_header_data[$key]['info']['feed_rated_count']        = $feed_aggregate['rated'];
 					$remote_header_data[$key]['info']['feed_aggregated']         = true;
 				}
 			}
@@ -374,6 +470,19 @@ class Feed
 						'info'         => json_encode($source_data['info'])
 					];
 					SBR_Sources::update($source_to_update);
+					// SMASH-1634: re-open this source's paginated backfill when its upstream
+					// review count grows, so new review batches load without a manual reset.
+					// Pro-only: the bulk backfill lives in the Pro plugin. Guard on
+					// sbr_is_pro() too — the Pro classes share this directory and stay
+					// autoloadable when only the Free plugin is active, so class_exists()
+					// alone would run this in Free (matches the convention below).
+					if (Util::sbr_is_pro() && class_exists('\\SmashBalloon\\Reviews\\Pro\\Services\\BulkUpdate\\Bulk_Reviews_Update')) {
+						\SmashBalloon\Reviews\Pro\Services\BulkUpdate\Bulk_Reviews_Update::maybe_rearm_source(
+							$provider,
+							$source_data['info']['id'],
+							isset($source_data['info']['total_rating']) ? $source_data['info']['total_rating'] : 0
+						);
+					}
 				}
 			}
 			return $remote_header_data;
@@ -429,7 +538,7 @@ class Feed
 			if (empty($source_info)) {
 				continue;
 			}
-			$remote_header_data[] = [
+			$entry = [
 				'info' => [
 					'id'           => $source_info['id'] ?? $s_source['account_id'] ?? '',
 					'name'         => $source_info['name'] ?? $source_info['source_name'] ?? $s_source['name'] ?? 'Unknown',
@@ -438,6 +547,11 @@ class Feed
 					'url'          => $source_info['url'] ?? ''
 				]
 			];
+			// SMASH-2477: keep the count the rating covers, or this path weights the header differently.
+			if (isset($source_info['rated_count'])) {
+				$entry['info']['rated_count'] = (int) $source_info['rated_count'];
+			}
+			$remote_header_data[] = $entry;
 		}
 
 		// SMASH-1412: per-source counts double-count when two EDD (or Woo) sources
@@ -452,6 +566,7 @@ class Feed
 			foreach ($remote_header_data as $key => $entry) {
 				$remote_header_data[$key]['info']['feed_total_review_count'] = $feed_aggregate['count'];
 				$remote_header_data[$key]['info']['feed_average_rating']     = $feed_aggregate['rating'];
+				$remote_header_data[$key]['info']['feed_rated_count']        = $feed_aggregate['rated'];
 				$remote_header_data[$key]['info']['feed_aggregated']         = true;
 			}
 		}
@@ -486,7 +601,7 @@ class Feed
 	 *
 	 * @since SMASH-1412
 	 * @param array $sources Sources array from feed settings
-	 * @return array{count:int,rating:float}|null
+	 * @return array{count:int,rating:float,rated:int}|null
 	 */
 	private function compute_feed_level_aggregate(array $sources)
 	{
@@ -508,10 +623,11 @@ class Feed
 
 		$total_count = 0;
 		$weighted_sum = 0.0;
+		$weighted_n = 0;
 		$any_dedup = false;
 
 		foreach ($by_provider as $provider => $provider_sources) {
-			$agg = $this->compute_provider_aggregate($provider, $provider_sources);
+			$agg = self::compute_provider_aggregate($provider, $provider_sources);
 			if ($agg === null) {
 				// No dedup available — sum per-source (correct for independent
 				// businesses: Yelp, Google, Trustpilot, TripAdvisor, WP.org).
@@ -523,12 +639,19 @@ class Feed
 					$count  = (int) ($info['review_count'] ?? $info['total_rating'] ?? 0);
 					$rating = (float) ($info['rating'] ?? $info['average_rating'] ?? 0);
 					$total_count  += $count;
-					$weighted_sum += $rating * $count;
+					// SMASH-2477: weight by the reviews the average covers; an unrated source adds none.
+					if ($rating > 0) {
+						$weight        = (int) ($info['rated_count'] ?? $count);
+						$weighted_sum += $rating * $weight;
+						$weighted_n   += $weight;
+					}
 				}
 			} else {
 				$any_dedup = true;
 				$total_count  += $agg['count'];
-				$weighted_sum += $agg['rating'] * $agg['count'];
+				$weight        = (int) ($agg['rated'] ?? $agg['count']);
+				$weighted_sum += $agg['rating'] * $weight;
+				$weighted_n   += $weight;
 			}
 		}
 
@@ -541,7 +664,8 @@ class Feed
 
 		return [
 			'count'  => $total_count,
-			'rating' => $total_count > 0 ? round($weighted_sum / $total_count, 1) : 0.0,
+			'rating' => $weighted_n > 0 ? round($weighted_sum / $weighted_n, 1) : 0.0,
+			'rated'  => $weighted_n,
 		];
 	}
 
@@ -556,9 +680,9 @@ class Feed
 	 * @since SMASH-1412
 	 * @param string $provider Provider name (edd, woocommerce, …)
 	 * @param array  $sources  Subset of feed sources matching this provider
-	 * @return array{count:int,rating:float}|null
+	 * @return array{count:int,rating:float,rated?:int}|null   rated: the reviews the rating covers (SMASH-2477)
 	 */
-	private function compute_provider_aggregate(string $provider, array $sources)
+	public static function compute_provider_aggregate(string $provider, array $sources)
 	{
 		if ($provider === 'edd') {
 			$download_ids = [];
@@ -615,6 +739,10 @@ class Feed
 			if (! class_exists($class)) {
 				return null;
 			}
+			// WooCommerce inactive: nothing to read, so no aggregate; the header keeps the per-source stored sums.
+			if (! function_exists('wc_get_product')) {
+				return null;
+			}
 			$woo = new $class();
 			if (! method_exists($woo, 'get_multi_source_info')) {
 				return null;
@@ -623,6 +751,7 @@ class Feed
 			return [
 				'count'  => (int) ($info['review_count'] ?? 0),
 				'rating' => (float) ($info['average_rating'] ?? $info['rating'] ?? 0),
+				'rated'  => (int) ($info['rated_count'] ?? $info['review_count'] ?? 0),
 			];
 		}
 
@@ -659,6 +788,11 @@ class Feed
 	public function cache_single_posts_from_set($posts, $provider_id)
 	{
 		foreach ($posts as $single_review) {
+			// Skip scalar entries from a malformed upstream payload (SMASH-1578);
+			// downstream caching assumes an associative review array.
+			if (! is_array($single_review)) {
+				continue;
+			}
 			$single_post_cache = new SinglePostCache($single_review);
 			$single_post_cache->set_provider_id($provider_id);
 
@@ -675,12 +809,49 @@ class Feed
 				}
 				$single_post_cache->store();
 			} else {
+				// SMASH-1785 — rebuild a localized avatar whose file has gone missing
+				// (Clear Local Images, a migration, host cleanup). Only brand-new
+				// reviews were ever resized, so a cleared avatar stayed dead forever.
+				// This is the fetch path, so the work is bounded by the refresh
+				// cadence, not per page view.
+				if (
+					Util::should_store_local_images()
+					&& $single_post_cache->localized_avatar_missing()
+				) {
+					$single_post_cache->resize_avatar(150);
+				}
 				$single_post_cache->update_single();
 			}
 		}
 	}
 
 
+
+	/**
+	 * Push a source's stored `info` into the header results so the source is
+	 * still counted when its fresh remote fetch is skipped (API key limit or
+	 * free-tier per-provider call cap). Without this, a rate-limited source
+	 * vanishes from the multi-source header total — the front-end then
+	 * under-reports the combined review count versus the Feed Builder preview,
+	 * which always aggregates every source's stored info (SMASH-1583 parity).
+	 *
+	 * No-op for review requests and for sources with no stored info.
+	 *
+	 * @param array  $data    Results accumulator (by reference).
+	 * @param mixed  $request The hydrated source request.
+	 * @param string $type    'sources' or 'reviews'.
+	 * @return void
+	 */
+	private function push_stored_source_info(&$data, $request, $type)
+	{
+		if ($type !== 'sources' || empty($request['info'])) {
+			return;
+		}
+		$info = is_string($request['info']) ? json_decode($request['info'], true) : $request['info'];
+		if (!empty($info) && is_array($info)) {
+			$data[] = ['info' => $info];
+		}
+	}
 
 	public function api_request($requests_needed, $type = 'reviews')
 	{
@@ -709,13 +880,21 @@ class Feed
 					: '';
 			}
 
-			// Skip if API limit reached for this provider
+			// Skip if API limit reached for this provider. For header (sources)
+			// requests still count the source via its stored info so a
+			// rate-limited source isn't dropped from the multi-source header
+			// count — the admin preview always aggregates every source, so the
+			// front-end must too (SMASH-1583 front-end parity).
 			if (SBR_Feed_Saver_Manager::check_api_limit($request['provider'])) {
+				$this->push_stored_source_info($data, $request, $type);
 				continue;
 			}
 
-			// Skip if provider call limit reached
+			// Skip if provider call limit reached — same stored-info fallback,
+			// otherwise a free-tier per-provider call cap silently removes the
+			// source from the header total (SMASH-1583).
 			if (SBR_Feed_Saver_Manager::limit_provider_api_calls($request['provider'], $request['account_id'])) {
+				$this->push_stored_source_info($data, $request, $type);
 				continue;
 			}
 
@@ -973,6 +1152,30 @@ class Feed
 				$new_data = $remote_request->fetch();
 			}
 
+			// SMASH-2408: one decision point for what this fetch means for the source. The shapes nothing below reports
+			// (an empty or non-JSON 200, data with no reviews, a Facebook timeout) are provider failures: recorded, never shown.
+			$hidden = false;
+			if ($type === 'reviews') {
+				$outcome = SourceFetchOutcome::classify($new_data, (string) ($request['provider'] ?? ''), Util::sbr_is_pro());
+				$this->record_fetch_state($request, $outcome);
+				// Recorded for the retry and the visitor-side empty state, never shown: we monitor providers ourselves.
+				$hidden = SourceFetchOutcome::is_provider_failure($outcome);
+				if ($hidden) {
+					$this->hidden_failures++;
+				} elseif ($outcome['outcome'] === SourceFetchOutcome::FAILED && $this->is_unreported_failure($new_data)) {
+					$this->add_relay_error(array('id' => $outcome['id']), $request);
+				}
+			}
+
+			// SMASH-1610: SBRelay::call() returns a refused request as the bare error envelope
+			// (`id`, `success: false`, no `data` key), so the branch below used to drop it silently.
+			if ($type === 'reviews' && $this->is_relay_error_envelope($new_data)) {
+				if (!$hidden) {
+					$this->add_relay_error($new_data, $request);
+				}
+				continue;
+			}
+
 			// If no data was returned, fall back to stored source info for header requests
 			if (!isset($new_data['data'])) {
 				if ($type === 'sources' && !empty($request['info'])) {
@@ -1002,15 +1205,20 @@ class Feed
 					}
 				}
 				$message .= '<br><br>';
-				$message .= sprintf(__('This is affecting the source %s for %s. New reviews will not be fetched until this is resolved.', 'reviews-feed'), wp_strip_all_tags($request['name']), wp_strip_all_tags($request['provider']));
+				$message .= self::source_affected_sentence(wp_strip_all_tags($request['name']), wp_strip_all_tags($request['provider']));
 				$message .= '<br><br>';
-				$this->add_error($message, sprintf(__('Troubleshoot by visiting %serror message reference page%s.', 'reviews-feed'), '<a href="https://smashballoon.com/doc/reviews-feed-error-message-reference/?reviews&utm_campaign=reviews-pro&utm_source=feed&utm_medium=apierror&utm_content=Error%20Message%20Reference" target="_blank" rel="noopener noreferrer">', '</a>'));
+				$this->add_error($message, self::troubleshoot_directions());
 				// For source requests: always skip the normal data push after error handling
 				// (error structures lack 'info' key and would break update_header_cache)
 				// For review requests: preserve original fall-through behavior
 				if ($type === 'sources') {
 					continue;
 				}
+			}
+
+			// Relay master sends error maps in data.reviews (a refused key, a WordPress.org scrape exception); cached, each became a blank review (SMASH-2382).
+			if ($type === 'reviews' && SourceFetchOutcome::is_error_map($new_data)) {
+				continue;
 			}
 
 			$new_data = $this->add_source_to_post_set($request, $new_data);
@@ -1024,12 +1232,250 @@ class Feed
 		return $data;
 	}
 
+	/**
+	 * Did one of this feed's sources fail? Only the classifier's FAILED counts — the state record_fetch_state()
+	 * stored earlier or mirrored this request — never any relay error: `noReviewsFound` is a relay error that
+	 * means an honestly empty source, and a quota refusal is about the site. FeedDisplay uses it to tell a broken
+	 * empty feed from an honestly empty one. SMASH-2410.
+	 *
+	 * @return bool
+	 */
+	public function has_failed_source()
+	{
+		$sources = is_array($this->settings) && isset($this->settings['sources']) && is_array($this->settings['sources'])
+			? $this->settings['sources']
+			: array();
+		foreach ($sources as $source) {
+			$raw = is_array($source) && isset($source['error']) && is_string($source['error']) ? $source['error'] : '';
+			if (SourceFetchOutcome::decode_state($raw) !== null) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Store a reviews fetch's outcome on the source row (`sources.error`), only when it changes. SMASH-2408.
+	 *
+	 * Shape: {id, scope, attempts, since}. `scope` is relay (the relay itself failed: the same for every source),
+	 * config (a local provider not active / deleted, Pro required — never a reconnect) or source. No relay text is
+	 * stored: it can echo request input (SMASH-2031). `since` survives repeated failures.
+	 *
+	 * @param array                                            $request Hydrated source.
+	 * @param array{outcome: string, id: string, scope: string} $outcome SourceFetchOutcome::classify().
+	 * @return void
+	 */
+	private function record_fetch_state(array $request, array $outcome)
+	{
+		if (empty($request['account_id']) || empty($request['provider'])) {
+			return;
+		}
+
+		$raw    = isset($request['error']) && is_string($request['error']) ? $request['error'] : '';
+		$stored = SourceFetchOutcome::decode_state($raw);
+		$state  = $outcome['outcome'];
+
+		if ($state === SourceFetchOutcome::FETCHED || $state === SourceFetchOutcome::AMBIGUOUS) {
+			if ($raw !== '') {
+				(new DB())->source_set_fetch_state($request['account_id'], $request['provider'], '');
+				$this->remember_fetch_state($request, '');
+			}
+			return;
+		}
+		if ($state !== SourceFetchOutcome::FAILED) {
+			return;
+		}
+
+		$scope = $outcome['scope'];
+		if ($stored !== null && $stored['id'] === $outcome['id'] && $stored['scope'] === $scope) {
+			return;
+		}
+
+		$error = wp_json_encode(array(
+			'id'       => $outcome['id'],
+			'scope'    => $scope,
+			// Counted by the cron retry (FailedSourceRetry, SMASH-2409), not here: a repeat failure keeps it.
+			'attempts' => $stored !== null ? $stored['attempts'] : 0,
+			'since'    => $stored !== null ? $stored['since'] : time(),
+		));
+		(new DB())->source_set_fetch_state($request['account_id'], $request['provider'], (string) $error);
+		$this->remember_fetch_state($request, (string) $error);
+	}
+
+	/**
+	 * Mirror a written state onto this request's hydrated source, so the same render reads what was just found
+	 * (FeedDisplay asks has_failed_source() after the fetch). SMASH-2410.
+	 *
+	 * @param array  $request Hydrated source.
+	 * @param string $error   The value written.
+	 * @return void
+	 */
+	private function remember_fetch_state(array $request, $error)
+	{
+		if (!is_array($this->settings) || !isset($this->settings['sources']) || !is_array($this->settings['sources'])) {
+			return;
+		}
+		$account_id = $request['account_id'] ?? null;
+		$provider   = $request['provider'] ?? null;
+		foreach ($this->settings['sources'] as $key => $source) {
+			if (is_array($source) && ($source['account_id'] ?? null) === $account_id && ($source['provider'] ?? null) === $provider) {
+				$this->settings['sources'][ $key ]['error'] = $error;
+			}
+		}
+	}
+
+	/**
+	 * A failed answer no other branch reports: not a relay envelope (add_relay_error) and no `data.error` (add_error).
+	 *
+	 * @param mixed $response
+	 * @return bool
+	 */
+	private function is_unreported_failure($response)
+	{
+		if ($this->is_relay_error_envelope($response)) {
+			return false;
+		}
+
+		return !(is_array($response) && isset($response['data']) && is_array($response['data']) && !empty($response['data']['error']));
+	}
+
+	/**
+	 * Second sentence of a fetch error, shared by the relay-refusal and `data.error` branches. Not escaped.
+	 *
+	 * @param string $source_name
+	 * @param string $provider
+	 * @return string
+	 */
+	private static function source_affected_sentence($source_name, $provider)
+	{
+		/* translators: 1: source name, 2: provider name */
+		return sprintf(__('This is affecting the source %s for %s. New reviews will not be fetched until this is resolved.', 'reviews-feed'), $source_name, $provider);
+	}
+
+	/**
+	 * Directions HTML for a fetch error: the error message reference link.
+	 *
+	 * @return string
+	 */
+	private static function troubleshoot_directions()
+	{
+		/* translators: 1: opening link tag, 2: closing link tag */
+		return sprintf(__('Troubleshoot by visiting %serror message reference page%s.', 'reviews-feed'), '<a href="https://smashballoon.com/doc/reviews-feed-error-message-reference/?reviews&utm_campaign=reviews-pro&utm_source=feed&utm_medium=apierror&utm_content=Error%20Message%20Reference" target="_blank" rel="noopener noreferrer">', '</a>');
+	}
+
+	/**
+	 * Relay error ids are camelCase identifiers; keep the case, drop anything else.
+	 *
+	 * @param mixed $id
+	 * @return string
+	 */
+	private static function clean_error_id($id)
+	{
+		return is_string($id) ? (string) preg_replace('/[^A-Za-z0-9_-]/', '', $id) : '';
+	}
+
+	/**
+	 * A refused relay request as SBRelay::call() returns it: an `id`, no `data`, not successful.
+	 *
+	 * @param mixed $response
+	 * @return bool
+	 */
+	private function is_relay_error_envelope($response)
+	{
+		return is_array($response)
+			&& ! isset($response['data'])
+			&& isset($response['id']) && is_string($response['id']) && $response['id'] !== ''
+			&& ( $response['success'] ?? false ) !== true;
+	}
+
+	/**
+	 * Our text for a provider refusing the client's own API key (SMASH-1686), or null. sb-relay's reviewsError carries the
+	 * provider's error code as `status` (Reviews/Yelp.php); it is matched here, never echoed.
+	 *
+	 * @param string $provider The source's provider.
+	 * @param mixed  $status   The envelope's `status`.
+	 * @return string|null
+	 */
+	private static function provider_key_reason($provider, $status)
+	{
+		$reasons = array(
+			'yelp' => array(
+				'TRIAL_EXPIRED'             => __('Yelp stopped answering for this source because the free trial on your Yelp API key has ended. Upgrade your plan on Yelp, or add a key from a Yelp account with an active plan under Settings, Manage API Keys.', 'reviews-feed'),
+				'UNAUTHORIZED_ACCESS_TOKEN' => __('Yelp no longer accepts your Yelp API key. Create a new key on Yelp and add it under Settings, Manage API Keys.', 'reviews-feed'),
+			),
+		);
+
+		return is_string($status) ? ( $reasons[ $provider ][ $status ] ?? null ) : null;
+	}
+
+	/**
+	 * Record a relay refusal as a feed error carrying its id (SMASH-1610).
+	 *
+	 * The text is ours, keyed by id, not the relay's `message`: relay strings can echo request input.
+	 * relayUnreachable / relayServerError carry a message SBRelay itself wrote, so that one is reused.
+	 *
+	 * @param array $response Relay error envelope.
+	 * @param array $request  Hydrated source.
+	 * @return void
+	 */
+	private function add_relay_error(array $response, $request)
+	{
+		$error_id = self::clean_error_id($response['id'] ?? '');
+		if ($error_id === '') {
+			$error_id = 'relayError';
+		}
+
+		$key_reason = $error_id === 'reviewsError'
+			? self::provider_key_reason((string) ($request['provider'] ?? ''), $response['status'] ?? null)
+			: null;
+
+		if ($error_id === 'freeReviewsLimitExceeded') {
+			// Provider-neutral on purpose: this also fires for sources with no API-key field (Trustpilot, sb-relay LimitReviewsRequest).
+			$reason = __("This source has reached the number of reviews the plugin can fetch on your current plan, so new reviews can't be fetched for it right now.", 'reviews-feed');
+		} elseif ($key_reason !== null) {
+			$reason = $key_reason;
+		} elseif (in_array($error_id, array( 'relayUnreachable', 'relayServerError' ), true) && ! empty($response['message']) && is_string($response['message'])) {
+			$reason = wp_strip_all_tags($response['message']);
+		} else {
+			/* translators: %s: error code returned by the reviews server */
+			$reason = sprintf(__("The reviews server couldn't fetch reviews for this source (%s).", 'reviews-feed'), $error_id);
+		}
+
+		$source_name = wp_strip_all_tags((string) ($request['name'] ?? ''));
+		$provider    = wp_strip_all_tags((string) ($request['provider'] ?? ''));
+
+		$message  = esc_html($reason) . '<br><br>';
+		$message .= esc_html(self::source_affected_sentence($source_name, $provider));
+		$message .= '<br><br>';
+
+		$this->add_error(
+			$message,
+			self::troubleshoot_directions(),
+			$error_id,
+			$source_name !== '' ? $source_name . ': ' . $reason : $reason
+		);
+	}
+
 	public function add_source_to_post_set($source, $post_set)
 	{
-		if (! isset($post_set['data']['reviews'][0])) {
+		// `reviews` must be a real list before we iterate. On an error-shaped
+		// payload the container can itself be a scalar (e.g. 'reviews' => 'error
+		// message'); `isset($reviews[0])` alone is fooled by string-offset
+		// semantics (isset($str[0]) is true), which would make the foreach below
+		// emit a "foreach() argument must be of type array|object" warning. Guard
+		// that it's an array first (SMASH-1578 / PR #478 review).
+		if (! is_array($post_set['data']['reviews'] ?? null) || ! isset($post_set['data']['reviews'][0])) {
 			return $post_set;
 		}
 		foreach ($post_set['data']['reviews'] as $index => $review) {
+			// Skip non-array entries from a malformed/error-shaped payload
+			// (SMASH-1578): the write below assigns a 'source' offset, which on a
+			// scalar (string) entry is a fatal TypeError on PHP 8.0+. This runs
+			// upstream of cache_single_posts_from_set, so it must guard too.
+			if (! is_array($review)) {
+				continue;
+			}
 			$post_set['data']['reviews'][ $index ]['source'] = array(
 				'id' => $source['info']['id'] ?? $source['account_id'] ?? '',
 				'url' => $source['info']['url'] ?? '',
@@ -1281,7 +1727,8 @@ class Feed
 		$aggregator = new PostAggregator();
 		// Pass limit from settings (default 150 for backward compatibility)
 		$limit = isset($settings['numPostDesktop']) ? max(150, (int) $settings['numPostDesktop']) : 150;
-		$posts = $aggregator->db_post_set($settings['sources'], null, $limit);
+		// SMASH-2407: the same sources posts_from_db() rendered from, so a feed shown in its stored language can be moderated.
+		$posts = $aggregator->db_post_set($this->db_read_sources($aggregator), null, $limit);
 		$posts = $aggregator->normalize_db_post_set($posts);
 		$post_set = $this->filter_posts($posts, $settings);
 		return $post_set;

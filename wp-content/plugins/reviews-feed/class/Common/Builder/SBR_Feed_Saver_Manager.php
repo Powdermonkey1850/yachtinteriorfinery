@@ -21,11 +21,11 @@ use SmashBalloon\Reviews\Common\Error_Reporter;
 use SmashBalloon\Reviews\Common\Integrations\Providers\Google;
 use SmashBalloon\Reviews\Common\Integrations\Providers\Yelp;
 use SmashBalloon\Reviews\Common\Integrations\SBRelay;
+use SmashBalloon\Reviews\Common\Parser;
 use SmashBalloon\Reviews\Common\PostAggregator;
 use SmashBalloon\Reviews\Common\Services\SettingsManagerService;
 use SmashBalloon\Reviews\Common\Traits\SBR_Feed_Templates_Settings;
 use SmashBalloon\Reviews\Common\Util;
-use SmashBalloon\Reviews\Common\FeedCache;
 use SmashBalloon\Reviews\Common\Helpers\Data_Encryption;
 use SmashBalloon\Reviews\Pro\Services\BulkUpdate\Bulk_External_Reviews_Update;
 use SmashBalloon\Reviews\Pro\Services\BulkUpdate\Bulk_Reviews_Update;
@@ -50,9 +50,13 @@ class SBR_Feed_Saver_Manager
 
 
 		add_action('wp_ajax_sbr_feed_saver_manager_add_source', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_source'));
-		add_action('wp_ajax_sbr_feed_saver_manager_add_facebook_souce', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_facebook_souce'));
-		add_action('wp_ajax_sbr_feed_saver_manager_connect_manual_facebook', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_manual_facebook_souce'));
-		add_action('wp_ajax_sbr_feed_saver_manager_delete_source', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'delete_souce'));
+		add_action('wp_ajax_sbr_feed_saver_manager_add_facebook_source', array( 'SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_facebook_source' ));
+		// The bundled customizer (vendor/smashballoon/customizer AddSourceModal.js) still
+		// sends the historical misspelled action name — keep it registered or adding a
+		// Facebook source from the feed builder 400s.
+		add_action('wp_ajax_sbr_feed_saver_manager_add_facebook_souce', array( 'SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_facebook_source' ));
+		add_action('wp_ajax_sbr_feed_saver_manager_connect_manual_facebook', array( 'SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'add_manual_facebook_source' ));
+		add_action('wp_ajax_sbr_feed_saver_manager_delete_source', array( 'SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'delete_source' ));
 		add_action('wp_ajax_sbr_feed_saver_manager_get_source_impact', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'get_source_impact'));
 		add_action('wp_ajax_sbr_feed_saver_manager_update_api_key', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'update_api_key'));
 		add_action('wp_ajax_sbr_import_feed_settings', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'import_feed_settings'));
@@ -68,6 +72,7 @@ class SBR_Feed_Saver_Manager
 		add_action('wp_ajax_sbr_feed_saver_manager_advanced_search_reviews', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'advanced_search_reviews'));
 		add_action('wp_ajax_sbr_feed_saver_manager_duplicate_collection', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'duplicate_collection'));
 		add_action('wp_ajax_sbr_feed_saver_manager_load_more_sources', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'load_more_sources'));
+		add_action('wp_ajax_sbr_feed_saver_manager_load_more_collections', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'load_more_collections'));
 
 		add_action('wp_ajax_sbr_feed_saver_manager_export_collection', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'export_collection'));
 		add_action('wp_ajax_sbr_import_full_collection', array('SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager', 'import_full_collection'));
@@ -158,7 +163,7 @@ class SBR_Feed_Saver_Manager
 			'feed_id' => false,
 		);
 
-		if ($feed_saver->update_or_insert()) {
+		if (false !== $feed_saver->update_or_insert()) {
 			$return = array(
 				'success' => true,
 				'feed_id' => $feed_saver->get_feed_id(),
@@ -167,13 +172,15 @@ class SBR_Feed_Saver_Manager
 				echo wp_json_encode($return);
 				wp_die();
 			} else {
-				$feed_cache = new FeedCache($feed_id);
+				$feed_cache = Util::feed_cache_for_site((string) $feed_id);
 				if (isset($_POST['get_posts']) && $_POST['get_posts'] == true) {
 					$feed = Util::sbr_is_pro() ? new \SmashBalloon\Reviews\Pro\Feed($settings_data, $feed_id, $feed_cache) : new \SmashBalloon\Reviews\Common\Feed($settings_data, $feed_id, $feed_cache);
 					$feed->init();
 					$feed->get_set_cache();
 					$posts = $feed->get_post_set_page();
 					$return['posts'] = $posts;
+					// SMASH-1610: the editor replaces its notice with whatever this returns.
+					$return['relayErrors'] = $feed->get_relay_errors();
 				}
 			}
 		}
@@ -257,7 +264,7 @@ class SBR_Feed_Saver_Manager
 			$preview_settings = self::sanitize_settings($preview_settings);
 
 			$feed_id = absint($_POST['feedID']);
-			$feed_cache = new FeedCache($feed_id, 30000);
+			$feed_cache = Util::feed_cache_for_site((string) $feed_id, 30000);
 			$feed_cache->clear('posts');
 			$feed_cache->clear('header');
 			$feed = Util::sbr_is_pro() ? new \SmashBalloon\Reviews\Pro\Feed($preview_settings, $feed_id, $feed_cache) : new \SmashBalloon\Reviews\Common\Feed($preview_settings, $feed_id, $feed_cache);
@@ -289,15 +296,82 @@ class SBR_Feed_Saver_Manager
 				$return['settings'] = $preview_settings;
 			}
 			$return['posts'] = $posts;
-			$return['sourcesList'] = SBR_Sources::get_sources_list([
+			$sources_list = SBR_Sources::get_sources_list([
 				'id' => !empty($preview_settings['sources']) && isset($preview_settings['sources']) ? $preview_settings['sources'] : [],
 			]);
+			// SMASH-1583: the customizer header (Header.js) reads these source
+			// infos directly, so the admin preview must match the published feed.
+			// Backfill the same empty per-source counts the front-end backfills
+			// (Facebook recommendations report total_rating: 0) from the FULL
+			// cached review set, so the preview's combined count + weighted
+			// average line up with what visitors actually see.
+			$return['sourcesList'] = self::backfill_preview_source_counts($sources_list, $feed->get_posts());
+			// SMASH-1610: relay refusals behind an empty preview.
+			$return['relayErrors'] = $feed->get_relay_errors();
 
 			echo sbr_json_encode(
 				$return
 			);
 		}
 		wp_die();
+	}
+
+	/**
+	 * SMASH-1583: backfill empty per-source review counts for the customizer
+	 * preview so the admin preview header reports the same combined count +
+	 * weighted average as the published feed (Facebook recommendations persist
+	 * total_rating: 0). The backfill RULE itself lives in exactly one place —
+	 * Parser::backfill_review_counts — and this method only adapts the
+	 * DB-sourced row shape: `info` arrives as a JSON string and the id the
+	 * Parser keys on may only exist as the row-level `account_id`. We decode
+	 * `info` to an array, delegate, then re-encode the rows that came in as
+	 * strings so React's SbUtils.jsonParse keeps receiving the shape it expects.
+	 *
+	 * Shared by both customizer-preview entry points — the fly-preview AJAX
+	 * (feed_customizer_fly_preview) and the initial feed-builder hydration
+	 * (SBR_Feed_Builder::customizer_feed_data) — so the preview shows the same
+	 * counts on first open as it does after the first edit.
+	 *
+	 * @param array $sources_list Raw source rows (info is usually a JSON string).
+	 * @param array $posts        Full normalized cached reviews (each with source.id).
+	 * @return array The source rows with info.total_rating backfilled where empty.
+	 */
+	public static function backfill_preview_source_counts($sources_list, $posts)
+	{
+		if (! is_array($sources_list)) {
+			return [];
+		}
+		if (empty($sources_list)) {
+			return $sources_list;
+		}
+
+		// Normalise DB JSON-string `info` to arrays so the shared Parser rule
+		// can run, remembering which rows to re-encode on the way out.
+		$was_string = [];
+		foreach ($sources_list as $key => $source) {
+			if (! is_array($source) || ! is_string($source['info'] ?? null)) {
+				continue;
+			}
+			$decoded = json_decode($source['info'], true);
+			if (! is_array($decoded)) {
+				continue;
+			}
+			// Parser keys on info.id; DB rows carry the id as account_id.
+			if (! isset($decoded['id']) && isset($source['account_id'])) {
+				$decoded['id'] = $source['account_id'];
+			}
+			$sources_list[$key]['info'] = $decoded;
+			$was_string[$key] = true;
+		}
+
+		$sources_list = (new Parser())->backfill_review_counts($sources_list, $posts);
+
+		foreach (array_keys($was_string) as $key) {
+			if (isset($sources_list[$key]['info']) && is_array($sources_list[$key]['info'])) {
+				$sources_list[$key]['info'] = wp_json_encode($sources_list[$key]['info']);
+			}
+		}
+		return $sources_list;
 	}
 
 	/**
@@ -323,7 +397,8 @@ class SBR_Feed_Saver_Manager
 			$preview_settings['numPostTablet'] = 100;
 			$preview_settings['numPostMobile'] = 100;
 
-			$feed = Util::sbr_is_pro() ? new \SmashBalloon\Reviews\Pro\Feed($preview_settings, $feed_id, new FeedCache($feed_id, 30000)) : new \SmashBalloon\Reviews\Common\Feed($preview_settings, $feed_id, new FeedCache($feed_id, 30000));
+			$feed_cache = Util::feed_cache_for_site((string) $feed_id, 30000);
+			$feed = Util::sbr_is_pro() ? new \SmashBalloon\Reviews\Pro\Feed($preview_settings, $feed_id, $feed_cache) : new \SmashBalloon\Reviews\Common\Feed($preview_settings, $feed_id, $feed_cache);
 			$feed->init();
 			$posts = $feed->get_posts_for_moderation();
 
@@ -363,7 +438,9 @@ class SBR_Feed_Saver_Manager
 			if ($has_api_key_in_post || $has_stored_api_key) {
 				$data = array(
 					'provider' => $provider,
-					'providerIdUrl' => esc_url_raw($_POST['providerIdUrl']),
+					// esc_url_raw() only ltrim()s: a trailing space would reach the parsers as %20 (SMASH-1706).
+					// is_string(), not a cast: `providerIdUrl[]=` would warn on PHP 8 and parse "Array".
+					'providerIdUrl' => is_string($_POST['providerIdUrl']) ? esc_url_raw(trim($_POST['providerIdUrl'])) : '',
 					'apiKey' => $has_api_key_in_post ? sanitize_text_field($_POST['apiKey']) : null,
 				);
 				$return = self::process_source_apikey($data);
@@ -377,13 +454,21 @@ class SBR_Feed_Saver_Manager
 	}
 
 	/**
+	 * @deprecated Misspelled variant kept for third-party callers; use add_facebook_source().
+	 */
+	public static function add_facebook_souce(): void
+	{
+		self::add_facebook_source();
+	}
+
+	/**
 	* Used to Add Facebook Sources
 	*
 	*
 	*
 	* @since 1.0
 	*/
-	public static function add_facebook_souce()
+	public static function add_facebook_source(): void
 	{
 		check_ajax_referer('sbr-admin', 'nonce');
 
@@ -414,13 +499,21 @@ class SBR_Feed_Saver_Manager
 	}
 
 	/**
+	 * @deprecated Misspelled variant kept for third-party callers; use add_manual_facebook_source().
+	 */
+	public static function add_manual_facebook_souce(): void
+	{
+		self::add_manual_facebook_source();
+	}
+
+	/**
 	* Used to Add Manual Facebook Source
 	*
 	*
 	*
 	* @since 1.0
 	*/
-	public static function add_manual_facebook_souce()
+	public static function add_manual_facebook_source(): void
 	{
 		check_ajax_referer('sbr-admin', 'nonce');
 
@@ -447,7 +540,41 @@ class SBR_Feed_Saver_Manager
 	*
 	* @since 1.0
 	*/
-	public static function delete_souce()
+	/**
+	 * Did the relay's `source/remove` succeed (or was the source already gone)?
+	 *
+	 * SBRelay::call() returns the full body on success (`success: true`) and the
+	 * UNWRAPPED error envelope on failure (`{ id, code, success: false }` — no
+	 * `error` key). So a real failure is `success === false`; a `sourceNotFound`
+	 * / HTTP 404 means it's already gone (also "removed"); and an unreachable
+	 * relay yields an empty array, which we treat as removable (fail-open, the
+	 * prior behaviour). Without this, a failed remove read as success and the
+	 * local delete went ahead anyway — orphaning the relay-side source, which
+	 * then keeps counting against the per-license source cap.
+	 *
+	 * @param array $relay_response Decoded SBRelay::call() result.
+	 * @return bool True when it is safe to delete the source locally.
+	 */
+	private static function relay_source_removed(array $relay_response): bool
+	{
+		$failed = isset($relay_response['success']) && false === $relay_response['success'];
+		if (! $failed) {
+			return true;
+		}
+
+		return 'sourceNotFound' === ($relay_response['id'] ?? null)
+			|| 404 === (int) ($relay_response['code'] ?? 0);
+	}
+
+	/**
+	 * @deprecated Misspelled variant kept for third-party callers; use delete_source().
+	 */
+	public static function delete_souce(): void
+	{
+		self::delete_source();
+	}
+
+	public static function delete_source(): void
 	{
 		check_ajax_referer('sbr-admin', 'nonce');
 
@@ -466,6 +593,12 @@ class SBR_Feed_Saver_Manager
 				'provider' => $provider
 			]);
 			$source_info = !empty($source_record['info']) ? json_decode($source_record['info'], true) : [];
+			// json_decode() returns null/false for malformed stored JSON; keep it an
+			// array so the relay_source_id read below can't emit a PHP 8 "array offset
+			// on null" warning (which would corrupt this AJAX handler's JSON response).
+			if (!is_array($source_info)) {
+				$source_info = [];
+			}
 
 			// For collections, just delete locally
 			if (isset($_POST['isCollection']) && $_POST['isCollection']) {
@@ -488,58 +621,59 @@ class SBR_Feed_Saver_Manager
 					];
 				}
 
-				$relay_response = null;
-				switch ($provider) {
-					case 'google':
-						$google = new Google($relay);
-						$relay_response = $google->removeSource($relay_args);
-						break;
-					case 'yelp':
-						$yelp = new Yelp($relay);
-						$relay_response = $yelp->removeSource($relay_args);
-						break;
-					case 'tripadvisor':
-						$tripadvisor = new \SmashBalloon\Reviews\Pro\Integrations\Providers\TripAdvisor($relay);
-						$relay_response = $tripadvisor->removeSource($relay_args);
-						break;
-					case 'trustpilot':
-						$trustpilot = new \SmashBalloon\Reviews\Pro\Integrations\Providers\TrustPilot($relay);
-						$relay_response = $trustpilot->removeSource($relay_args);
-						break;
-					case 'wordpress.org':
-						$WordpressOrg = new \SmashBalloon\Reviews\Pro\Integrations\Providers\WordpressOrg($relay);
-						$relay_response = $WordpressOrg->removeSource($relay_args);
-						break;
-				}
+				// Remove the source from the relay. The `source/remove` endpoint is
+				// keyed by the source/place id and is provider-agnostic — every
+				// provider inherits the same BaseProvider::removeSource() and the
+				// provider name is never sent — so call it directly instead of
+				// instantiating a per-provider class. This keeps the relay-first
+				// delete working for every provider even when its class isn't loaded
+				// (e.g. a TripAdvisor / Trustpilot / WordPress.org source on a site
+				// where Pro is inactive after a downgrade), which previously fataled
+				// with "Class ... not found". SBRelay::call() always returns a decoded
+				// array, so we read it directly (the old per-provider removeSource()
+				// wrapped this same call in wp_json_encode(), which made the response
+				// check below dead code — a relay string is never an array).
+				$relay_response = $relay->call('source/remove', $relay_args, 'POST', true);
 
-				// Check relay response - only delete locally if relay succeeded or source doesn't exist
-				// Allow deletion if: success, source not found (already deleted), or no relay_source_id (local-only)
-				$relay_success = true;
-				if (is_array($relay_response)) {
-					// Check for error responses - but "not found" is OK (source already deleted from relay)
-					if (isset($relay_response['error']) && !empty($relay_response['error'])) {
-						$error_msg = is_string($relay_response['error']) ? $relay_response['error'] : '';
-						$is_not_found = stripos($error_msg, 'not found') !== false
-							|| stripos($error_msg, 'does not exist') !== false
-							|| (isset($relay_response['code']) && $relay_response['code'] === 404);
-
-						if (!$is_not_found) {
-							$relay_success = false;
-						}
-					}
-				}
-
-				if (!$relay_success) {
-					// Relay deletion failed - don't delete locally to prevent orphaned state
-					// Note: wp_send_json_error() terminates execution, no return needed
+				// Only block the local delete if the relay explicitly reported an error.
+				// A "not found" (or 404) means the source was already gone from the relay,
+				// which is fine. An unreachable relay returns no `error` key, so the local
+				// delete still proceeds rather than wedging the source forever.
+				// Only delete locally if the relay actually removed the source (or
+				// it was already gone). See self::relay_source_removed() for how the
+				// SBRelay envelope is interpreted. wp_send_json_error() terminates.
+				if (! self::relay_source_removed($relay_response)) {
 					wp_send_json_error([
 						'message' => __('Failed to delete source from server. Please try again.', 'reviews-feed'),
-						'relay_error' => isset($relay_response['error']) ? $relay_response['error'] : 'Unknown error'
+						'relay_error' => $relay_response['id'] ?? ($relay_response['message'] ?? 'Unknown error'),
 					]);
 				}
 
 				// Relay deletion succeeded (or source wasn't on relay) - safe to delete locally
 				SBR_Sources::delete_source($source_id);
+
+				// Also drop this source's cached reviews. wp_sbr_reviews_posts rows are
+				// keyed by provider_id = the source account id for every provider deleted
+				// here: the place_id for Google/Yelp, and the edd_multi_/wc_multi_ id for
+				// EDD/Woo multi-sources (set_provider_id($source_id) when caching). So this
+				// one call cleans them all — verified live (EDD multi-source 59 posts -> 0).
+				// Without it the posts orphan after the source row is gone, and for the free
+				// tier it also wedges re-adds: FreeRetriever's already_fetched() counts posts
+				// by provider + provider_id, so a free user who deletes their one Google/Yelp
+				// source still can't add one (nothing shows in the list, but the gate stays
+				// closed). Overlapping EDD/Woo multi-sources are safe — each keeps its own
+				// copies under its own account id, so deleting one never removes another
+				// source's reviews (verified: sibling source's posts untouched). Mirrors the
+				// cleanup the collection branch above already performs.
+				PostAggregator::delete_reviews_by_provide_id($source_account_id);
+
+				// The reviews are gone, so a re-add must import the history again (SMASH-2525).
+				if (class_exists(Bulk_Reviews_Update::class)) {
+					Bulk_Reviews_Update::forget_source($source_account_id, $provider);
+				}
+				if (class_exists(Bulk_External_Reviews_Update::class)) {
+					Bulk_External_Reviews_Update::forget_source($source_account_id, $provider);
+				}
 			}
 		}
 		echo sbr_json_encode([
@@ -549,6 +683,20 @@ class SBR_Feed_Saver_Manager
 		]);
 		wp_die();
 	}
+
+	/**
+	 * Source reconciliation REMOVED (2026-06-24, SMASH-1585 follow-up).
+	 *
+	 * The relay's `sources/reconcile` treated an empty `place_ids` keep-list as
+	 * "remove all", so a single false-empty from the plugin (e.g. a transient DB
+	 * read error returning an empty set) could have wiped every relay-side source
+	 * for a paying customer on a routine Clear All Caches. The behaviour was
+	 * non-essential — the SMASH-1585 migration fix is the bearer-aware register
+	 * rebind, and the per-source delete path already keeps the relay in sync — so
+	 * the destructive sweep was removed rather than guarded. Do NOT reintroduce a
+	 * keep-list/diff reconcile without an explicit, confirmed remove-all signal and
+	 * cross-repo place_id + provider-list pinning tests.
+	 */
 
 	/**
 	 * Get impact data for deleting a source
@@ -658,6 +806,22 @@ class SBR_Feed_Saver_Manager
 	}
 
 
+	/**
+	 * Did the relay refuse the source because the keyless source limit is reached?
+	 *
+	 * SBRelay::call() returns the relay's error envelope unwrapped, so the limit arrives
+	 * as `id: maxSourceLimitExceeded` (sb-relay SourceLimit middleware) with no `error`
+	 * key. `error: sourceLimitExceeded` is the legacy shape, kept for BC: the keyless
+	 * pre-flight in process_source_apikey() returns before this check is reached.
+	 *
+	 * @param array<string, mixed> $info Decoded relay response.
+	 */
+	public static function is_source_limit_error(array $info): bool
+	{
+		return 'sourceLimitExceeded' === ($info['error'] ?? null)
+			|| 'maxSourceLimitExceeded' === ($info['id'] ?? null);
+	}
+
 	public static function update_api_limit($provider, $action)
 	{
 		$apikeys_limit = get_option('sbr_apikeys_limit', []);
@@ -697,13 +861,31 @@ class SBR_Feed_Saver_Manager
 			//If there is no providerIdUrl set, then the call is just for checking the API KEY
 			switch ($provider) {
 				case 'tripadvisor':
+					// No providerIdUrl is the key-only probe from update_api_key(); it keeps 'XXX'.
+					if (isset($data['providerIdUrl'])) {
+						$input_error = self::get_tripadvisor_input_error($data['providerIdUrl']);
+						if ($input_error !== null) {
+							// SMASH-1706: nothing to resolve, so no relay round trip. Same shape the
+							// customizer already shows for a relay refusal (`error` + `message`).
+							return [
+								'success'       => false,
+								'error'         => 'invalidSourceUrl',
+								'message'       => $input_error,
+								'apiKeyLimits'  => get_option('sbr_apikeys_limit', []),
+								'pluginNotices' => Util::get_plugin_notices(),
+							];
+						}
+					}
 					$relay_args['place_id'] = isset($data['providerIdUrl']) ? self::get_place_id_tripadvisor($data['providerIdUrl']) : 'XXX';
 					break;
 				case 'trustpilot':
-					$relay_args['place_id'] = $data['providerIdUrl'];
+						// update_api_key() builds $data with provider + apiKey only, so the key
+						// probe reaches here with no providerIdUrl at all (SMASH-1973).
+						// Reading it blind raised "Undefined array key".
+						$relay_args['place_id'] = $data['providerIdUrl'] ?? '';
 					break;
 				case 'wordpress.org':
-						$wordpressorg_args = self::get_place_id_wordpressorg($data['providerIdUrl']);
+						$wordpressorg_args = self::get_place_id_wordpressorg($data['providerIdUrl'] ?? null);
 						$relay_args['place_id'] = $wordpressorg_args['type'] . '/' . $wordpressorg_args['slug'];
 						$relay_args['type'] = $wordpressorg_args['type'];
 						$relay_args['slug'] = $wordpressorg_args['slug'];
@@ -751,7 +933,10 @@ class SBR_Feed_Saver_Manager
 				case 'google':
 					$google = new Google($relay);
 					$settings = wp_parse_args(get_option('sbr_settings', []), sbr_plugin_settings_defaults());
-					$relay_args['language'] = $settings['localization'];
+					// Map the language (e.g. WPML es-mx -> es-419) instead of sending the
+					// raw 'localization' sentinel to Google; SBRelay drops it if 'default'
+					// (SMASH-1631, follow-up to SMASH-1617).
+					$relay_args['language'] = Util::get_api_call_language($settings);
 					$info = $google->getSourcesInfo($relay_args);
 					break;
 				case 'yelp':
@@ -772,7 +957,10 @@ class SBR_Feed_Saver_Manager
 					break;
 			}
 			if ($info !== false) {
+				// A non-JSON body (an HTML error page, for instance) decodes to null, and
+				// every offset read below then works on null.
 				$info = json_decode($info, true);
+				$info = is_array($info) ? $info : [];
 				//Checks if there is an error
 				if (
 					!empty($info['error'])
@@ -784,6 +972,11 @@ class SBR_Feed_Saver_Manager
 					) {
 						SBR_Feed_Saver_Manager::update_api_limit($provider, 'add');
 					}
+					// AddSourceModal.js keys its API-key remedy on `error === 'sourceLimitExceeded'`. The flag is
+					// deliberately not set here: it also freezes live fetches (Feed.php check_api_limit) — SMASH-1901.
+					if (self::is_source_limit_error($info)) {
+						$info['error'] = 'sourceLimitExceeded';
+					}
 					$info['apiKeyLimits'] = get_option('sbr_apikeys_limit', []);
 					$info['pluginNotices'] = Util::get_plugin_notices();
 					return $info;
@@ -794,8 +987,17 @@ class SBR_Feed_Saver_Manager
 				 * OR
 				 * Return an error which if it's invalid location
 				 */
+				// `info.error` arrives either as a code string or, alongside `info.errorId`,
+				// as an object carrying the code under `info.error.error`. Comparing the
+				// object to a string made every check below silently fall through.
+				$error_code = self::get_source_error_code($info);
+				$error_id   = self::get_source_error_id($info);
+
+				// Only an explicit code may satisfy this gate. An errorId alone means the
+				// relay failed for a reason it did not name, which is no evidence the key
+				// works — treating it as such stored invalid keys as valid.
 				$checkValidKey = (
-						!empty($info['info']['error']) && $info['info']['error'] !== 'invalidKey'
+						$error_code !== null && $error_code !== 'invalidKey'
 					)
 					|| !empty($info['info']['id'])
 					|| !empty($info['info']['successId']);
@@ -811,13 +1013,29 @@ class SBR_Feed_Saver_Manager
 					$info['apiKeyLimits'] = get_option('sbr_apikeys_limit', []);
 				}
 
-				if (isset($info['info']['error'])) {
-					if ($info['info']['error'] === 'invalidKey') {
+				if ($error_code !== null) {
+					if ($error_code === 'invalidKey') {
 						$return['apikey'] = 'invalid';
 					}
-					if ($info['info']['error'] === 'invalidLocation') {
+					if ($error_code === 'invalidLocation') {
 						$return['placeId'] = 'invalid';
 					}
+				}
+
+				// Without this the object shape returns only the housekeeping keys
+				// (apiKeys, sourcesList, …), which is indistinguishable from success:
+				// the modal takes its success branch and the user is told nothing.
+				if (($error_code !== null || $error_id !== null) && empty($info['info']['id'])) {
+					$return['success'] = false;
+					$return['error']   = $error_code !== null ? $error_code : $error_id;
+					$return['message'] = self::get_source_error_message($info);
+					if ($error_id !== null) {
+						$return['errorId'] = $error_id;
+					}
+					$return['apiKeyLimits']  = get_option('sbr_apikeys_limit', []);
+					$return['pluginNotices'] = Util::get_plugin_notices();
+
+					return $return;
 				}
 				if (isset($info['info']['id'])) {
 					$info['info']['provider'] = $provider;
@@ -1049,36 +1267,169 @@ class SBR_Feed_Saver_Manager
 		return end($res);
 	}
 
+	/**
+	 * Read the source error code out of a relay `sources/*` response.
+	 *
+	 * Two shapes are in the wild: `info.error` as the code itself, and `info.error` as
+	 * an object holding the code under `info.error.error` next to `info.errorId`. The
+	 * object arrives with HTTP 200 and `success: true` at the envelope level, so the
+	 * only signal is inside `info`.
+	 *
+	 * @param  mixed $info Decoded relay response.
+	 * @return string|null  Error code, or null when the response has none.
+	 */
+	public static function get_source_error_code($info)
+	{
+		if (!is_array($info) || !isset($info['info']) || !is_array($info['info'])) {
+			return null;
+		}
+
+		$error = isset($info['info']['error']) ? $info['info']['error'] : null;
+
+		if (is_string($error) && $error !== '') {
+			return $error;
+		}
+
+		if (is_array($error) && !empty($error['error']) && is_string($error['error'])) {
+			return $error['error'];
+		}
+
+		// Deliberately no errorId fallback. An errorId is evidence of failure but not
+		// evidence of WHICH failure, and the caller feeds this into the gate that
+		// decides whether to store the submitted key — an opaque code is not equal to
+		// 'invalidKey', so returning it here persisted bad keys as valid. Callers pair
+		// this with get_source_error_id() to detect failure.
+		return null;
+	}
+
+	/**
+	 * The relay's opaque failure marker, when it sent one.
+	 *
+	 * Separate from get_source_error_code() on purpose: this says "something failed",
+	 * that one says "this specific thing failed". Only the latter may inform whether a
+	 * submitted API key is worth storing.
+	 *
+	 * @param  mixed $info Decoded relay response.
+	 * @return string|null
+	 */
+	public static function get_source_error_id($info)
+	{
+		if (!is_array($info) || !isset($info['info']) || !is_array($info['info'])) {
+			return null;
+		}
+
+		return !empty($info['info']['errorId']) && is_string($info['info']['errorId'])
+			? $info['info']['errorId']
+			: null;
+	}
+
+	/**
+	 * Human-readable message for a source error, falling back to a generic line when
+	 * the relay sends only a code.
+	 *
+	 * @param  mixed $info Decoded relay response.
+	 * @return string
+	 */
+	public static function get_source_error_message($info)
+	{
+		$info  = is_array($info) ? $info : [];
+		$nested = isset($info['info']) && is_array($info['info']) ? $info['info'] : [];
+		$error = isset($nested['error']) ? $nested['error'] : null;
+
+		if (is_array($error) && !empty($error['message']) && is_string($error['message'])) {
+			return $error['message'];
+		}
+
+		if (!empty($info['message']) && is_string($info['message'])) {
+			return $info['message'];
+		}
+
+		return __('Could not connect this source, please make sure you have provided the right info.', 'reviews-feed');
+	}
+
 	public static function get_place_id_tripadvisor($place_url)
 	{
-		// probably a place ID
+		$place_url = trim((string) $place_url);
+
+		// The TripAdvisor location id is the "-d<digits>" token, present in every
+		// listing URL form: Attraction_Review / Hotel_Review / Restaurant_Review,
+		// short or long, any TLD (.com/.ca/.co.uk), with or without a trailing
+		// "-Reviews-...html". "g" is the geo id, "d" is the location id — only "d".
+		// Match this FIRST so scheme-less pastes (e.g. "tripadvisor.com/...", which
+		// FILTER_VALIDATE_URL rejects) still resolve to the id.
+		// Any digit count: older listings carry short ids (SMASH-1706 measured `-d123`).
+		if (preg_match('/-d(\d+)/i', $place_url, $matches)) {
+			return $matches[1];
+		}
+
+		// No location token — a bare location id (e.g. "2422991") passes through.
 		if ((bool) filter_var($place_url, FILTER_VALIDATE_URL) === false) {
 			return $place_url;
 		}
 
+		// Legacy fallback: last path segment (matches get_place_id() behaviour).
 		$broken_up = explode('/', $place_url);
-
-		foreach ($broken_up as $url_piece) {
-			if (strpos($url_piece, '.html') !== false) {
-				preg_match('/-d+\d{0,10}-/i', $url_piece, $matches, PREG_OFFSET_CAPTURE);
-				if (! empty($matches[0])) {
-					return str_replace(array('-', 'd'), '', $matches[0][0]);
-				}
-			}
-		}
-		return $place_url;
+		return end($broken_up);
 	}
 
-	//WordPress Org Theme/Plugin Source
+	/**
+	 * Why a TripAdvisor add-source input cannot resolve to a location, or null if it can.
+	 *
+	 * Resolvable means get_place_id_tripadvisor() yields a numeric id: the `-d<digits>`
+	 * token, a bare id, or a URL whose last segment is the id. Enforced here regardless of
+	 * any client-side check, since an older customizer bundle sends the input unchecked.
+	 *
+	 * @param mixed $place_url Raw or esc_url_raw()'d input (a bare id arrives as `http://2422991`).
+	 * @return string|null Translated reason, or null when the input is usable.
+	 */
+	public static function get_tripadvisor_input_error($place_url): ?string
+	{
+		$place_url = is_scalar($place_url) ? trim((string) $place_url) : '';
+
+		if ($place_url === '') {
+			// Same words as the customizer's empty-field notice (AddSourceModal.js), shared by every provider.
+			return __('Enter a listing URL or ID first.', 'reviews-feed');
+		}
+
+		// Checked first: a member handle can itself contain "-d<digits>".
+		if (preg_match('#/Profile/#i', $place_url) === 1) {
+			return __('This TripAdvisor link is a member profile, not a business. Open the business on TripAdvisor and copy the URL of its own page.', 'reviews-feed');
+		}
+
+		// Judge what would actually be sent as place_id, not the input's shape.
+		if (preg_match('/^\d+$/', self::get_place_id_tripadvisor($place_url)) === 1) {
+			return null;
+		}
+
+		if (preg_match('/-g\d+/i', $place_url) === 1) {
+			return __('This TripAdvisor link is a category page (a destination or a list of places), not a single listing. Open the individual business and copy the URL of its own page.', 'reviews-feed');
+		}
+
+		return __('We could not find a TripAdvisor location ID in that. Paste the listing URL (it contains "-d" followed by numbers) or the numeric location ID.', 'reviews-feed');
+	}
+
+	/**
+	 * WordPress Org Theme/Plugin Source.
+	 *
+	 * Both callers can hand this a value that is not a string: the refresh path
+	 * reads a stored `info['url']` that is absent on a source row whose info was
+	 * never populated (RemoteRequest.php:190), and the key probe reads a
+	 * `providerIdUrl` the Settings modal never sends. `null` reached `trim()` and
+	 * `strpos()` and raised two PHP 8 deprecations per call.
+	 *
+	 * Return shape is unchanged, and an unusable url still yields an empty slug,
+	 * so callers behave exactly as before — this removes the diagnostics, not a
+	 * behaviour. `parse_url()` also returns null for a path-less url, which the
+	 * old `explode()` passed straight in.
+	 *
+	 * @param mixed $place_url Listing URL, or anything a caller happened to have.
+	 * @return array{type:string,slug:string}
+	 */
 	public static function get_place_id_wordpressorg($place_url)
 	{
-		$broken_up = explode(
-			'/',
-			parse_url(
-				trim($place_url, '/'),
-				PHP_URL_PATH
-			)
-		);
+		$place_url = is_string($place_url) ? $place_url : '';
+		$path      = parse_url(trim($place_url, '/'), PHP_URL_PATH);
+		$broken_up = explode('/', is_string($path) ? $path : '');
 
 		$slug = $broken_up[count($broken_up) - 1];
 		$type = strpos($place_url, 'theme') !== false ? 'theme' : 'plugin';
@@ -1171,8 +1522,51 @@ class SBR_Feed_Saver_Manager
 
 		self::clear_plugin_cache();
 
+		// NOTE: relay source reconciliation was REMOVED in this release (SMASH-1585
+		// follow-up). An empty keep-list made the relay "remove all", risking
+		// deletion of every relay-side source for a paying customer on a routine
+		// Clear All Caches. It was non-essential — the migration fix is the
+		// bearer-aware register rebind, and per-source delete already syncs the relay.
+
 		// Reset bulk update states to allow re-fetching of new reviews
 		self::reset_bulk_update_states();
+
+		// SMASH-1614: lift the relay's per-source weekly update cap for THIS
+		// site's sources so the immediate refresh below can actually refetch.
+		// Without this, Clear All Caches empties the local cache but the relay
+		// refuses the refetch (once-per-week Pro limit), leaving the feed empty
+		// for up to 7 days. The relay endpoint is bearer-scoped + non-destructive
+		// (it only nulls last_fetched_at). Best-effort and filtered so support
+		// can disable without a redeploy. Runs BEFORE the refresh so the cron
+		// fetches that follow find the window already cleared.
+		if (apply_filters('sbr_reset_relay_fetch_window_on_clear', true)) {
+			self::reset_relay_fetch_window();
+		}
+
+		// Companion to the relay window reset above. The relay lifts the SERVER
+		// weekly cap, but the plugin also keeps a LOCAL "already fetched" belt
+		// (FreeRetriever::limit_review_api_call -> already_fetched / _week) that
+		// still skips the keyless relay call for a Google/Yelp source that
+		// already has cached reviews (the belt only applies to google/yelp;
+		// other providers short-circuit earlier in check_api_call). Clear All
+		// Caches keeps those rows (it only blanks the feed cache), so without
+		// this the immediate refresh below would still skip keyless Google/Yelp
+		// sources and the feed would never refetch. Set a short-lived flag the
+		// belt honours so the refresh can refetch during a brief window. The
+		// flag is TTL-bounded, NOT consumed per call; the relay's weekly window
+		// re-closes per source after the first fetch, which bounds the cost.
+		// Non-destructive: existing reviews stay until the refetch succeeds.
+		// Set AFTER clear_plugin_cache() (which purges `_transient_sbr_%`) and
+		// the flag uses the `sbreviews_` prefix so it is not swept by that purge.
+		// Note: a no-op for genuine free users — the relay still 429s them and
+		// doesn't reset the free fetched_count; it only helps Pro/keyed flows.
+		if (apply_filters('sbr_force_keyless_refetch_on_clear', true)) {
+			set_transient(
+				\SmashBalloon\Reviews\Common\Utils\FreeRetriever::FORCE_REFETCH_FLAG,
+				1,
+				5 * MINUTE_IN_SECONDS
+			);
+		}
 
 		// Trigger an immediate cache refresh so users don't have to wait for
 		// either the hourly cron or the next frontend visit. Two steps:
@@ -1192,6 +1586,39 @@ class SBR_Feed_Saver_Manager
 		]);
 
 		wp_die();
+	}
+
+	/**
+	 * Ask the relay to clear the per-source weekly fetch window for this site,
+	 * so a user-initiated Clear All Caches can refetch immediately instead of
+	 * waiting up to 7 days for the Pro weekly update cap (SMASH-1614).
+	 *
+	 * Best-effort: a relay hiccup must never block Clear All Caches, so every
+	 * failure is swallowed — the hourly cron still catches up later. The relay
+	 * side is bearer-scoped and only nulls `last_fetched_at` (non-destructive).
+	 *
+	 * Note: like every authenticated relay call, this routes through
+	 * SBRelay::call() → check_token_validity(), so on a migrated/cloned site
+	 * (url_mismatch → invalidToken) it can trigger the existing silent
+	 * re-registration recovery. That's benign/self-healing (the destructive
+	 * relay reconciliation was removed in SMASH-1585), not new behavior unique
+	 * to this path — but worth knowing it isn't strictly side-effect-free.
+	 *
+	 * @since 2.6.5
+	 */
+	private static function reset_relay_fetch_window(): void
+	{
+		try {
+			$relay = new SBRelay(new SettingsManagerService());
+			// SBRelay::call() returns a decoded array (it never throws on an
+			// error body — those are already logged via SBR_Error_Handler), so
+			// this catch only fires on an unexpected throw (e.g. construction).
+			$relay->call('source/reset-fetch-window', [], 'POST', true);
+		} catch (\Throwable $e) {
+			// Best-effort: never block Clear All Caches. Log so a silently
+			// failing cap-lift (feed stays empty up to 7 days) is diagnosable.
+			error_log('SBR: reset_relay_fetch_window failed — ' . $e->getMessage());
+		}
 	}
 
 	/**
@@ -1468,10 +1895,20 @@ class SBR_Feed_Saver_Manager
 	 *
 	 * @since 1..1
 	 */
-	public static function cache_single_posts_from_set($posts, $provider)
+	public static function cache_single_posts_from_set($posts, $provider, $lang = null)
 	{
 		$settings = wp_parse_args(get_option('sbr_settings', []), sbr_plugin_settings_defaults());
-		$lang = $settings['localization'];
+		// Tag cached reviews with the SAME mapped language the on-demand path uses
+		// (Feed::get_db_lang -> apiCallLanguage), not the raw 'localization'. On a
+		// WPML auto site the raw value is the sentinel 'wpml'; tagging bulk-fetched
+		// reviews 'wpml' while the on-demand page tags 'es-419' split them across
+		// two lang-keyed rows (SinglePostCache dedup keys on lang) (SMASH-1631).
+		//
+		// When the caller already knows the exact language it fetched in (the
+		// per-language bulk-history loop, SMASH-1631), it passes $lang so every
+		// batch is tagged with its own language — re-resolving here would mis-tag
+		// every batch as the cron's default language.
+		$lang = ($lang !== null) ? $lang : Util::get_api_call_language($settings);
 		$providers_no_media = sbr_get_no_media_providers();
 		$providers_lang = sbr_get_lang_providers();
 
@@ -1495,7 +1932,52 @@ class SBR_Feed_Saver_Manager
 		$providers_no_media,
 		$providers_lang
 	) {
+		// Malformed upstream payloads can hand us a scalar instead of a review
+		// array; the `$single_review['source'] = $provider` write below would
+		// fatal on a string offset (SMASH-1578). Bail out on non-array input.
+		if (! is_array($single_review)) {
+			return;
+		}
 		// Decode HTML entities in review text and reviewer name (fixes Danish characters, emojis, etc.)
+		//
+		// Do NOT narrow the body with wp_kses() here. It was tried (SMASH-1795) and removed:
+		// this is a WRITE path, so anything kses drops is gone from the database for good,
+		// and kses deletes from a `<` to the next `>` when what sits between them is not an
+		// allowed tag. Measured on real WordPress with the br/em/strong list, after the
+		// decode above:
+		//
+		//   "Great value 5 &lt; 10 and 20 &gt; 15" -> stored "Great value 5  15"
+		//   "Price &lt; $10 &gt; shipping"          -> stored "Price  shipping"
+		//   "Loved it &lt;b&gt;so much&lt;/b&gt;"    -> stored "Loved it so much"
+		//
+		// The first two are ordinary customer prose about price, and the deletion happened
+		// on every keyed/bulk fetch.
+		//
+		// Be precise about what this buys, because it is narrower than it looks:
+		// sbr_kses_review_text() deletes "5 < 10 and 20 > 15" at render exactly the same
+		// way, so what the visitor SEES is unchanged. What changes is that the database
+		// keeps the customer's actual words, so the display side stays fixable. Filtering
+		// on read is reversible; filtering on write is not.
+		//
+		// Nothing is lost defensively either. The render allowlist is the layer that
+		// protects, and it is deliberately the layer that also covers rows already stored
+		// plus the writers that never reach this function (Woo/EDD comment_content, the
+		// bulk updaters, the review form). Full sink list for the stored body, so the next
+		// audit does not have to rebuild it:
+		//   - feed templates + shortcode atts — sbr_kses_review_text() (5 sites)
+		//   - Review Alerts frontend — inline config via wp_json_encode() with
+		//     JSON_HEX_TAG, consumed by textContent/escapeHTML() in sbr-review-alerts.js
+		//   - Review Alerts BUILDER PREVIEW — SBR_Review_Alert_Service::get_preview_reviews()
+		//     (:1347) returns the body unfiltered over ajax_preview_reviews, and it is the
+		//     one sink with neither the allowlist nor JSON_HEX_TAG. Safe because the
+		//     consumer is React: customizer ReviewAlertPreview.js:733 and :844 interpolate
+		//     it as a JSX text child, which React escapes. The only
+		//     dangerouslySetInnerHTML in that component (:311-312) takes the static
+		//     PROS_ICON/CONS_ICON constants, not review data. Verified in the customizer
+		//     source; if that ever becomes dangerouslySetInnerHTML, this sink needs the
+		//     allowlist before anything else changes.
+		//   - JSON-LD — SBR_Schema_Service, escaped per path (JSON_HEX_TAG /
+		//     escape_markup_for_aioseo()).
 		if (isset($single_review['text'])) {
 			$single_review['text'] = html_entity_decode($single_review['text'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
 		}
@@ -1621,7 +2103,7 @@ class SBR_Feed_Saver_Manager
 		];
 
 		if (isset($review['media']) && is_array($review['media'])) {
-			$sanitized_review['media'] = $review['media'];
+			$sanitized_review['media'] = self::sanitize_review_media($review['media']);
 		}
 		//JSON Data
 		$sanitized_review['json_data'] = $sanitized_review;
@@ -1888,14 +2370,32 @@ class SBR_Feed_Saver_Manager
 			SBR_Sources::update_or_insert($collection_insert);
 
 			$collection_reviews = PostAggregator::get_source_all_posts($collection_id);
+			$encryption         = new Data_Encryption();
 
 			foreach ($collection_reviews as $s_review) {
-				$review_json = json_decode($s_review['json_data'], true);
+				// SMASH-2480: Facebook rows are stored encrypted (SinglePostCache::should_encrypt()); undecrypted,
+				// decode_review_json() returned null and the copy dropped every Facebook review.
+				if (($s_review['provider'] ?? '') === 'facebook' && isset($s_review['json_data']) && is_string($s_review['json_data'])) {
+					$s_review['json_data'] = $encryption->maybe_decrypt($s_review['json_data']);
+				}
+				// SMASH-2028: this reads the same table as SMASH-2024, so the same
+				// non-review row arrives here. normalize_review_shape() returns a
+				// non-array untouched, so it reached the reads below as a scalar —
+				// "Cannot access offset of type string on string" on PHP 8. Skip
+				// the row instead of copying it.
+				$review_json = PostAggregator::decode_review_json($s_review['json_data'] ?? null);
+				if ($review_json === null) {
+					continue;
+				}
+				// SMASH-1587: old json_data may store 'provider' as a scalar slug;
+				// the $review_json['provider']['name'] read below fatals on PHP 8 without this.
+				$review_json = Util::normalize_review_shape($review_json);
 				$review_id 	= $id . time() . wp_rand();
 
 				$sanitized_review = [
 					'time' 			=> absint($review_json['time']),
-					'rating' 		=> absint($review_json['rating']),
+					// SMASH-2480: json_data keeps Facebook's 'positive'/'negative'; absint() made them 0.
+					'rating' 		=> absint(Util::facebook_collection_rating(['rating' => $review_json['rating'] ?? 0])),
 					'provider_id' 	=> $id,
 					'review_id'		=> $review_id,
 					'text' 			=> sanitize_text_field($review_json['text']),
@@ -1915,29 +2415,22 @@ class SBR_Feed_Saver_Manager
 					]
 				];
 
-				if (isset($review['media']) && is_array($review_json['media'])) {
-					$sanitized_review['media'] = $review_json['media'];
+				// SMASH-1033 — was `isset($review['media'])`, but this scope only
+				// defines $review_json (:2299), so the guard never passed and media
+				// was dropped on every collection duplication.
+				if (isset($review_json['media']) && is_array($review_json['media'])) {
+					$sanitized_review['media'] = self::sanitize_review_media($review_json['media']);
 				}
 				//JSON Data
 				$sanitized_review['json_data'] = $sanitized_review;
 				$single_post_cache = new \SmashBalloon\Reviews\Pro\SinglePostCache($sanitized_review, new \SmashBalloon\Reviews\Pro\MediaFinder($sanitized_review['source']));
 				$single_post_cache->set_provider_id($id);
+				// Stored with images_done = 0: the feed's batched sbr_check_media pass resizes them
+				// (Pro\Feed::find_and_resize_media(), 150 rows a call), not this one request.
 				$single_post_cache->store();
-				/** @phpstan-ignore-next-line media key may or may not exist depending on review data */
-				if (isset($sanitized_review['media']) && Util::should_store_local_images()) {
-					$aggregator = new PostAggregator();
-					$single_post_cache->resize_images(array(640, 150));
-					$single_post_data = $single_post_cache->get_post_data();
-					$single_post_storage_data = $single_post_cache->get_storage_data();
-					$single_post_data = $aggregator->add_local_image_urls($single_post_data, $single_post_storage_data);
-					$single_post_cache->update(
-						[
-							array('images_done', 1, '%d'),
-							array('json_data', wp_json_encode($single_post_data), '%s')
-						]
-					);
-				}
 			}
+			// SMASH-2477: recalculate the copy from its own rows (rating, total_rating, rated_count), as import does.
+			SBR_Sources::update_collection_ratings($id);
 			echo sbr_json_encode(
 				[
 					'sourcesCount' => SBR_Sources::get_sources_count(),
@@ -1979,6 +2472,45 @@ class SBR_Feed_Saver_Manager
 			'page' => $args['page'],
 			'perPage' => $per_page,
 			'totalPages' => ceil($total_count / $per_page)
+		]);
+		wp_die();
+	}
+
+	/**
+	 * One page of collections for the Collections screen.
+	 *
+	 * Mirrors load_more_sources() — same nonce, same capability, same response
+	 * keys — so the front end pages both lists the same way. It is a separate
+	 * action because it pages a different set: load_more_sources() walks ALL
+	 * providers, and filtering its page down to collections client-side is the
+	 * bug this fixes (SMASH-1599).
+	 *
+	 * @since SMASH-1599
+	 */
+	public static function load_more_collections(): void
+	{
+		check_ajax_referer('sbr-admin', 'nonce');
+		if (!sbr_current_user_can('manage_reviews_feed_options')) {
+			wp_send_json_error();
+		}
+
+		$page = isset($_POST['collections_page']) ? absint($_POST['collections_page']) : 1;
+		// absint(0) and absint('abc') are both 0, and page 0 would ask for a
+		// negative offset. The query floors it too; doing it here as well keeps
+		// the `page` echoed back honest, because the front end uses that value
+		// to highlight the active pager button.
+		$page = max(1, $page);
+
+		$collections_list = DB::get_collections_page($page);
+		$total_count      = DB::get_collections_count();
+		$per_page         = DB::COLLECTIONS_PER_PAGE;
+
+		echo sbr_json_encode([
+			'collectionsList'  => $collections_list,
+			'collectionsCount' => $total_count,
+			'page'             => $page,
+			'perPage'          => $per_page,
+			'totalPages'       => (int) max(1, ceil($total_count / $per_page))
 		]);
 		wp_die();
 	}
@@ -2037,10 +2569,15 @@ class SBR_Feed_Saver_Manager
 			SBR_Sources::update_or_insert($collection_info);
 
 			foreach ($collection_json['reviewsList'] as $single_review) {
-				unset($single_review['id']);
-				$single_review = json_decode($single_review['json_data'], true);
+				$single_review = self::imported_collection_review($single_review);
+				if ($single_review === null) {
+					continue;
+				}
 				if (!empty($single_review)) {
-					$review_store = Util::parse_single_review($single_review, $collection_json['account_id'], $single_review['review_id']);
+					// An imported review need not carry a review_id; '' is what the
+					// undefined-key read resolved to before, minus the notice.
+					$review_store = Util::parse_single_review($single_review, $collection_json['account_id'], $single_review['review_id'] ?? '');
+					self::carry_review_media($review_store, $single_review);
 					$review_store['json_data'] = $review_store;
 
 					$single_post_cache = new \SmashBalloon\Reviews\Pro\SinglePostCache($review_store, new \SmashBalloon\Reviews\Pro\MediaFinder($review_store['source']));
@@ -2048,6 +2585,8 @@ class SBR_Feed_Saver_Manager
 					$single_post_cache->store();
 				}
 			}
+			// SMASH-1685: the export's rating went through absint() above (4.6 -> 4); recompute from the imported rows.
+			SBR_Sources::update_collection_ratings($collection_info['account_id']);
 		}
 
 		echo sbr_json_encode(
@@ -2076,31 +2615,22 @@ class SBR_Feed_Saver_Manager
 			$collection_json = self::parse_collection_json();
 			$collection_id = sanitize_text_field($_POST['collection_id']);
 			foreach ($collection_json['reviewsList'] as $single_review) {
-				unset($single_review['id']);
-				$single_review = json_decode($single_review['json_data'], true);
+				$single_review = self::imported_collection_review($single_review);
+				if ($single_review === null) {
+					continue;
+				}
 				if (!empty($single_review)) {
 					$single_review['review_id'] = $collection_id . time() . wp_rand();
 					$single_review['retimeview_id'] = time();
 
 					$review_store = Util::parse_single_review($single_review, $collection_id, $single_review['review_id']);
+					self::carry_review_media($review_store, $single_review);
 					$review_store['json_data'] = $review_store;
 
 					$single_post_cache = new \SmashBalloon\Reviews\Pro\SinglePostCache($review_store, new \SmashBalloon\Reviews\Pro\MediaFinder($review_store['source']));
 					$single_post_cache->set_provider_id($collection_id);
+					// Same as duplicate_collection(): images_done = 0 hands the resize to the batched feed pass.
 					$single_post_cache->store();
-					if (isset($sanitized_review['media']) && Util::should_store_local_images()) {
-						$aggregator = new PostAggregator();
-						$single_post_cache->resize_images(array(640, 150));
-						$single_post_data = $single_post_cache->get_post_data();
-						$single_post_storage_data = $single_post_cache->get_storage_data();
-						$single_post_data = $aggregator->add_local_image_urls($single_post_data, $single_post_storage_data);
-						$single_post_cache->update(
-							[
-								array('images_done', 1, '%d'),
-								array('json_data', wp_json_encode($single_post_data), '%s')
-							]
-						);
-					}
 				}
 			}
 
@@ -2115,6 +2645,140 @@ class SBR_Feed_Saver_Manager
 		wp_die();
 	}
 
+
+	/**
+	 * Carry a review's media onto the parsed store row.
+	 *
+	 * Util::parse_single_review() (Util.php:1835) builds a fixed shape with no
+	 * `media` key, so every import path has to put it back or the local-image
+	 * guard downstream is in scope and permanently false — the same SMASH-1033
+	 * bug in a better disguise. Shared by the two import handlers,
+	 * import_full_collection() and import_reviews_collection(); the first had
+	 * no copy of this step at all.
+	 *
+	 * Takes $review_store by reference: returning a fresh array<string,mixed>
+	 * erased the shape phpstan had inferred for it, which surfaced as
+	 * "Offset 'source' might not exist" at both call sites.
+	 *
+	 * @param  array<string,mixed> $review_store  parsed row, modified in place
+	 * @param  array<string,mixed> $single_review decoded source review, still has media
+	 */
+	private static function carry_review_media(array &$review_store, array $single_review): void
+	{
+		if (isset($single_review['media']) && is_array($single_review['media'])) {
+			$review_store['media'] = self::sanitize_review_media($single_review['media']);
+		}
+	}
+
+	/**
+	 * Review media from a request or a file, reduced to what the plugin itself writes.
+	 *
+	 * Every producer writes `['type' => 'image', 'url' => …]` (relay, form integrations,
+	 * CollectionReviewForm.js) and the resize and customizer preview read only images
+	 * (Pro\SinglePostCache::resize_images(), sb-customizer Feed/PostMedia.js). An item keeps
+	 * `type`, `url` and the plugin's own `local` size map (present in exports); every URL
+	 * must be absolute http(s). Valid input comes back unchanged. Used by the manual
+	 * review save, the duplicate, both imports and form submissions.
+	 *
+	 * Public for CollectionSubmissionReviews::transform_and_store_review(), which
+	 * writes the same media into collections from another class.
+	 *
+	 * @param  array<mixed> $media  media list from a request, a stored row, or an uploaded file
+	 * @return list<array<string,mixed>>
+	 */
+	public static function sanitize_review_media(array $media): array
+	{
+		$clean = [];
+		foreach ($media as $item) {
+			if (!is_array($item) || ($item['type'] ?? null) !== 'image') {
+				continue;
+			}
+			$url = self::safe_media_url($item['url'] ?? null);
+			if ($url === '') {
+				continue;
+			}
+			$kept  = ['type' => 'image', 'url' => $url];
+			$local = isset($item['local']) && is_array($item['local']) ? self::sanitize_local_sizes($item['local']) : [];
+			if (!empty($local)) {
+				$kept['local'] = $local;
+			}
+			$clean[] = $kept;
+		}
+		return $clean;
+	}
+
+	/**
+	 * A media item's `local` map: numeric size => http(s) or root-relative URL, the rest dropped.
+	 *
+	 * Root-relative is kept here only: a filtered `sbr_resize_url` produces it, Parser::css_url()
+	 * renders it, and nothing fetches a `local` entry (resize_images() reads `url`).
+	 *
+	 * @param  array<mixed> $local
+	 * @return array<int,string>
+	 */
+	private static function sanitize_local_sizes(array $local): array
+	{
+		$clean = [];
+		foreach ($local as $size => $local_url) {
+			$safe = self::safe_media_url($local_url, true);
+			if (is_numeric($size) && $safe !== '') {
+				$clean[(int) $size] = $safe;
+			}
+		}
+		return $clean;
+	}
+
+	/**
+	 * An absolute http(s) URL passed through esc_url_raw(), or '' for anything else.
+	 *
+	 * esc_url_raw() keeps `(`, `)` and `'`, so a URL could still close a CSS url() in a
+	 * style attribute: those are percent-encoded, and the image still loads. It already
+	 * strips `"`, `\` and control characters and encodes spaces. A protocol-relative `//cdn`
+	 * URL gets `https:`, as Parser::css_url() does at the sink.
+	 *
+	 * @param  mixed $url
+	 * @param  bool  $allow_root_relative  `/path` kept too (the `local` map only; see sanitize_local_sizes()).
+	 */
+	private static function safe_media_url($url, bool $allow_root_relative = false): string
+	{
+		if (!is_string($url) || $url === '') {
+			return '';
+		}
+		$clean = strtr(esc_url_raw($url), ['(' => '%28', ')' => '%29', "'" => '%27']);
+		if (strpos($clean, '//') === 0) {
+			$clean = 'https:' . $clean;
+		}
+		$scheme = wp_parse_url($clean, PHP_URL_SCHEME);
+		if ($allow_root_relative && !is_string($scheme) && strpos($clean, '/') === 0) {
+			return $clean;
+		}
+		return is_string($scheme) && in_array(strtolower($scheme), ['http', 'https'], true) ? $clean : '';
+	}
+
+	/**
+	 * One entry of an imported collection file to its review array, or null.
+	 *
+	 * The entry is file content, so it need not be an array at all. It used to
+	 * start with `unset($entry['id'])`, which on a string is
+	 * `Error: Cannot unset string offsets` — thrown before `json_data` was even
+	 * read. That unset was also dead: the very next line overwrote the variable
+	 * with the decoded column, so removing it changes nothing for a valid entry
+	 * and removes the only thing it could do to an invalid one.
+	 *
+	 * The column itself then goes through the same gate as every other reader,
+	 * so a non-review decodes to null and the caller skips it (SMASH-2028).
+	 *
+	 * @param  mixed $entry Raw entry from the uploaded `reviewsList`.
+	 * @return array<string,mixed>|null Decoded review, or null when it is not one.
+	 */
+	public static function imported_collection_review($entry)
+	{
+		if (!is_array($entry)) {
+			return null;
+		}
+
+		return PostAggregator::decode_review_json($entry['json_data'] ?? null);
+	}
 
 	/**
 	 * Parse Collections JSON file
@@ -2156,7 +2820,10 @@ class SBR_Feed_Saver_Manager
 		}
 		$collection_json = json_decode($imported_file, true);
 
-		if (empty($collection_json['reviewsList'])) {
+		// A non-empty scalar `reviewsList` passes empty() and then both import
+		// loops foreach over a string (SMASH-2028). Same message as a file with
+		// no reviewsList at all — from the caller's side it is the same problem.
+		if (empty($collection_json['reviewsList']) || !is_array($collection_json['reviewsList'])) {
 			wp_send_json_error(
 				[
 					"message" => __("Something went wrong. This doesn't look like a collections import file.", "reviews-feed")

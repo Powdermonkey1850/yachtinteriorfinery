@@ -354,16 +354,38 @@ class SBR_Notifications extends ServiceProvider
 			return array();
 		}
 
+		// Honour the consent source switch so local <-> remote is an exclusive
+		// swap rather than additive (mirrors instagram-feed). 'none' hides
+		// everything; 'local' serves the Consent package's bundled fallback;
+		// 'remote' uses the fetched feed as before.
+		$source = class_exists('\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager')
+			? \SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+
+		if ('none' === $source) {
+			return array();
+		}
 
 		$option = $this->get_option();
 
-		// Update notifications using async task.
-		if (empty($option['update']) || sbr_get_current_time() > $option['update'] + DAY_IN_SECONDS) {
-			$this->update();
+		if ('local' === $source) {
+			$feed = class_exists('\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications')
+				? \SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications::load_local_fallback(self::PLUGIN, \SmashBalloon\Reviews\Common\Util::sbr_is_pro())
+				: array();
+			// dismiss() records ids in this plugin's option, which the package's
+			// local verify() does not read, so filter dismissed local notices here.
+			$feed = array_values(array_filter($feed, function ($notification) use ($option) {
+				return ! in_array($notification['id'], $option['dismissed'], true);
+			}));
+		} else {
+			// Update notifications using async task.
+			if (empty($option['update']) || sbr_get_current_time() > $option['update'] + DAY_IN_SECONDS) {
+				$this->update();
+			}
+			$feed = ! empty($option['feed']) ? $this->verify_active($option['feed']) : array();
 		}
 
 		$events = ! empty($option['events']) ? $this->verify_active($option['events']) : array();
-		$feed   = ! empty($option['feed']) ? $this->verify_active($option['feed']) : array();
 
 		// If there is a new user notification, add it to the beginning of the notification list
 		$sbr_newuser = new SBR_New_User();
@@ -433,6 +455,17 @@ class SBR_Notifications extends ServiceProvider
 	 */
 	public function update()
 	{
+		// The Consent package owns the source-switch + local-fallback path. Only
+		// fire the remote fetch when consent resolves to 'remote'; 'local' and
+		// 'none' are no-ops here (mirrors instagram-feed).
+		$source = class_exists('\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager')
+			? \SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+
+		if ('remote' !== $source) {
+			return;
+		}
+
 		$feed   = $this->fetch_feed();
 		$option = $this->get_option();
 		update_option(
@@ -441,7 +474,7 @@ class SBR_Notifications extends ServiceProvider
 				'update'    => sbr_get_current_time(),
 				'feed'      => $feed,
 				'events'    => $option['events'],
-				'dismissed' => $option['dismissed'],
+				'dismissed' => $option['dismissed'] ?? array(),
 			)
 		);
 	}
@@ -559,15 +592,18 @@ class SBR_Notifications extends ServiceProvider
 		}
 
 		$notifications = $this->get();
+
+		// Keep the persisted marketing store in sync with the active consent
+		// source — an empty/none result clears it — so notices from a previous
+		// source can't linger (mirrors instagram-feed).
+		if (class_exists('\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications')) {
+			\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications::reconcile_from_notifications('reviews-feed', $notifications);
+		}
+
 		if (empty($notifications)) {
 			return null;
 		}
 
-		$is_review_notice = ! empty($notifications[0]) && ! empty($notifications[0]['id']) && $notifications[0]['id'] === 'review';
-
-		if (! $is_review_notice || ! empty($_GET['feed_id'])) {
-			return null;
-		}
 
 		$notifications_html   = '';
 		$current_class        = ' current';
@@ -730,14 +766,14 @@ class SBR_Notifications extends ServiceProvider
 		$href = ( $type === 'review' || $type === 'discount' )  ? ' href=" ' . esc_attr($close_href) . '" ' : '';
 
 		$return = '<div id="sbr-notifications" class="' . esc_attr($type_class) . '" ' . $href . '>';
-			$return .= '<a class="dismiss" title="' . esc_attr__('Dismiss this message', 'reviews-feed') . '" >';
-				$return .= '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M9.66683 1.27325L8.72683 0.333252L5.00016 4.05992L1.2735 0.333252L0.333496 1.27325L4.06016 4.99992L0.333496 8.72659L1.2735 9.66659L5.00016 5.93992L8.72683 9.66659L9.66683 8.72659L5.94016 4.99992L9.66683 1.27325Z" fill="white"/></svg>';
-			$return .= '</a>';
+			$return .= '<button type="button" class="dismiss" aria-label="' . esc_attr__('Dismiss this message', 'reviews-feed') . '">';
+				$return .= '<svg aria-hidden="true" focusable="false" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M9.66683 1.27325L8.72683 0.333252L5.00016 4.05992L1.2735 0.333252L0.333496 1.27325L4.06016 4.99992L0.333496 8.72659L1.2735 9.66659L5.00016 5.93992L8.72683 9.66659L9.66683 8.72659L5.94016 4.99992L9.66683 1.27325Z" fill="white"/></svg>';
+			$return .= '</button>';
 
 		if (count($notifications) > 1) :
 				$return .= '<div class="navigation">';
-					$return .= '<a class="prev disabled" title="' . esc_attr__('Previous message', 'reviews-feed') . '"><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="chevron-left" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" class="svg-inline--fa fa-chevron-left fa-w-10"><path fill="currentColor" d="M34.52 239.03L228.87 44.69c9.37-9.37 24.57-9.37 33.94 0l22.67 22.67c9.36 9.36 9.37 24.52.04 33.9L131.49 256l154.02 154.75c9.34 9.38 9.32 24.54-.04 33.9l-22.67 22.67c-9.37 9.37-24.57 9.37-33.94 0L34.52 272.97c-9.37-9.37-9.37-24.57 0-33.94z" class=""></path></svg></a>';
-					$return .= '<a class="next disabled" title="' . esc_attr__('Next message', 'reviews-feed') . '"><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="chevron-right" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" class="svg-inline--fa fa-chevron-right fa-w-10"><path fill="currentColor" d="M285.476 272.971L91.132 467.314c-9.373 9.373-24.569 9.373-33.941 0l-22.667-22.667c-9.357-9.357-9.375-24.522-.04-33.901L188.505 256 34.484 101.255c-9.335-9.379-9.317-24.544.04-33.901l22.667-22.667c9.373-9.373 24.569-9.373 33.941 0L285.475 239.03c9.373 9.372 9.373 24.568.001 33.941z" class=""></path></svg></a>';
+					$return .= '<button type="button" class="prev disabled" aria-label="' . esc_attr__('Previous message', 'reviews-feed') . '" disabled><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="chevron-left" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" class="svg-inline--fa fa-chevron-left fa-w-10"><path fill="currentColor" d="M34.52 239.03L228.87 44.69c9.37-9.37 24.57-9.37 33.94 0l22.67 22.67c9.36 9.36 9.37 24.52.04 33.9L131.49 256l154.02 154.75c9.34 9.38 9.32 24.54-.04 33.9l-22.67 22.67c-9.37 9.37-24.57 9.37-33.94 0L34.52 272.97c-9.37-9.37-9.37-24.57 0-33.94z" class=""></path></svg></button>';
+					$return .= '<button type="button" class="next disabled" aria-label="' . esc_attr__('Next message', 'reviews-feed') . '" disabled><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="chevron-right" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512" class="svg-inline--fa fa-chevron-right fa-w-10"><path fill="currentColor" d="M285.476 272.971L91.132 467.314c-9.373 9.373-24.569 9.373-33.941 0l-22.667-22.667c-9.357-9.357-9.375-24.522-.04-33.901L188.505 256 34.484 101.255c-9.335-9.379-9.317-24.544.04-33.901l22.667-22.667c9.373-9.373 24.569-9.373 33.941 0L285.475 239.03c9.373 9.372 9.373 24.568.001 33.941z" class=""></path></svg></button>';
 				$return .= '</div>';
 		endif;
 

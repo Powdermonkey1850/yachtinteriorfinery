@@ -111,6 +111,31 @@ class WPCode_Admin_Page_Code_Snippets extends WPCode_Admin_Page {
 			return;
 		}
 
+		/**
+		 * Filter to refuse a bulk action before it runs. Return a non-empty message to refuse the whole batch.
+		 *
+		 * @param string $refusal The refusal message, empty to allow.
+		 * @param int[]  $ids     The selected snippet ids.
+		 * @param string $action  The bulk action.
+		 */
+		$refusal = apply_filters( 'wpcode_snippets_bulk_action_refusal', '', $ids, $action );
+		if ( '' !== $refusal ) {
+			$this->set_error_message( $refusal );
+
+			return;
+		}
+
+		// Only operate on wpcode snippets the current user is allowed to edit.
+		$ids = array_filter(
+			$ids,
+			function ( $id ) {
+				return 'wpcode' === get_post_type( $id ) && current_user_can( 'edit_post', $id );
+			}
+		);
+		if ( empty( $ids ) ) {
+			return;
+		}
+
 		$update_status_actions = array( 'trash', 'untrash' );
 
 		if ( in_array( $action, $update_status_actions, true ) ) {

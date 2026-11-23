@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+if (!defined('ABSPATH')) die('No direct access allowed');
+
 if (!class_exists('UDP_Google_Client')) {
   require_once dirname(__FILE__) . '/../autoload.php';
 }
@@ -70,7 +72,7 @@ class UDP_Google_Http_REST
    * @param UDP_Google_Client $client
    * @return mixed|null
    */
-  public static function decodeHttpResponse($response, UDP_Google_Client $client = null)
+  public static function decodeHttpResponse($response, $client = null)
   {
     $code = $response->getResponseHttpCode();
     $body = $response->getResponseBody();

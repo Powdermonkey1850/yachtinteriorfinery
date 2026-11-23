@@ -66,8 +66,16 @@ class WPCode_Admin_Page_Live_Preview extends WPCode_Admin_Page {
 			wp_die( esc_html__( 'No snippet ID provided.', 'insert-headers-and-footers' ) );
 		}
 
+		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_key( $_GET['_wpnonce'] ), 'wpcode-live-preview' ) ) {
+			wp_die( esc_html__( 'The link you followed has expired.', 'insert-headers-and-footers' ) );
+		}
+
 		$this->snippet_id = absint( $_GET['snippet_id'] );
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		if ( $this->snippet_id ? ! current_user_can( 'edit_post', $this->snippet_id ) : ! current_user_can( 'wpcode_edit_snippets' ) ) {
+			wp_die( esc_html__( 'Sorry, you are not allowed to do that.', 'insert-headers-and-footers' ), '', array( 'response' => 403 ) );
+		}
 
 		$this->snippet = wpcode_get_snippet( $this->snippet_id );
 
@@ -118,6 +126,7 @@ class WPCode_Admin_Page_Live_Preview extends WPCode_Admin_Page {
 					<textarea id="wpcode-live-preview-css-editor" name="wpcode_live_preview_css"><?php echo esc_textarea( $this->preview_css ); ?></textarea>
 				</div>
 			</div>
+			<div class="wpcode-live-preview-resizer" title="<?php esc_attr_e( 'Drag to resize the editor', 'insert-headers-and-footers' ); ?>"></div>
 			<div class="wpcode-live-preview-iframe-wrapper wpcode-device-desktop">
 				<div class="wpcode-live-preview-loading">
 					<?php esc_html_e( 'Loading preview...', 'insert-headers-and-footers' ); ?>

@@ -2,6 +2,7 @@
 
 use SmashBalloon\TikTokFeeds\Common\Utils;
 use SmashBalloon\TikTokFeeds\Common\AuthorizationStatusCheck;
+use SmashBalloon\TikTokFeeds\Common\SourceErrors;
 
 if (! defined('ABSPATH')) {
 	exit;
@@ -246,6 +247,14 @@ function sbtt_get_tiktok_connection_urls($is_settings = false)
 		$admin_url_state = esc_url('http://' . $host . $request_uri);
 	}
 
+	// The broker sends the state URL's scheme://host to the relay as `website`, and the
+	// relay matches it exactly against the registered site_url(). Use the home option's
+	// scheme, so an http home with an https admin still matches its registration.
+	$home_scheme = wp_parse_url((string) get_option('home'), PHP_URL_SCHEME);
+	if ($home_scheme === 'http' || $home_scheme === 'https') {
+		$admin_url_state = set_url_scheme($admin_url_state, $home_scheme);
+	}
+
 	// Get current user email for Lindris onboarding, with admin email as fallback.
 	$current_user   = wp_get_current_user();
 	$wordpress_user = ! empty($current_user->user_email) ? $current_user->user_email : get_option('admin_email', '');
@@ -332,6 +341,50 @@ function sbtt_get_whitespace($times)
 }
 
 /**
+ * Make a value safe for the Support-page system info.
+ *
+ * SMASH-2498: the system info reaches the page through wp_localize_script(),
+ * which html_entity_decode()s every top-level scalar, and the shared customizer
+ * renders it with dangerouslySetInnerHTML. esc_html() is therefore undone in
+ * transit. Decode and strip run together until the value stops changing, so no
+ * tag and no entity is left for that single decode to turn into markup. Looping
+ * the strip as well as the decode matters: stripping a filler tag can join two
+ * halves into a new entity. The pass count is capped; a value that is still
+ * changing at the cap was built to do so and returns an empty string.
+ *
+ * @param mixed $value Value destined for the system info.
+ * @return string
+ */
+function sbtt_support_info_text($value)
+{
+	if (! is_scalar($value)) {
+		return '';
+	}
+
+	$max      = 12;
+	$value    = (string) $value;
+	$previous = null;
+	$passes   = 0;
+
+	while ($value !== $previous && $passes < $max) {
+		$previous = $value;
+		$passes++;
+
+		$decoded = null;
+		$decodes = 0;
+		while ($value !== $decoded && $decodes < $max) {
+			$decoded = $value;
+			$decodes++;
+			$value   = html_entity_decode($value, ENT_QUOTES, 'UTF-8');
+		}
+
+		$value = wp_strip_all_tags($value);
+	}
+
+	return $value !== $previous ? '' : $value;
+}
+
+/**
  * Get Site and Server Info
  *
  * @return string
@@ -344,12 +397,12 @@ function sbtt_get_site_n_server_info()
 	$php_ssl = in_array('https', stream_get_wrappers()) ? "Yes" : "No";
 
 	$output = '## SITE/SERVER INFO: ##' . "</br>";
-	$output .= 'Plugin Version:' . sbtt_get_whitespace(11) . SBTT_PLUGIN_NAME . "</br>";
-	$output .= 'Site URL:' . sbtt_get_whitespace(17) . site_url() . "</br>";
-	$output .= 'Home URL:' . sbtt_get_whitespace(17) . home_url() . "</br>";
-	$output .= 'WordPress Version:' . sbtt_get_whitespace(8) . get_bloginfo('version') . "</br>";
-	$output .= 'PHP Version:' . sbtt_get_whitespace(14) . PHP_VERSION . "</br>";
-	$output .= 'Web Server Info:' . sbtt_get_whitespace(10) . esc_html(sanitize_text_field($_SERVER['SERVER_SOFTWARE'])) . "</br>"; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
+	$output .= 'Plugin Version:' . sbtt_get_whitespace(11) . sbtt_support_info_text(SBTT_PLUGIN_NAME) . "</br>";
+	$output .= 'Site URL:' . sbtt_get_whitespace(17) . sbtt_support_info_text(site_url()) . "</br>";
+	$output .= 'Home URL:' . sbtt_get_whitespace(17) . sbtt_support_info_text(home_url()) . "</br>";
+	$output .= 'WordPress Version:' . sbtt_get_whitespace(8) . sbtt_support_info_text(get_bloginfo('version')) . "</br>";
+	$output .= 'PHP Version:' . sbtt_get_whitespace(14) . sbtt_support_info_text(PHP_VERSION) . "</br>";
+	$output .= 'Web Server Info:' . sbtt_get_whitespace(10) . sbtt_support_info_text(isset($_SERVER['SERVER_SOFTWARE']) ? $_SERVER['SERVER_SOFTWARE'] : '') . "</br>"; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotValidated, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 	$output .= 'PHP allow_url_fopen:' . sbtt_get_whitespace(6) . $allow_url_fopen . "</br>";
 	$output .= 'PHP cURL:' . sbtt_get_whitespace(17) . $php_curl . "</br>";
 	$output .= 'JSON:' . sbtt_get_whitespace(21) . $php_json_decode . "</br>";
@@ -372,7 +425,7 @@ function sbtt_get_active_plugins_info()
 
 	foreach ($plugins as $plugin_path => $plugin) {
 		if (in_array($plugin_path, $active_plugins)) {
-			$output .= $plugin['Name'] . ': ' . $plugin['Version'] . "</br>";
+			$output .= sbtt_support_info_text($plugin['Name']) . ': ' . sbtt_support_info_text($plugin['Version']) . "</br>";
 		}
 	}
 
@@ -398,7 +451,7 @@ function sbtt_get_global_settings_info()
 	if (Utils::sbtt_is_pro()) {
 		$output .= 'License key: ';
 		if (isset($global_settings['license_key'])) {
-			$output .= esc_html($global_settings['license_key']);
+			$output .= sbtt_support_info_text($global_settings['license_key']);
 		} else {
 			$output .= ' Not added';
 		}
@@ -406,14 +459,25 @@ function sbtt_get_global_settings_info()
 		$output .= '</br>';
 		$output .= 'License Tier: ';
 		if (isset($statuses['license_tier'])) {
-			$output .= esc_html($statuses['license_tier']);
+			$output .= sbtt_support_info_text($statuses['license_tier']);
 		} else {
 			$output .= ' Not Set';
 		}
 		$output .= '</br>';
 		$output .= 'License status: ';
 		if (isset($global_settings['license_status'])) {
-			$output .= $global_settings['license_status'];
+			// sanitize_key() on READ, not just on write. This blob is shipped through
+			// wp_localize_script(), which html_entity_decode()s every top-level scalar,
+			// and rendered with dangerouslySetInnerHTML -- so esc_html() alone is inert
+			// (an entity-encoded payload is reassembled in transit). Hardening only at
+			// the write boundary would leave two holes: a value poisoned before that
+			// hardening shipped, and the five callers that write sbtt_global_settings
+			// with a direct update_option(). sanitize_key() removes '&', '<' and '>'
+			// outright, which is the invariant this sink needs, and it is lossless for
+			// the real EDD status tokens (valid, expired, site_inactive, ...).
+			// esc_html() is kept so the escaping is still correct if this page ever
+			// stops going through the localize/innerHTML transport.
+			$output .= esc_html(sanitize_key($global_settings['license_status']));
 		} else {
 			$output .= ' Inactive';
 		}
@@ -427,7 +491,10 @@ function sbtt_get_global_settings_info()
 
 	$output .= '</br>';
 	$output .= 'GDPR: ';
-	$output .= isset($global_settings['gdpr']) ? $global_settings['gdpr'] : ' Not setup';
+	// Same read-side hardening as license_status above. This line previously had no
+	// escaping at all, so gdpr had zero defence at the sink; sanitize_key() is
+	// lossless for its only real values ('auto', 'yes', 'no').
+	$output .= isset($global_settings['gdpr']) ? esc_html(sanitize_key($global_settings['gdpr'])) : ' Not setup';
 	$output .= '</br>';
 	$output .= 'Optimize Images: ';
 	$output .= isset($global_settings['optimize_images']) && $global_settings['optimize_images'] === true ? 'Enabled' : 'Disabled';
@@ -459,7 +526,7 @@ function sbtt_get_sources_settings_info()
 	}
 
 	foreach ($source_list as $source) {
-		$output .= $source['display_name'] . ' ( Open ID => ' . $source['open_id'] . ' )';
+		$output .= sbtt_support_info_text($source['display_name'] ?? '') . ' ( Open ID => ' . sbtt_support_info_text($source['open_id'] ?? '') . ' )';
 		$output .= '</br>';
 	}
 	$output .= '</br>';
@@ -468,33 +535,24 @@ function sbtt_get_sources_settings_info()
 }
 
 /**
- * Get known error messages and directions to resolve for the given error message.
+ * Get the error message and directions to show for a relay error.
  *
  * @param string $message Error message.
  * @return array
  */
 function sbtt_get_error_message_and_directions($message)
 {
-	$error_messages = [
-		'The payload is invalid.' => [
-			'message' => __('Invalid Access Token. Please reconnect the source.', 'feeds-for-tiktok'),
-			/* translators: 1: Opening anchor tag, 2: Closing anchor tag */
-			'directions' => wp_sprintf(__('Please go to %1$sTikTok Feeds%2$s settings page to reconnect the source.', 'feeds-for-tiktok'), '<a href="' . esc_url(admin_url('admin.php?page=sbtt-settings')) . '" target="_blank" rel="noopener noreferrer">', '</a>'),
-		],
-		'access_token_invalid' => [
-			'message' => __('Invalid Access Token. Please reconnect the source.', 'feeds-for-tiktok'),
-			/* translators: 1: Opening anchor tag, 2: Closing anchor tag */
-			'directions' => wp_sprintf(__('Please go to %1$sTikTok Feeds%2$s settings page to reconnect the source.', 'feeds-for-tiktok'), '<a href="' . esc_url(admin_url('admin.php?page=sbtt-settings')) . '" target="_blank" rel="noopener noreferrer">', '</a>'),
-		]
-	];
-
-	if (isset($error_messages[$message])) {
-		return $error_messages[$message];
+	if (SourceErrors::is_reconnect_error($message)) {
+		return SourceErrors::notice();
 	}
 
-	return $message;
+	// Surface the original message rather than discarding it, so an
+	// unrecognised error never renders as a blank notice.
+	return [
+		'message'    => $message,
+		'directions' => '',
+	];
 }
-
 
 /**
  * Get Upgrade Plugin link

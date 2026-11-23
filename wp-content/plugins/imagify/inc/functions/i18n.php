@@ -38,6 +38,7 @@ function get_imagify_localize_script_translations( $context ) {
 					'signupText'                  => __( 'Enter your email to get an API key:', 'imagify' ),
 					'signupConfirmButtonText'     => __( 'Sign Up', 'imagify' ),
 					'signupErrorEmptyEmail'       => __( 'You need to specify an email!', 'imagify' ),
+					'signupErrorRequestFailed'    => __( 'The request failed. Please check your connection and try again.', 'imagify' ),
 					/* translators: Don't use escaped HTML entities here (like &nbsp;). */
 					'signupSuccessTitle'          => __( 'Congratulations!', 'imagify' ),
 					'signupSuccessText'           => __( 'Your account has been successfully created. Please check your mailbox, you are going to receive an email with API key.', 'imagify' ),
@@ -60,8 +61,14 @@ function get_imagify_localize_script_translations( $context ) {
 
 		case 'options':
 			$translations = [
-				'getFilesTree' => imagify_can_optimize_custom_folders() ? get_imagify_admin_url( 'get-files-tree' ) : false,
-				'labels'       => [
+				'getFilesTree'       => imagify_can_optimize_custom_folders() ? get_imagify_admin_url( 'get-files-tree' ) : false,
+				'resetInternalState' => [
+					'action'  => 'imagify_reset_internal_state',
+					'confirm' => __( 'Are you sure you want to reset the Imagify internal state? This will clear optimization locks and cancel any pending jobs.', 'imagify' ),
+					'success' => __( 'Imagify internal state has been reset successfully.', 'imagify' ),
+					'error'   => __( 'An error occurred while resetting the internal state. Please try again.', 'imagify' ),
+				],
+				'labels'             => [
 					'ValidApiKeyText'         => __( 'Your API key is valid.', 'imagify' ),
 					'waitApiKeyCheckText'     => __( 'Check in progress...', 'imagify' ),
 					'ApiKeyCheckSuccessTitle' => __( 'Congratulations!', 'imagify' ),
@@ -236,6 +243,7 @@ function get_imagify_localize_script_translations( $context ) {
 				'waitImageUrl'   => IMAGIFY_ASSETS_IMG_URL . 'popin-loader.svg',
 				'ajaxActions'    => [
 					'bulkProcess'   => 'imagify_bulk_optimize',
+					'bulkStop'      => 'imagify_bulk_stop',
 					'getFolderData' => 'imagify_get_folder_type_data',
 					'bulkInfoSeen'  => 'imagify_bulk_info_seen',
 				],
@@ -287,6 +295,15 @@ function get_imagify_localize_script_translations( $context ) {
 					'imagesErrorText'                => __( '%s Error(s)', 'imagify' ),
 					'bulkInfoTitle'                  => __( 'Information', 'imagify' ),
 					'confirmBulk'                    => __( 'Start the optimization', 'imagify' ),
+					'stopTitle'                      => __( 'Stop the optimization?', 'imagify' ),
+					'stopText'                       => __( 'Media files still waiting in the queue will not be optimized. The media file currently being processed cannot be interrupted. You can restart the optimization at any time.', 'imagify' ),
+					'confirmStop'                    => __( 'Stop the optimization', 'imagify' ),
+					'cancelStop'                     => __( 'Continue the optimization', 'imagify' ),
+					'stoppedTitle'                   => __( 'Optimization stopped', 'imagify' ),
+					/* translators: %s is a number. Don't use %d. */
+					'stoppedText'                    => __( '%s media file(s) were removed from the queue.', 'imagify' ),
+					'stoppedNothingQueuedText'       => __( 'The optimization was stopped. No media file was left in the queue.', 'imagify' ),
+					'stopErrorText'                  => __( 'The optimization could not be stopped. Please reload the page and try again.', 'imagify' ),
 				],
 			];
 

@@ -1,6 +1,6 @@
 {
     "name": "@devowl-wp/real-product-manager-wp-client",
-    "version": "1.20.23",
+    "version": "1.22.8",
     "private": true,
     "description": "A WordPress client for Real Product Manager",
     "homepage": "https://devowl.io",
@@ -8,7 +8,7 @@
     "author": "DevOwl",
     "sideEffects": [
         "**/*.{css,scss,less}",
-        "./src/public/ts/*.tsx"
+        "./lib/*.tsx"
     ],
     "type": "module",
     "exports": {
@@ -45,8 +45,8 @@
         "@ant-design/icons": "catalog:frontend",
         "@devowl-wp/react-utils": "workspace:*",
         "antd": "catalog:frontend",
-        "mobx": "catalog:legacy",
-        "mobx-react": "catalog:legacy",
+        "mobx": "catalog:frontend",
+        "mobx-react": "catalog:frontend",
         "react": "catalog:frontend",
         "react-dom": "catalog:frontend"
     },
@@ -84,7 +84,7 @@
             "de_CH": false,
             "de_CH_informal": false,
             "hu_HU": "hu",
-            "nb_NO": "nb_NO",
+            "nb_NO": "nb",
             "ru_RU": "ru@formal",
             "sk_SK": "sk",
             "uk": "uk",
@@ -131,7 +131,7 @@
             "es@formal": 100,
             "da": 100,
             "sv": 100,
-            "nb_NO": 100,
+            "nb": 100,
             "cs": 100,
             "pt@formal": 100,
             "hu": 100,
@@ -167,7 +167,7 @@
             "sv": [
                 "deepl"
             ],
-            "nb_NO": [
+            "nb": [
                 "deepl"
             ],
             "cs": [
@@ -301,7 +301,6 @@
     },
     "swc": {
         "jsc": {
-            "loose": true,
             "parser": {
                 "syntax": "typescript",
                 "tsx": true,

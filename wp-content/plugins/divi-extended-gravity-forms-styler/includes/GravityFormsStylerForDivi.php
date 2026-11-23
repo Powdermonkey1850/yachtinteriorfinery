@@ -46,6 +46,10 @@ class EL_GravityFormsStylerForDivi extends DiviExtension {
         );
 
 		parent::__construct( $name, $args );
+
+		if ( is_admin() ) {
+            require_once $this->plugin_dir . 'src/class-update.php';
+        }
 	}
 	
 }

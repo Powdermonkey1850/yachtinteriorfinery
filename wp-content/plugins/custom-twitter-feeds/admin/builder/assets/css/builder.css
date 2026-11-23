@@ -20,6 +20,37 @@ body{
     background: #2A65DB;
 }
 
+/* SMASH-1378: reset UA button defaults for elements converted from <div>/<a>/<span>
+   to <button> during the a11y semantic upgrade. TW's builder.css has no chrome
+   reset for these, so the browser's default <button> border/background renders as an
+   unwanted outer border on checkbox and other controls. Wrapped in :where() so the
+   reset has specificity (0,0,0) and any per-control rule (e.g. padding/background on
+   .sb-control-imagechooser-btn) still wins automatically. */
+:where(
+    button.sb-control-switcher-ctn,
+    button.sb-control-checkbox-ctn,
+    button.sb-control-checkbox,
+    button.sb-control-checkboxsection-open,
+    button.sb-control-colorpicker-btn,
+    button.sb-control-colorpicker-swatch,
+    button.sb-control-imagechooser-clear-icon,
+    button.sb-control-imagechooser-btn,
+    button.sb-control-input-info,
+    button.ctf-fb-popup-cls
+) {
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-align: inherit;
+    line-height: inherit;
+}
+
 /****
 Buttons
  */
@@ -647,6 +678,20 @@ Welcome Screen Empty State
     position: absolute;
     left: 12px;
 }
+/* a11y: ctf-fb-btn-new converted from <div> to native <button>; reset UA button styles so it matches the original design */
+button.ctf-fb-btn-new{
+    font-family: inherit;
+    text-align: left;
+    line-height: 17px;
+    -webkit-appearance: none;
+    appearance: none;
+}
+/* a11y: restore a visible keyboard focus ring (parent .ctf-fb-btn forces outline:none) */
+button.ctf-fb-btn-new:focus-visible{
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px #2271b1;
+}
 
 .ctf-fb-inf-cnt{
     position: relative;
@@ -785,6 +830,14 @@ Welcome Screen Empty State
 #ctf-builder-app .ctf-fb-create-ctn h4,
 #ctf-builder-app .ctf-fb-feedtypes-pp-ctn  h4{
     margin-bottom: 1px;
+}
+/* SMASH-1378: feed-creation step headings receive programmatic focus on step
+   change for screen-reader context only (tabindex=-1, not in the tab order),
+   so suppress the visible focus ring on the heading itself. */
+#ctf-builder-app .ctf-fb-create-ctn h4:focus,
+#ctf-builder-app .ctf-fb-create-ctn h4:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
 }
 #ctf-builder-app .ctf-fb-feedtypes-pp-ctn[data-screen="customizer"] .ctf-fb-types {
     margin-top: 20px;
@@ -1495,148 +1548,11 @@ Source Screen
 
 
 
-/*Embed Popup*/
-.ctf-fb-embed-step-1{
-    margin-top: 36px;
-}
 
-.ctf-fb-embed-step-1 > div{
-    padding: 0 20px;
-}
-.ctf-fb-embed-step-1-top{
-    padding-bottom: 53px!important;
-    border-bottom: 1px solid #E8E8EB;
-    margin-bottom: 42px;
-}
-#ctf-builder-app .ctf-fb-embed-step-1 h4{
-    margin-bottom: 12px;
-}
-.ctf-fb-embed-input-ctn{
-    display: flex;
-}
-.ctf-fb-embed-input-ctn input,
-.ctf-fb-embed-input-ctn input[type="text"]{
-    position: relative;
-    font-style: normal;
-    font-weight: normal;
-    font-size: 16px;
-    line-height: 160%;
-    color: #141B38;
-    height: 44px;
-    width: 77%;
-    box-sizing: border-box;
-    border-radius: 0px;
-    border: 1px solid #D0D1D7!important;
-    border-right: 0px!important;
-
-}
-.ctf-fb-embed-input-ctn input:focus, .ctf-fb-embed-input-ctn .ctf-fb-hd-btn:focus{
-    box-shadow: none!important;
-    outline: none!important
-}
-.ctf-fb-embed-input-ctn .ctf-fb-hd-btn{
-    width: 23%;
-    border-bottom-left-radius: 0px;
-    border-top-left-radius: 0px;
-}
-.ctf-fb-embed-input-ctn svg{
-    width: 17px;
-    fill: currentColor;
-    float: left;
-    margin-right: 10px;
-}
-.ctf-fb-embed-step-1-bottom h4{
-    text-align: center;
-}
-.ctf-fb-embed-btns-ctn{
-    display: grid;
-    grid-template-columns: 49% 49%;
-    grid-column-gap: 2%;
-    margin-top: 14px;
-    margin-bottom: 35px;
-}
-.ctf-fb-embed-btn{
-    cursor: pointer;
-    width: 100%;
-    height: 50px;
-    background: #F3F4F5;
-    border-radius: 2px;
-    border: 1px solid #DCDDE1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-sizing: border-box;
-    padding: 0 20px;
-    position: relative;
-    color: #141B38;
-    font-size: 16px;
-    font-weight: 500;
-}
-.ctf-fb-embed-btn .sb-icon-label svg{
-    fill: currentColor;
-    width: 18px;
-    margin-right: 10px;
-    float: left;
-}
-.ctf-fb-embed-popup .sb-embed-breadcrumb {
-    display: flex;
-    align-items: center;
-    padding: 25px 30px 0;
-    margin-bottom: 2px;
-}
-.sb-embed-breadcrumb a {
-    font-style: normal;
-    font-weight: bold;
-    font-size: 10px;
-    line-height: 160%;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #434960;
-    cursor: pointer;
-}
-.sb-embed-breadcrumb a:hover {
-    color: #141B38;
-}
-.sb-embed-breadcrumb svg {
-    margin-right: 8px;
-}
-.ctf-fb-embed-step-2 > div{
-    padding: 0 29px;
-}
 
 .sb-customizer-sidebar-cache-wrapper{
     margin-top: 20px;
     padding: 0 20px;
-}
-.ctf-fb-embed-step-2-list{
-    margin-top: 25px;
-    border-top: 1px solid #DCDDE1;
-    padding-top: 14px !important;
-}
-.ctf-fb-embed-step-2-list > strong{
-    text-transform: uppercase;
-    font-size: 12px;
-    color: #434960;
-    margin-bottom: 10px;
-}
-.ctf-fb-embed-step-2-pages{
-    margin-top: 8px;
-    height: 250px;
-    overflow: auto;
-}
-.ctf-fb-embed-step-2-pages .sb-control-toggle-icon svg {
-    width: 11px;
-}
-.ctf-fb-embed-step-2-action{
-    padding: 10px 34px 10px 30px !important;
-    background: #F3F4F5;
-    box-shadow: 0px -4px 5px rgba(0, 0, 0, 0.1);
-}
-.ctf-fb-embed-step-2-action a{
-    color: #fff;
-}
-.ctf-fb-embed-step-2-action a[data-active="false"]{
-    opacity: .75;
 }
 
 /*Dialog Popup*/
@@ -1706,189 +1622,10 @@ Source Screen
     height: 42px;
 }
 
-/*
-	Footer Sticky Widget
-*/
-.ctf-stck-wdg{
-    position: fixed;
-    right: 21px;
-    z-index: 9;
-    bottom: 20px;
-}
-.ctf-stck-wdg-btn{
-    width: 52px;
-    height: 52px;
-    background: #fff;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    filter: drop-shadow(0px 9px 13px rgba(0, 0, 0, 0.2));
-}
-.ctf-stck-wdg-btn svg{
-    width: 25px;
-    fill: #FE544F;
-    height: 33px;
-    float: left;
-}
-.ctf-stck-wdg[data-active="true"] .ctf-stck-wdg-btn svg,.ctf-stck-wdg-btn-cls{
-    display: none;
-}
-
-.ctf-stck-wdg[data-active="true"] .ctf-stck-wdg-btn-cls,
-.ctf-stck-wdg[data-active="true"] .ctf-stck-wdg-btn-cls svg{
-    display: block;
-}
-.ctf-stck-wdg-btn-cls{
-    width: inherit;
-    height: inherit;
-    position: relative;
-    color: #364152;
-    box-shadow: 0px 1px 6px rgba(0, 0, 0,  .05), 0px 9px 12px rgba(0, 0, 0,  .05);
-    border-radius: 70px;
-}
-.ctf-stck-wdg-btn-cls svg {
-    width: 14px;
-    height: 14px;
-    position: absolute;
-    top: 50%;
-    right: 0;
-    bottom: 0;
-    left: 50%;
-    margin-top: -7px;
-    margin-left: -7px;
-}
-
-.ctf-stck-pop{
-    position: absolute;
-    width: 292px;
-    height: auto;
-    background: #fff;
-    border: 1px solid #E2E8F0;
-    box-sizing: border-box;
-    box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.15), 0px 3px 14px rgba(0, 0, 0, 0.12);
-    border-radius: 2px;
-    padding: 20px;
-    right: 0px;
-    bottom: 100px;
-    color: #141B38;
-    opacity: 0;
-    padding-bottom: 82px;
-    visibility: hidden;
-}
-.ctf-stck-wdg[data-active="true"] .ctf-stck-pop{
-    bottom: 66px;
-    opacity: 1;
-    visibility: visible;
-}
-
-.ctf-stck-pop svg{
-    fill: currentColor;
-}
-.ctf-stck-el-list{
-    border: 1px solid #DCDDE1;
-    border-radius: 2px;
-}
-.ctf-stck-el{
-    display: flex;
-    align-items: center;
-    padding: 11px 13px;
-    border-bottom: 1px solid #DCDDE1;
-}
-.ctf-stck-el:hover{
-    background: #F3F4F5;
-}
-.ctf-stck-el:last-of-type{
-    border-bottom: 0px;
-}
-.ctf-stck-el-list .ctf-chevron svg{
-    width: 5px;
-    height: 8px;
-}
-.ctf-stck-el-list .ctf-stck-el-icon svg {
-
-}
-.ctf-stck-el .ctf-stck-el-txt{
-    color: #27303F;
-}
-.ctf-stck-el.ctf-stck-el-upgrd{
-    padding: 8px 14px;
-    font-size: 14px;
-    background: var(--cl-orange);
-    color: #fff;
-}
 .ctf-chevron {
     position: absolute;
     right: 14px
 }
-.ctf-stck-el.ctf-stck-el-upgrd .ctf-stck-el-txt{
-    color: #fff;
-}
-.ctf-stck-el.ctf-stck-el-upgrd:after{
-    top: 20px;
-    opacity: 1;
-}
-.ctf-stck-el-icon{
-    margin-right: 10px;
-}
-.ctf-stck-el-icon svg{
-    width: 17px;
-    float: left;
-}
-.ctf-stck-el.ctf-stck-el-upgrd svg path{
-    fill: #fff!important;
-}
-#ctf-builder-app .ctf-stck-title{
-    margin-top: 20px;
-    margin-bottom: 10px;
-}
-
-.ctf-stck-follow{
-    background: #F3F4F5;
-    margin-top: 20px;
-    left: 0px;
-    bottom: 0px;
-    position: absolute;
-    padding: 12px 20px;
-    display: flex;
-    align-items:  center;
-}
-.ctf-stck-follow span{
-    font-weight: 600;
-    font-size: 14px;
-}
-.ctf-stck-flw-links{
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-left: auto;
-}
-.ctf-stck-flw-links a{
-    width: 36px;
-    height: 28px;
-    color: inherit;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-    margin-left: 4px;
-    border-radius: 2px;
-}
-.ctf-stck-flw-links svg{
-    width: 17px;
-    color: #141B38;
-}
-.ctf-stck-flw-links a:hover{
-    background: #fff;
-}
-.ctf-stck-flw-links a:hover svg{
-    color: inherit;
-}
-
-.ctf-stck-flw-links a[data-type="instagram"] svg path{
-    fill: currentColor;
-}
-
 
 /*
 	Builder Footer
@@ -3609,6 +3346,17 @@ flex: 1;
 .sb-control-checkbox-ctn > div{
 	z-index: 3;
 }
+/* SMASH-1378: restore checkboxsection row layout after div→button a11y conversion.
+   Chevron moved inside .sb-control-checkboxsection-open; `> div{z-index:3}` no longer
+   matches the <button> children → chevron not far-right + hover overlay (z-index:1)
+   covered label+chevron. Flex the open-button (chevron right) + raise above overlay. */
+.sb-control-checkboxsection-open {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 3;
+}
 .sb-control-checkbox-ctn:hover .sb-control-checkbox-hover{
 	opacity: 1;
 }
@@ -4364,7 +4112,8 @@ font-style: normal;
     width: 12px;
     height: 12px;
 }
-.sb-onboarding-tooltip h3 {
+.sb-onboarding-tooltip h3,
+.sb-onboarding-tooltip .sb-onboarding-wizard-step-heading {
     font-size: 16px;
     color: #141B38;
     line-height: 160%;
@@ -4561,31 +4310,6 @@ width: calc(100% - 20px);
     }
     .ctf-fb-header .sb-button-standard{
         padding: 10px 10px 10px 31px;
-    }
-    .ctf-fb-embed-ctn.sb-fs-boss.ctf-fb-center-boss .ctf-fb-popup-inside {
-        top: 35px;
-    }
-    .ctf-fb-embed-btns-ctn {
-        grid-template-columns: 100%;
-    }
-    .ctf-fb-embed-btns-ctn .ctf-fb-embed-btn {
-        margin-bottom: 10px;
-    }
-    .ctf-fb-embed-ctn.sb-fs-boss.ctf-fb-center-boss .ctf-fb-popup-inside .ctf-fb-embed-step-1-top {
-        margin-bottom: 10px;
-    }
-    .ctf-fb-embed-ctn.sb-fs-boss.ctf-fb-center-boss .ctf-fb-popup-inside .ctf-fb-embed-input-ctn {
-        flex-wrap: wrap;
-    }
-    .ctf-fb-embed-input-ctn input, .ctf-fb-embed-input-ctn input[type="text"] {
-        width: 100%;
-        border-right: 1px solid #D0D1D7!important;
-    }
-    .ctf-fb-embed-input-ctn .ctf-fb-hd-btn {
-        width: 32%;
-        max-width: 120px;
-        margin-top: 10px !important;
-        padding: 8px;
     }
     .sb-fs-boss.ctf-fb-center-boss {
         z-index: 100001 !important;

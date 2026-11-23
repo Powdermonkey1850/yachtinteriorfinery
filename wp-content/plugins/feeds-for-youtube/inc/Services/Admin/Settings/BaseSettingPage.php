@@ -79,8 +79,12 @@ abstract class BaseSettingPage extends ServiceProvider {
 
 	public function register_menu_page() {
 		$menu_slug = SBY_SLUG . '-' . $this->menu_slug;
+		$callback  = [$this, 'render'];
 		if ($this->has_page_restriction) {
+			// No render callback for this shared link, otherwise WordPress hooks the
+			// slug and breaks the URL of every submenu item that uses it.
 			$menu_slug = 'admin.php?page=sby-feed-builder&tab=more';
+			$callback  = '';
 		}
 
 		add_submenu_page(
@@ -89,13 +93,65 @@ abstract class BaseSettingPage extends ServiceProvider {
 			$this->menu_title,
 			'manage_options',
 			$menu_slug,
-			[$this, 'render'],
+			$callback,
 			$this->menu_position
 		);
 	}
 
 	private function get_notifications() {
 		return Container::get_instance()->get(SBY_Notifications::class)->output_return();
+	}
+
+	/**
+	 * Shared Consent + WPConsent settings seed.
+	 *
+	 * Both the Setup (onboarding) and Settings pages localize the same Consent
+	 * package flags, legal-link URLs, and WPConsent install/activate descriptor
+	 * onto window.sby_settings. Centralised here so the two callers don't carry
+	 * byte-identical copies (the duplication SonarCloud flagged on new code).
+	 *
+	 * @param string $context       Link context for ConsentManager::link_url()
+	 *                              ('onboarding' or 'settings').
+	 * @param bool   $include_flags Whether to seed the dsc/notif choice flags.
+	 *                              The Settings Data Controls tab needs them to
+	 *                              hydrate its toggles; onboarding does not.
+	 * @return array
+	 */
+	protected function consent_settings( $context, $include_flags = false ) {
+		$settings = [];
+
+		if ( class_exists( '\SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+			// Drives whether the React "Data Sharing" tab renders at all — it needs
+			// the Consent package loaded. The tab is shown only when consent is
+			// user-manageable; when any Smash Balloon Pro plugin is active, consent +
+			// in-plugin notifications are forced on and governed centrally, so the
+			// tab is hidden entirely.
+			$settings['consentAvailable'] = ! \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::is_locked_by_pro();
+			$settings['sbyIsPro']         = (bool) \sby_is_pro();
+			// When any Smash Balloon Pro plugin is active, the free tab renders its
+			// toggles checked + disabled with a notice (consent is locked on).
+			$settings['consentLockedByPro'] = \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::is_locked_by_pro();
+
+			if ( $include_flags ) {
+				$flags = \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::flags();
+				$settings['consentDsc']   = ! empty( $flags['dsc'] );
+				$settings['consentNotif'] = ! empty( $flags['notif'] );
+			}
+
+			$settings['consentPermissionsUrl'] = \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( $context, 'permissions', 'youtube' );
+			$settings['consentTermsUrl']       = \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( $context, 'terms', 'youtube' );
+			$settings['consentPrivacyUrl']     = \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( $context, 'privacy', 'youtube' );
+		}
+
+		$wpconsent_file = 'wpconsent-cookies-banner-privacy-suite/wpconsent.php';
+		$settings['wpconsentScreen'] = [
+			'isPluginInstalled' => file_exists( WP_PLUGIN_DIR . '/' . $wpconsent_file ),
+			'isPluginActive'    => is_plugin_active( $wpconsent_file ),
+			'pluginFile'        => $wpconsent_file,
+			'downloadUrl'       => 'https://downloads.wordpress.org/plugin/wpconsent-cookies-banner-privacy-suite.zip',
+		];
+
+		return $settings;
 	}
 
 	protected function get_settings_object() {

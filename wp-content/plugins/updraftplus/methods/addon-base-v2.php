@@ -1,6 +1,6 @@
 <?php
 
-if (!defined('UPDRAFTPLUS_DIR')) die('No direct access allowed');
+if (!defined('ABSPATH')) die('No direct access allowed');
 
 /*
 Methods to define when extending this class (can use $this->storage and $this->options where relevant):
@@ -382,7 +382,7 @@ abstract class UpdraftPlus_RemoteStorage_Addons_Base_v2 extends UpdraftPlus_Back
 			return;
 		}
 
-		$testfile = md5(time().rand()).'.txt';
+		$testfile = md5(time().wp_rand()).'.txt';
 		
 		$test_results = $this->do_credentials_test($testfile, $posted_settings);
 		

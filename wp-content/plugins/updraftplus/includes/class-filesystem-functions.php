@@ -1,6 +1,6 @@
 <?php
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery -- we try to reduce overhead by bypassing WP APIs and other extra layers; Some custom complex queries tailored specifically to our needs, giving us full control over the SQL commands and data manipulation
-// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.WP.AlternativeFunctions.file_system_operations_fwrite, WordPress.WP.AlternativeFunctions.file_system_operations_fgets, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir, WordPress.WP.AlternativeFunctions.file_system_operations_fread, WordPress.WP.AlternativeFunctions.file_system_operations_chmod, WordPress.WP.AlternativeFunctions.file_system_operations_fputs, WordPress.WP.AlternativeFunctions.file_system_operations_is_writeable, WordPress.WP.AlternativeFunctions.file_system_operations_chown, WordPress.WP.AlternativeFunctions.file_system_operations_chgrp, WordPress.WP.AlternativeFunctions.file_system_operations_touch -- Native PHP fileystem function is used for direct control and performance because it can bypass additional layers of abstraction so that no overhead from the WordPress filesystem API's internal handling
+// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.WP.AlternativeFunctions.file_system_operations_fwrite, WordPress.WP.AlternativeFunctions.file_system_operations_fgets, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPress.WP.AlternativeFunctions.file_system_operations_mkdir, WordPress.WP.AlternativeFunctions.file_system_operations_fread, WordPress.WP.AlternativeFunctions.file_system_operations_chmod, WordPress.WP.AlternativeFunctions.file_system_operations_fputs, WordPress.WP.AlternativeFunctions.file_system_operations_is_writable, WordPress.WP.AlternativeFunctions.file_system_operations_chown, WordPress.WP.AlternativeFunctions.file_system_operations_chgrp, WordPress.WP.AlternativeFunctions.file_system_operations_touch, WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- Native PHP fileystem function is used for direct control and performance because it can bypass additional layers of abstraction so that no overhead from the WordPress filesystem API's internal handling
 // phpcs:disable WordPress.WP.AlternativeFunctions.rename_rename -- rename() usage is intentional and safe within this context
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- some query operations need to always receive the most up-to-date or actual data directly from the database, reducing the risk of serving stale information.
 if (!defined('ABSPATH')) die('No direct access.');
@@ -64,7 +64,7 @@ class UpdraftPlus_Filesystem_Functions {
 	
 		global $wp_filesystem, $updraftplus;
 
-		$build_url = UpdraftPlus_Options::admin_page().'?page=updraftplus&action=updraft_restore';
+		$build_url = UpdraftPlus_Options::admin_page().'?page=updraftplus&action=updraft_restore&nonce='.wp_create_nonce('updraftplus-credentialtest-nonce');
 		
 		foreach ($url_parameters as $k => $v) {
 			$build_url .= '&'.$k.'='.$v;
@@ -195,7 +195,7 @@ class UpdraftPlus_Filesystem_Functions {
 		$updraft_dir = $updraftplus->backups_dir_location();
 		$now_time = time();
 		$files_deleted = 0;
-		$include_cachelist = defined('DOING_CRON') && DOING_CRON && doing_action('updraftplus_clean_temporary_files') ? true : $include_cachelist;
+		$include_cachelist = defined('DOING_CRON') && DOING_CRON && function_exists('doing_action') && doing_action('updraftplus_clean_temporary_files') ? true : $include_cachelist;// phpcs:ignore wp_function_not_compatible_with_requires_wp -- False positive: we've already checked whether the 'doing_action()' function exists using 'function_exists()' before calling it.
 		if ($handle = opendir($updraft_dir)) {
 			while (false !== ($entry = readdir($handle))) {
 				$manifest_match = preg_match("/updraftplus-manifest\.json/", $entry);
@@ -492,7 +492,7 @@ class UpdraftPlus_Filesystem_Functions {
 	 *                                           * If the value is 'extract_only', then it'll extract only files in the '$folders_to_look' parameter.
 	 *                                           * If the value is 'extract_except', then it'll extract all files except the ones in the '$folders_to_look' parameter.
 	 *
-	 * @return boolean|WP_Error True on success, WP_Error on failure.
+	 * @return Boolean|WP_Error True on success, WP_Error on failure.
 	 */
 	public static function unzip_file($file, $to, $starting_index = 0, $folders_to_look = array(), $extract_matched_folders = 'extract_only') {
 		global $wp_filesystem;
@@ -502,7 +502,7 @@ class UpdraftPlus_Filesystem_Functions {
 		}
 
 		// Unzip can use a lot of memory, but not this much hopefully.
-		if (function_exists('wp_raise_memory_limit')) wp_raise_memory_limit('admin');
+		if (function_exists('wp_raise_memory_limit')) wp_raise_memory_limit('admin');// phpcs:ignore wp_function_not_compatible_with_requires_wp -- False positive: we've already checked whether the 'wp_raise_memory_limit()' function exists using 'function_exists()' before calling it.
 
 		$needed_dirs = array();
 		$to = trailingslashit($to);
@@ -533,7 +533,7 @@ class UpdraftPlus_Filesystem_Functions {
 			$added_unzip_action = true;
 		}
 		
-		if (class_exists('ZipArchive', false) && apply_filters('unzip_file_use_ziparchive', true)) {
+		if (class_exists('ZipArchive', false) && apply_filters('unzip_file_use_ziparchive', true)) { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- False positive: this is a core WordPress hook.
 			$result = self::unzip_file_go($file, $to, $needed_dirs, 'ziparchive', $starting_index, $folders_to_look, $extract_matched_folders);
 			if (true === $result || (is_wp_error($result) && 'incompatible_archive' != $result->get_error_code())) return $result;
 			if (is_wp_error($result)) {
@@ -626,7 +626,7 @@ class UpdraftPlus_Filesystem_Functions {
 	 */
 	public static function wp_doing_cron() {
 		if (function_exists('wp_doing_cron')) return wp_doing_cron();
-		return apply_filters('wp_doing_cron', defined('DOING_CRON') && DOING_CRON);
+		return apply_filters('wp_doing_cron', defined('DOING_CRON') && DOING_CRON); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- False positive: this is a core WordPress hook.
 	}
 	
 	/**
@@ -734,7 +734,7 @@ class UpdraftPlus_Filesystem_Functions {
 	 *                                           * If the value is 'extract_only', then it'll extract only files in the '$folders_to_look' parameter.
 	 *                                           * If the value is 'extract_except', then it'll extract all files except the ones in the '$folders_to_look' parameter.
 	 *
-	 * @return boolean|WP_Error True on success, WP_Error on failure.
+	 * @return Boolean|WP_Error True on success, WP_Error on failure.
 	 */
 	private static function unzip_file_go($file, $to, $needed_dirs = array(), $method = 'ziparchive', $starting_index = 0, $folders_to_look = array(), $extract_matched_folders = 'extract_only') {
 		global $wp_filesystem, $updraftplus;

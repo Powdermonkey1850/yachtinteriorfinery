@@ -4,7 +4,7 @@
 // phpcs:disable WordPress.DB.DirectDatabaseQuery.NoCaching -- some query operations need to always receive the most up-to-date or actual data directly from the database, reducing the risk of serving stale information.
 // phpcs:disable WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- we use the set_error_handler() function to provide a flexible way of handling PHP errors according to our needs; we centralises error handling in one place and customises certain errors based on their severity and context.
 // phpcs:disable Squiz.PHP.DiscouragedFunctions.Discouraged -- some functions, like set_time_limit() and ini_set(), are used to temporarily change PHP configuration values based on the script's needs (e.g., processing large datasets or performing long operations).
-if (!defined('UPDRAFTPLUS_DIR')) die('No access.');
+if (!defined('ABSPATH')) die('No direct access allowed');
 
 /*
 	See class-commands.php for explanation about how these classes work.
@@ -164,7 +164,7 @@ class UpdraftPlus_WPAdmin_Commands extends UpdraftPlus_Commands {
 				$foreign_known = apply_filters('updraftplus_accept_archivename', array());
 				if (!is_array($foreign_known) || empty($foreign_known[$backups[$timestamp]['meta_foreign']])) {
 					/* translators: %s: Backup source information */
-					$err[] = sprintf(__('Backup created by unknown source (%s) - cannot be restored.', 'updraftplus'), $backups[$timestamp]['meta_foreign']);
+					$err[] = sprintf(__('Backup created by unknown source (%s) - cannot be restored.', 'updraftplus'), esc_html($backups[$timestamp]['meta_foreign']));
 				} else {
 					// For some reason, on PHP 5.5 passing by reference in a single array stopped working with apply_filters_ref_array (though not with do_action_ref_array).
 					$backupable_plus_db = apply_filters_ref_array("updraftplus_importforeign_backupable_plus_db", array($backupable_plus_db, array($foreign_known[$backups[$timestamp]['meta_foreign']], &$mess, &$warn, &$err)));
@@ -189,16 +189,16 @@ class UpdraftPlus_WPAdmin_Commands extends UpdraftPlus_Commands {
 					}
 					if (!file_exists($updraft_dir.'/'.$file)) {
 						/* translators: %s: File path */
-						$err[] = sprintf(__('File not found (you need to upload it): %s', 'updraftplus'), $updraft_dir.'/'.$file);
+						$err[] = sprintf(__('File not found (you need to upload it): %s', 'updraftplus'), esc_html($updraft_dir.'/'.$file));
 					} elseif (filesize($updraft_dir.'/'.$file) == 0) {
 						/* translators: %s: File name */
-						$err[] = sprintf(__('File was found, but is zero-sized (you need to re-upload it): %s', 'updraftplus'), $file);
+						$err[] = sprintf(__('File was found, but is zero-sized (you need to re-upload it): %s', 'updraftplus'), esc_html($file));
 					} else {
 						$itext = (0 == $index) ? '' : $index;
 						if (!empty($backups[$timestamp][$type.$itext.'-size']) && filesize($updraft_dir.'/'.$file) != $backups[$timestamp][$type.$itext.'-size']) {
 							if (empty($warn['doublecompressfixed'])) {
 								/* translators: 1: File name, 2: Actual file size, 3: Expected file size */
-								$warn[] = sprintf(__('File (%1$s) was found, but has a different size (%2$s) from what was expected (%3$s) - it may be corrupt.', 'updraftplus'), $file, filesize($updraft_dir.'/'.$file), $backups[$timestamp][$type.$itext.'-size']);
+								$warn[] = sprintf(__('File (%1$s) was found, but has a different size (%2$s) from what was expected (%3$s) - it may be corrupt.', 'updraftplus'), esc_html($file), filesize($updraft_dir.'/'.$file), esc_html($backups[$timestamp][$type.$itext.'-size']));
 							}
 						}
 						do_action_ref_array("updraftplus_checkzip_$type", array($updraft_dir.'/'.$file, &$mess, &$warn, &$err));
@@ -345,6 +345,16 @@ class UpdraftPlus_WPAdmin_Commands extends UpdraftPlus_Commands {
 	}
 
 	/**
+	 * This function is called via AJAX and updates the social media notice dismissal time to 84 days from when it was dismissed
+	 *
+	 * @return array - an empty array
+	 */
+	public function dismiss_social_media() {
+		UpdraftPlus_Options::update_updraft_option('updraftplus_dismissed_social_media_notice', time() + 84*86400);
+		return array();
+	}
+
+	/**
 	 * This function is called via ajax and will update the clone php notice dismiss time
 	 *
 	 * @return array - an empty array
@@ -355,12 +365,13 @@ class UpdraftPlus_WPAdmin_Commands extends UpdraftPlus_Commands {
 	}
 
 	/**
-	 * Update and set dismiss_phpseclib_notice option name to true
+	 * Update and set dismiss_phpseclib_notice option name to the minimum recommended PHP version
 	 *
 	 * @return array - an associative array containing a key named 'success' with 1 value which indicates the successful of updating the option
 	 */
 	public function dismiss_phpseclib_notice() {
-		UpdraftPlus_Options::update_updraft_option('updraft_dismiss_phpseclib_notice', true);
+		// Store the minimum recommended PHP version dismissed for (previously was boolean `true`), so a later version bump re-shows the notice.
+		UpdraftPlus_Options::update_updraft_option('updraft_dismiss_phpseclib_notice', UPDRAFTPLUS_PHPSECLIB_MIN_PHP_VERSION);
 		return array('success' => 1);
 	}
 
@@ -388,6 +399,19 @@ class UpdraftPlus_WPAdmin_Commands extends UpdraftPlus_Commands {
 	public function dismissdashnotice() {
 		UpdraftPlus_Options::update_updraft_option('updraftplus_dismisseddashnotice', time() + 366*86400);
 		return array();
+	}
+
+	/**
+	 * Dismiss the Azure Legacy Storage notice.
+	 *
+	 * This function updates the option to indicate that the user has dismissed
+	 * the Azure legacy storage notice, preventing it from being shown again.
+	 *
+	 * @return array Associative array with a 'success' key indicating the operation status.
+	 */
+	public function dismiss_azure_legacy_storage_notice() {
+		UpdraftPlus_Options::update_updraft_option('updraftplus_dismiss_azure_legacy_storage_notice', 1);
+		return array('success' => 1);
 	}
 	
 	public function rawbackuphistory() {
@@ -815,25 +839,6 @@ class UpdraftPlus_WPAdmin_Commands extends UpdraftPlus_Commands {
 			$action_data['similar_type_collate'] = $similar_type_collate;
 		}
 		return $action_data;
-	}
-
-	/**
-	 * Set the Tour status
-	 *
-	 * @param array $params - the $_REQUEST. We're looking for 'current_step'
-	 * @return bool
-	 */
-	public function set_tour_status($params) {
-		return class_exists('UpdraftPlus_Tour') ? UpdraftPlus_Tour::get_instance()->set_tour_status($params) : false;
-	}
-
-	/**
-	 * Resets the tour status
-	 *
-	 * @return bool
-	 */
-	public function reset_tour_status() {
-		return class_exists('UpdraftPlus_Tour') ? UpdraftPlus_Tour::get_instance()->reset_tour_status() : false;
 	}
 
 	/**

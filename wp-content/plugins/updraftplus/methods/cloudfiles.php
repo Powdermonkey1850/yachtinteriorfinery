@@ -59,21 +59,6 @@ class UpdraftPlus_BackupModule_cloudfiles_oldsdk extends UpdraftPlus_BackupModul
 		// This options format is handled via only accessing options via $this->get_options()
 		return array('multi_options', 'config_templates', 'multi_storage', 'conditional_logic');
 	}
-
-	/**
-	 * Retrieve default options for this remote storage module.
-	 *
-	 * @return Array - an array of options
-	 */
-	public function get_default_options() {
-		return array(
-			'user' => '',
-			'authurl' => 'https://auth.api.rackspacecloud.com',
-			'apikey' => '',
-			'path' => '',
-			'region' => null
-		);
-	}
 	
 	/**
 	 * Check whether options have been set up by the user, or not
@@ -594,7 +579,7 @@ class UpdraftPlus_BackupModule_cloudfiles_oldsdk extends UpdraftPlus_BackupModul
 			return;
 		}
 
-		$try_file = md5(rand()).'.txt';
+		$try_file = md5(wp_rand()).'.txt';
 
 		try {
 			$object = $container_object->create_object($try_file);

@@ -31,6 +31,10 @@ if (!defined('SBR_REST_DOMAIN')) {
 	define('SBR_REST_DOMAIN', 'SBR/v1');
 }
 
+if (!defined('SBR_SMASH_USAGE_TRACKING_API_URL')) {
+	define('SBR_SMASH_USAGE_TRACKING_API_URL', 'https://usage.smashballoon.com/api');
+}
+
 // Common Library Assets URL
 if (!defined('SB_COMMON_ASSETS')) {
 	define('SB_COMMON_ASSETS', plugin_dir_url(__FILE__) . 'vendor/smashballoon/customizer/sb-common/');
@@ -148,6 +152,36 @@ $customizerContainer->set(\Smashballoon\Customizer\V2\Config\Proxy::class, new \
 $serviceContainerClass = SmashBalloon\Reviews\Common\Util::sbr_is_pro() ? \SmashBalloon\Reviews\Pro\ServiceContainer::class : \SmashBalloon\Reviews\Common\ServiceContainer::class;
 $commonServiceContainer = \SmashBalloon\Reviews\Common\Container::get_instance()->get($serviceContainerClass)->register();
 
+// Initialize the About Us page.
+if ( class_exists( '\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\AboutUs\AboutUsManager' ) ) {
+	$sbr_about_plugin_file = defined( 'SBR_PRO' ) && SBR_PRO
+		? SBR_PLUGIN_DIR . 'sb-reviews-pro.php'
+		: SBR_PLUGIN_DIR . 'sb-reviews.php';
+
+	\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\AboutUs\AboutUsManager::init(
+		array(
+			'plugin_slug'    => 'sb-reviews',
+			'plugin_name'    => 'Reviews Feed',
+			'plugin_version' => SBRVER,
+			'plugin_file'    => $sbr_about_plugin_file,
+			'menu_parent'    => 'sbr',
+			'page_slug'      => 'sbr-about',
+			'menu_position'  => 4,
+			'is_pro'         => defined( 'SBR_PRO' ) && SBR_PRO,
+		)
+	);
+}
+
+$sbr_main_plugin_file = defined('SBR_PRO') && SBR_PRO
+	? SBR_PLUGIN_DIR . 'sb-reviews-pro.php'
+	: SBR_PLUGIN_DIR . 'sb-reviews.php';
+register_deactivation_hook(
+	$sbr_main_plugin_file,
+	function () {
+		wp_clear_scheduled_hook(\SmashBalloon\Reviews\Common\UsageTracking\Config::CRON_HOOK);
+	}
+);
+
 // Initialize the deactivation feedback survey.
 if (class_exists('\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Feedback\FeedbackManager')) {
 	$sbr_plugin_slug = defined('SBR_PRO') && SBR_PRO ? 'reviews-feed-pro' : 'reviews-feed';
@@ -164,4 +198,34 @@ if (class_exists('\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\F
 		'enable_help_widget' => true,
 		'help_url'           => 'https://smashballoon.com/docs/reviews/',
 	]);
+}
+
+// Initialize the WP-compliance Consent package.
+if ( class_exists( '\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+	$sbr_pro = ( class_exists( '\SmashBalloon\Reviews\Common\Util' ) && \SmashBalloon\Reviews\Common\Util::sbr_is_pro() );
+	\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::init(
+		array(
+			'plugin_slug'         => 'reviews-feed',
+			'plugin_name'         => $sbr_pro ? 'Reviews Feed Pro' : 'Reviews Feed',
+			'utm_slug'            => 'reviews',
+			'legacy_class'        => 'SBR_Consent',
+			'is_pro'              => $sbr_pro,
+			'show_reprompt_modal' => ! $sbr_pro,
+			'pro_init_option'     => $sbr_pro ? 'sbr_pro_consent_initialized' : null,
+			// SMASH-2630: sites that had opted in to usage tracking keep sharing
+			// after the consent update (run once by the package). Reads the raw
+			// toggle, because Config::is_enabled() already includes the consent gate.
+			// SMASH-2686: 2.10.0 saved usagetracking = true as a default on any
+			// Settings save, so the toggle alone is not proof. A stored site token
+			// is: only the 2.11.0+ tracker stores one, and only while enabled.
+			'legacy_optin'        => static function () {
+				$settings = get_option( 'sbr_settings', array() );
+				if ( ! is_array( $settings ) || empty( $settings['usagetracking'] ) ) {
+					return false;
+				}
+				$token = get_option( \SmashBalloon\Reviews\Common\UsageTracking\Config::OPTION_SITE_TOKEN, '' );
+				return is_string( $token ) && '' !== $token;
+			},
+		)
+	);
 }

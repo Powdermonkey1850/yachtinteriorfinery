@@ -4,8 +4,8 @@ Contributors: smashballoon, craig-at-smash-balloon, am, smub
 Tags: TikTok, TikTok feed, TikTok videos, TikTok account, TikTok widget
 Support Website: https://smashballoon.com/tiktok-feeds/?utm_campaign=tiktok-free&utm_source=readme&utm_medium=product-page
 Requires at least: 5.2
-Tested up to: 6.9
-Stable tag: 1.5.2
+Tested up to: 7.1
+Stable tag: 1.10.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
@@ -121,6 +121,51 @@ Your TikTok feed will update at least once per day. This occurs in the backgroun
 TikTok Feeds has built in caching so your feed will not go down in the event the TikTok API is unavailable or if your connected TikTok account needs to be reconnected. A backup video feed will display until the issues are resolved.
 
 == Changelog ==
+= 1.10.0 =
+* New: The Embed button in the feed builder now opens a new Embed Feed window. Search your pages and posts, or create a new page, and "Add and Go to Page" opens the editor with your TikTok Feed block already in place. You can also add the feed to the Site Editor or a widget, or copy its shortcode.
+* Tweak: If you had turned on usage tracking before, your choice now carries over to the Data Sharing setting. If you turned Data Sharing off or skipped it, it stays off.
+* Fix: Connecting a TikTok account no longer fails with "Unauthorized" on a site that was cloned, moved to a new URL, or serves wp-admin over https with an http site address.
+* Fix: Plugin security hardening.
+
+= 1.9.1 =
+* Fix: The data-sharing popup no longer locks you out of your WordPress admin when your choice can't be saved. You can always close it and keep working.
+
+= 1.9.0 =
+* New: Ask AI assistants to check and update your TikTok feed settings through the WordPress Abilities API (WordPress 6.9 or later). Changes stay off until you turn on MCP Write Access under Settings > General, and it covers the free plugin's settings. [See what TikTok Feeds Pro adds](https://smashballoon.com/tiktok-feeds/tiktok-lite-upgrade/?utm_source=changelog&utm_medium=aiagents&utm_campaign=tiktok-free-readme)
+
+= 1.8.0 =
+* New: Added a Debug settings tab with Privacy & Data Sharing controls for in-plugin notifications and usage tracking.
+* Tweak: Refreshed the About Us page to match the other Smash Balloon plugins.
+* Tweak: Added an "Upgrade to Pro" link to the plugin's admin menu.
+* Fix: Feed style changes now take effect immediately after a plugin update instead of being served from a stale cache.
+* Fix: Dismissed notifications no longer reappear after a page reload.
+* Fix: Deactivating the plugin no longer conflicts with other active Smash Balloon plugins in the deactivation feedback prompt.
+
+= 1.7.2 =
+* New: Official support for WordPress 7.1.
+* Fix: On WordPress 7.1, the block editor no longer logs a JavaScript error.
+
+= 1.7.1 =
+* Fix: Plugin hardening.
+
+= 1.7.0 =
+* Tweak: The plugin now appears as "Smash Balloon TikTok Feed" in your WordPress plugins list, so all Smash Balloon plugins appear together.
+* Tweak: Pages that display a TikTok feed now load a smaller script, as it no longer includes admin-only components.
+* Fix: Admin notice controls (dismiss and carousel navigation) and the connecting overlay are now fully keyboard accessible and announced by screen readers.
+* Fix: Plugin security hardening.
+
+= 1.6.1 =
+* Fix: Sources with an invalid or un-decryptable token are now flagged on the Manage Sources screen with a prompt to reconnect, and the feed cache is cleared automatically on reconnect so fresh posts load right away.
+
+= 1.6.0 =
+* New: TikTok feeds can now be embedded directly from the WordPress block editor and Elementor using a dedicated feed block and widget.
+* New: Added a Help widget for in-app access to documentation and support.
+* New: Deeper GDPR consent integration, including a WPConsent setup banner in the GDPR settings.
+* Tweak: Compatibility with WP 7.
+* Tweak: Corrected typos and grammar in plugin UI strings.
+* Fix: HEIC images now convert and display correctly inside the block editor and Elementor.
+* Fix: Feed click handling and image height now render correctly on themes with custom styling.
+
 = 1.5.2 =
 * Fix: Additional plugin hardening.
 

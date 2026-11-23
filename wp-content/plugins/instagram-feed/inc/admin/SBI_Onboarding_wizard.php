@@ -206,7 +206,7 @@ class SBI_Onboarding_wizard extends SBI_Feed_Builder
 					'id' => 'success-page',
 					'template' => SBI_BUILDER_DIR . 'templates/onboarding/success-page.php',
 					'heading' => __('Awesome. You are all set up!', 'instagram-feed'),
-					'description' => __('Here\'s an overview of everything that is setup', 'instagram-feed'),
+					'description' => __('Here\'s an overview of everything that is set up', 'instagram-feed'),
 					'upgradeContent' => [
 						'heading' => __('Upgrade to unlock hashtag feeds, tagged feeds, a popup lightbox and more', 'instagram-feed'),
 						'description' => __('To unlock these features and much more, upgrade to Pro and enter your license key below.', 'instagram-feed'),
@@ -418,6 +418,8 @@ class SBI_Onboarding_wizard extends SBI_Feed_Builder
 				}
 				return false;
 		}
+
+		return false; // phpcs:ignore Generic.PHP.UpperCaseConstant
 	}
 
 	/**
@@ -775,6 +777,18 @@ class SBI_Onboarding_wizard extends SBI_Feed_Builder
 					@SBI_Onboarding_wizard::install_single_plugin($plugin_name);
 					$this->disable_installed_plugins_redirect();
 				}
+			}
+			// SMASH-1245 — opt-in consent from onboarding success page.
+			// Storage is the dedicated consent options (NOT sb_instagram_settings),
+			// and we set $dismiss_modal=true so the post-onboarding re-prompt won't fire.
+			if (
+				isset( $single_data['type'] )
+				&& 'consent' === $single_data['type']
+				&& isset( $single_data['value'] )
+				&& true === $single_data['value'] // phpcs:ignore Generic.PHP.UpperCaseConstant
+				&& class_exists( 'SBI_Consent' )
+			) {
+				\SBI_Consent::update( true, true, true ); // phpcs:ignore Generic.PHP.UpperCaseConstant
 			}
 		}
 		update_option('sb_instagram_settings', $sbi_settings);

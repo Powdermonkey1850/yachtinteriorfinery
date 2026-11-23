@@ -7,12 +7,12 @@
             "source": {
                 "type": "git",
                 "url": "https:\/\/github.com\/laravel\/serializable-closure.git",
-                "reference": "8be68b9a31863c40ccccac14f7e885e274b8ea62"
+                "reference": "38c220b38bacdb9f83eb5d60de07908a9553ebc4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https:\/\/api.github.com\/repos\/laravel\/serializable-closure\/zipball\/8be68b9a31863c40ccccac14f7e885e274b8ea62",
-                "reference": "8be68b9a31863c40ccccac14f7e885e274b8ea62",
+                "url": "https:\/\/api.github.com\/repos\/laravel\/serializable-closure\/zipball\/38c220b38bacdb9f83eb5d60de07908a9553ebc4",
+                "reference": "38c220b38bacdb9f83eb5d60de07908a9553ebc4",
                 "shasum": ""
             },
             "require": {
@@ -25,7 +25,7 @@
                 "phpstan\/phpstan": "^1.8.2",
                 "symfony\/var-dumper": "^5.4.11|^6.2.0|^7.0.0"
             },
-            "time": "2024-11-19T20:48:19+00:00",
+            "time": "2026-06-03T15:28:10+00:00",
             "type": "library",
             "extra": {
                 "branch-alias": {
@@ -225,13 +225,13 @@
             "source": {
                 "type": "git",
                 "url": "git@github.com:awesomemotive\/sb-customizer.git",
-                "reference": "1b41f89f1539b253b3ca773b2ae416ce4fca9fa8"
+                "reference": "7ddedeba23ad817aa1e4c01af6e10f287bdd9c38"
             },
             "require": {
                 "smashballoon\/framework": "dev-master",
                 "smashballoon\/stubs": "dev-master"
             },
-            "time": "2026-06-04T10:25:14+00:00",
+            "time": "2026-11-12T12:23:04+00:00",
             "type": "library",
             "installation-source": "source",
             "autoload": {
@@ -254,12 +254,12 @@
             "source": {
                 "type": "git",
                 "url": "git@github.com:awesomemotive\/sb-common.git",
-                "reference": "4dbefa7f6d5d9d4a56e70199b641d8abe8e2c413"
+                "reference": "e295f26a9a18f268b5842093e4d2dd5814db4430"
             },
             "dist": {
                 "type": "zip",
-                "url": "https:\/\/api.github.com\/repos\/awesomemotive\/sb-common\/zipball\/4dbefa7f6d5d9d4a56e70199b641d8abe8e2c413",
-                "reference": "4dbefa7f6d5d9d4a56e70199b641d8abe8e2c413",
+                "url": "https:\/\/api.github.com\/repos\/awesomemotive\/sb-common\/zipball\/e295f26a9a18f268b5842093e4d2dd5814db4430",
+                "reference": "e295f26a9a18f268b5842093e4d2dd5814db4430",
                 "shasum": ""
             },
             "require": {
@@ -276,7 +276,7 @@
                 "phpcompatibility\/php-compatibility": "^9.3",
                 "squizlabs\/php_codesniffer": "^3.7"
             },
-            "time": "2026-06-02T15:13:46+00:00",
+            "time": "2026-11-10T13:19:17+00:00",
             "default-branch": true,
             "type": "library",
             "installation-source": "dist",
@@ -305,10 +305,6 @@
                 }
             ],
             "description": "WordPress plugin framework. Developed by SmashBalloon Team.",
-            "support": {
-                "source": "https:\/\/github.com\/awesomemotive\/sb-common\/tree\/master",
-                "issues": "https:\/\/github.com\/awesomemotive\/sb-common\/issues"
-            },
             "install-path": "..\/smashballoon\/framework"
         },
         {
@@ -342,10 +338,6 @@
                 }
             ],
             "description": "Shared common stubs.",
-            "support": {
-                "source": "https:\/\/github.com\/awesomemotive\/sb-stubs\/tree\/1.0.0",
-                "issues": "https:\/\/github.com\/awesomemotive\/sb-stubs\/issues"
-            },
             "install-path": "..\/smashballoon\/stubs"
         }
     ],

@@ -27,6 +27,17 @@ class SettingsManagerService extends ServiceProvider
 	 */
 	private $settings_options = 'sbtt_global_settings';
 
+	/** Stored MCP Write Access toggle (SBTT_Write_Gate::OPTION_KEY, kept literal so this class does not depend on the Abilities layer). */
+	public const AI_WRITE_KEY = 'ai_write_enabled';
+
+	/**
+	 * Not a real setting: the value the Settings page was LOADED with for the
+	 * toggle above, round-tripped inside the posted settings so the server can
+	 * tell "the user flipped the switcher" from "a stale tab posted back what it
+	 * loaded". Always stripped before saving.
+	 */
+	public const AI_WRITE_LOADED_KEY = 'ai_write_enabled_loaded';
+
 	/**
 	 * Register the service.
 	 */
@@ -51,9 +62,69 @@ class SettingsManagerService extends ServiceProvider
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$settings = isset($_POST['settings']) ? sbtt_sanitize_data($_POST['settings']) : [];
 
+		if (is_array($settings)) {
+			$settings = $this->reconcile_ai_write_toggle($settings);
+		}
+
 		$this->update_global_settings($settings);
 
-		wp_send_json_success();
+		wp_send_json_success(array( 'settings' => $this->saved_toggle_state() ));
+	}
+
+	/**
+	 * The stored MCP Write Access value, in the shape the Settings page merges
+	 * back into its model after a save (sb-customizer SettingsPage, SMASH-2354).
+	 *
+	 * Refreshing the loaded marker with the stored value lets a same-tab
+	 * ON -> OFF -> save -> ON -> save sequence work without a page reload, and
+	 * keeps a stale tab's toggle in step with what is really stored.
+	 *
+	 * @return array{ai_write_enabled: bool, ai_write_enabled_loaded: bool}
+	 */
+	private function saved_toggle_state()
+	{
+		$option = get_option($this->settings_options, array());
+		$stored = is_array($option) && ! empty($option[ self::AI_WRITE_KEY ]);
+
+		return array(
+			self::AI_WRITE_KEY        => $stored,
+			self::AI_WRITE_LOADED_KEY => $stored,
+		);
+	}
+
+	/**
+	 * Only accept `ai_write_enabled` from the Settings page when the user
+	 * actually changed it in that tab.
+	 *
+	 * The page posts back the WHOLE pluginSettings it loaded, so a tab opened
+	 * while MCP Write Access was on would, on any later unrelated save, write
+	 * `true` back over a toggle an admin has since turned off, silently
+	 * re-enabling agent writes. The page carries the value it loaded the toggle
+	 * with (AI_WRITE_LOADED_KEY), and the save response returns the stored value for both keys so
+	 * the page refreshes that marker (a customizer without that merge needs a reload
+	 * to turn writes back on after turning them off). Turning writes OFF is always honoured. Turning
+	 * them ON is accepted only when this page loaded the toggle OFF. A post with
+	 * no loaded-value marker (a page rendered by an older version) can only turn
+	 * the toggle off; it fails closed.
+	 *
+	 * @param array $settings Decoded posted settings.
+	 * @return array
+	 */
+	private function reconcile_ai_write_toggle(array $settings)
+	{
+		$loaded = array_key_exists(self::AI_WRITE_LOADED_KEY, $settings)
+			? filter_var($settings[self::AI_WRITE_LOADED_KEY], FILTER_VALIDATE_BOOLEAN)
+			: null;
+		unset($settings[self::AI_WRITE_LOADED_KEY]);
+
+		if (array_key_exists(self::AI_WRITE_KEY, $settings)) {
+			$posted = filter_var($settings[self::AI_WRITE_KEY], FILTER_VALIDATE_BOOLEAN);
+			if ($posted && false !== $loaded) {
+				unset($settings[self::AI_WRITE_KEY]);
+			}
+		}
+
+		return $settings;
 	}
 
 	/**
@@ -67,10 +138,76 @@ class SettingsManagerService extends ServiceProvider
 			return;
 		}
 
+		$settings = self::harden_html_sink_values($settings);
+
 		$current_settings = $this->get_global_settings();
 		$updated_settings = wp_parse_args($settings, $current_settings);
 
 		update_option($this->settings_options, $updated_settings);
+
+		if ( array_key_exists( 'usagetracking', $updated_settings ) ) {
+			$scheduler = new \SmashBalloon\TikTokFeeds\Common\UsageTracking\Core\Scheduler();
+			if ( ! empty( $updated_settings['usagetracking'] ) ) {
+				$scheduler->schedule();
+			} else {
+				$scheduler->unschedule();
+			}
+		}
+	}
+
+	/**
+	 * Character-class-restrict the settings values that reach an HTML sink.
+	 *
+	 * Applied here rather than at any single caller, because the three writers that
+	 * can carry a hostile value all funnel through this method -- the settings AJAX
+	 * endpoint (which accepts arbitrary keys: sbtt_sanitize_data() runs no key
+	 * allowlist and wp_parse_args() merges whatever it is given), the license
+	 * recheck/activate paths, and the upgrader.
+	 *
+	 * This is NOT a complete choke point on the option, and must not be relied on as
+	 * one. Two call sites write sbtt_global_settings with a direct update_option()
+	 * and bypass this hardening entirely: RegisterWebsiteRoutine::save_response()
+	 * (also used by Relay) and AjaxHandlerService::clear_all_caches(). None is a live
+	 * bypass today -- they write only api_site_access_token, api_site_error,
+	 * api_site_url (scheme://host of the home option) and api_site_registered_at
+	 * (time()), and none of those keys
+	 * is printed into the Support page blob. But if a
+	 * key below is ever written from one of those paths, or a new sink-bound key is
+	 * added to the list without checking them, the hardening is silently skipped
+	 * there. Either route new writes through update_global_settings(), or harden at
+	 * the new call site too.
+	 *
+	 * Both keys below are printed into the Support page's system-info blob, which
+	 * is shipped to the browser via wp_localize_script() -- entity-decoding every
+	 * top-level scalar -- and rendered with dangerouslySetInnerHTML. Escaping at
+	 * the output point is therefore reversed in transit, and sanitize_text_field()
+	 * is not enough either: core only strips tags inside
+	 * `if ( str_contains( $filtered, '<' ) )`, so an entity-encoded payload such as
+	 * '&#60;img src=x onerror=1&#62;' carries no literal '<', survives byte-identical,
+	 * and is reassembled into a live tag downstream.
+	 *
+	 * sanitize_key() removes '&', '<' and '>' outright, which is the invariant this
+	 * sink actually needs. It is lossless for both keys' real value sets:
+	 * license_status takes EDD status tokens (valid, expired, site_inactive,
+	 * item_name_mismatch, ...) and gdpr takes 'auto' | 'yes' | 'no'.
+	 *
+	 * license_key is deliberately NOT included: sanitize_key() lowercases, which
+	 * would corrupt a real mixed-case licence key and break activation. It needs a
+	 * case-preserving treatment, tracked separately.
+	 *
+	 * @param array $settings Incoming (possibly partial) settings.
+	 *
+	 * @return array
+	 */
+	private static function harden_html_sink_values($settings)
+	{
+		foreach (array( 'license_status', 'gdpr' ) as $key) {
+			if (isset($settings[$key]) && is_scalar($settings[$key])) {
+				$settings[$key] = sanitize_key($settings[$key]);
+			}
+		}
+
+		return $settings;
 	}
 
 	/**

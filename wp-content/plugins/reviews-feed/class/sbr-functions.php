@@ -275,10 +275,23 @@ function sbr_plugin_settings_defaults()
 	return [
 		'localization' => '',
 		'optimize_images' => true,
-		'usagetracking' => true,
+		// Must match UsageTracking\Config::is_enabled()'s absent-key fallback, or the
+		// Advanced toggle renders ON for Free and any settings save persists consent.
+		'usagetracking' => Util::sbr_is_pro(),
 		'enqueue_js_in_header' => false,
 		'admin_error_notices' => true,
 		'feed_issue_reports' => true,
+		// SMASH-1756 — emit schema.org rich-snippet markup for feeds (global, default on).
+		'enableSchema' => true,
+		// SBR-499 — WordPress Abilities API write gate (AgDR-0503). Off by
+		// default: reading feed/settings data through the Abilities API is
+		// always allowed, but an AI assistant may only change settings once a
+		// human explicitly opts in via Settings → General ("MCP Write
+		// Access"). Shared by Free and Pro (SBR-577, AgDR-9005): the same
+		// option gates both editions' abilities, so an upgrade or downgrade
+		// keeps the human's choice. Nothing reads or acts on this gate unless
+		// SBR_Abilities::is_available() is true.
+		'ai_write_enabled' => false,
 		'translations' => [
 			'second' => __('second', 'reviews-feed'),
 			'seconds' => __('seconds', 'reviews-feed'),
@@ -293,7 +306,7 @@ function sbr_plugin_settings_defaults()
 			'month' => __('month', 'reviews-feed'),
 			'months' => __('months', 'reviews-feed'),
 			'year' => __('year', 'reviews-feed'),
-			'years' => __('year', 'reviews-feed'),
+			'years' => __('years', 'reviews-feed'),
 			'ago' => __('ago', 'reviews-feed'),
 			'writeReview' => __('Write a Review', 'reviews-feed'),
 			'reviewsHeader' => __('Over %s Reviews', 'reviews-feed'),
@@ -439,6 +452,22 @@ function sbr_scripts_enqueue($enqueue = false)
 
 	$data = array(
 		'adminAjaxUrl'  => admin_url('admin-ajax.php'),
+		// Translatable strings for JS-injected accessible names and SR announcements (WCAG 3.1.2).
+		'a11y'          => array(
+			/* translators: %s: number of reviews just loaded. Announced to screen readers after Load More. */
+			'reviewLoaded'     => __('%s review loaded.', 'reviews-feed'),
+			/* translators: %s: number of reviews just loaded. Announced to screen readers after Load More. */
+			'reviewsLoaded'    => __('%s reviews loaded.', 'reviews-feed'),
+			'allReviewsShown'  => __('All reviews shown.', 'reviews-feed'),
+			'photoViewer'      => __('Review photo viewer', 'reviews-feed'),
+			'previousPhoto'    => __('Previous photo', 'reviews-feed'),
+			'nextPhoto'        => __('Next photo', 'reviews-feed'),
+			'closePhotoViewer' => __('Close photo viewer', 'reviews-feed'),
+			'close'            => __('Close', 'reviews-feed'),
+			'previous'         => __('Previous', 'reviews-feed'),
+			'next'             => __('Next', 'reviews-feed'),
+			'reviewerPhoto'    => __('Reviewer photo', 'reviews-feed'),
+		),
 	);
 	//Pass option to JS file
 	wp_localize_script('sbr_scripts', 'sbrOptions', $data);
@@ -450,9 +479,323 @@ function sbr_scripts_enqueue($enqueue = false)
 }
 add_action('wp_enqueue_scripts', 'sbr_scripts_enqueue', 2);
 
+/**
+ * Register the badge stylesheet (SBR-163).
+ *
+ * Separate from sbr_styles because a badge can render on pages that carry no
+ * feed at all — a footer, a sidebar, a checkout — and those pages should not
+ * have to load the full feed stylesheet to show one badge.
+ *
+ * @return void
+ */
+function sbr_badge_register_styles()
+{
+	$min = ! empty($_GET['sb_debug']) ? '' : '.min'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only debug switch, mirrors sbr_scripts_enqueue()
+
+	// Util::asset_version(), not SBRVER: SBRVER changes on a RELEASE, and two
+	// builds of the same version produce byte-different sheets behind an identical
+	// `?ver=`. Measured on an InstaQA box — the edge answered `cf-cache-status:
+	// HIT`, `age: 3008` with the previous file. That is not hypothetical for these
+	// three: the badge logo row gained `flex-wrap` in this branch, and a cached
+	// copy of the old sheet overflows the badge instead of wrapping it.
+	wp_register_style(
+		'sbr_badges',
+		trailingslashit(SBR_PLUGIN_URL) . 'assets/css/sbr-badges' . $min . '.css',
+		array(),
+		Util::asset_version('assets/css/sbr-badges' . $min . '.css')
+	);
+
+	// The saved-badge styles (chip / card / medal) read ~35 design tokens, so
+	// the token sheet is a hard dependency rather than a convention — without it
+	// every colour and space falls back to the browser's initial value.
+	wp_register_style(
+		'sbr_design_tokens',
+		trailingslashit(SBR_PLUGIN_URL) . 'assets/css/design-tokens/sb-tokens.css',
+		array(),
+		Util::asset_version('assets/css/design-tokens/sb-tokens.css')
+	);
+
+	// Depends on sbr_badges too: the star row is the shared partial, and its
+	// rules live in that sheet.
+	wp_register_style(
+		'sbr_trust_badge',
+		trailingslashit(SBR_PLUGIN_URL) . 'assets/css/sbr-trust-badge' . $min . '.css',
+		array( 'sbr_design_tokens', 'sbr_badges' ),
+		Util::asset_version('assets/css/sbr-trust-badge' . $min . '.css')
+	);
+}
+add_action('wp_enqueue_scripts', 'sbr_badge_register_styles', 2);
+
+/**
+ * Enqueue the badge stylesheet on demand (SBR-163).
+ *
+ * Called by each badge rail only once a badge has actually produced markup, so
+ * a page never carries the CSS for a badge it did not render.
+ *
+ * @return void
+ */
+function sbr_badge_enqueue_styles()
+{
+	if (! wp_style_is('sbr_badges', 'registered')) {
+		sbr_badge_register_styles();
+	}
+
+	wp_enqueue_style('sbr_badges');
+}
+
+/**
+ * Make the design tokens available to every admin screen that mounts the shared
+ * customizer (SBR-163).
+ *
+ * The embed modal — and anything else ported from the design rock — is written
+ * entirely in `var(--sb-*)`. Those resolve to nothing without the token sheet,
+ * so the modal rendered completely unstyled on the feed customizer: the rules
+ * were present in main.css and every value in them was empty. The badge screens
+ * looked right only because they pull the tokens in as a dependency of the
+ * badge stylesheet.
+ *
+ * Hooked rather than added to `sb-customizer-style`'s dependency list because
+ * that handle is registered in five separate builders inside the shared
+ * `smashballoon/customizer` package, which other plugins also ship — they do
+ * not carry this token file, and making it a hard dependency there would fail
+ * for them. Keying off "was the customizer enqueued" keeps the fix on our side
+ * and covers every screen, including ones added later.
+ *
+ * It DOES therefore land on already-released screens — the feed customizer and
+ * the popup editor — which is worth stating because it looks like a BC risk.
+ * Measured before shipping: the token file declares 223 `--sb-*` properties,
+ * and across every stylesheet that shipped before it (the customizer package's
+ * own CSS and this plugin's admin sheets) exactly ZERO of those names are
+ * declared or read. Nothing that already renders resolves a `var(--sb-*)` whose
+ * value this changes; the sheet only adds names that were previously undefined.
+ * If that stops being true, the two files have started to overlap and this
+ * needs revisiting.
+ *
+ * @return void
+ */
+function sbr_admin_enqueue_design_tokens()
+{
+	if (! wp_style_is('sb-customizer-style', 'enqueued') && ! wp_script_is('sb-customizer-app', 'enqueued')) {
+		return;
+	}
+
+	if (! wp_style_is('sbr_design_tokens', 'registered')) {
+		// The SAME versioning as sbr_badge_register_styles(). Whichever function
+		// registers the handle first wins it for the whole request, so a bare
+		// SBRVER here put every admin-only page load back on release-versioning
+		// and reintroduced the staleness the other registration exists to avoid.
+		wp_register_style(
+			'sbr_design_tokens',
+			trailingslashit(SBR_PLUGIN_URL) . 'assets/css/design-tokens/sb-tokens.css',
+			array(),
+			Util::asset_version('assets/css/design-tokens/sb-tokens.css')
+		);
+	}
+
+	wp_enqueue_style('sbr_design_tokens');
+}
+// Priority 20: the builders enqueue the customizer on the default 10, so this
+// has to run after them to see it.
+add_action('admin_enqueue_scripts', 'sbr_admin_enqueue_design_tokens', 20);
+
+/**
+ * Enqueue the saved-badge stylesheet on demand (SBR-163).
+ *
+ * Its own entry point rather than a flag on the one above: the placement
+ * shapes vastly outnumber saved badges on a typical site, and they have no use
+ * for either the token sheet or the chip/card/medal rules.
+ *
+ * @return void
+ */
+function sbr_trust_badge_enqueue_styles()
+{
+	if (! wp_style_is('sbr_trust_badge', 'registered')) {
+		sbr_badge_register_styles();
+	}
+
+	// Dependencies pull in sbr_design_tokens and sbr_badges.
+	wp_enqueue_style('sbr_trust_badge');
+}
+
 function sbr_esc_html_with_br($text)
 {
 	return str_replace(array( '&lt;br /&gt;', '&lt;br&gt;' ), '<br>', esc_html(nl2br($text)));
+}
+
+/**
+ * Neutralize WordPress shortcodes in third-party review content before output.
+ *
+ * Review data imported from connected sources (Google, Yelp, Booking.com, EDD,
+ * etc.) is rendered inside the dynamic `sbr/sbr-feed-block`. WordPress runs
+ * `do_blocks()` on `the_content` at priority 9 and `do_shortcode()` at priority
+ * 11, so any shortcode left in the rendered block markup is expanded
+ * server-side — including a shortcode an unauthenticated visitor planted in a
+ * public review (e.g. a reviewer name or review body of `[gallery ids=1]`).
+ * The escaping helpers (`esc_html()`, `sbr_kses_review_text()`) deliberately leave the
+ * `[` and `]` characters untouched, so they do not stop this on their own.
+ *
+ * Encoding the square brackets to HEX HTML entities (`&#x5B;` / `&#x5D;`) keeps
+ * the literal text visible to the visitor (the browser renders them as `[` / `]`)
+ * while ensuring `do_shortcode()` can never match them. Apply this as the
+ * OUTERMOST wrapper around already-escaped output: `esc_html()` / `sbr_kses_review_text()`
+ * run first on the raw text (they leave `[` and `]` alone), then this encodes the
+ * brackets last.
+ *
+ * HEX, not decimal, is mandatory here: WordPress core's `do_shortcode()` ends by
+ * calling `unescape_invalid_shortcodes()`, which runs
+ * `str_replace( array( '&#91;', '&#93;' ), array( '[', ']' ), $content )` over the
+ * processed content. That reverses the DECIMAL entities `&#91;` / `&#93;` straight
+ * back to raw `[` / `]` — re-arming the very shortcode we just neutralized (the
+ * feed renders through `do_shortcode` via the `[reviews-feed]` shortcode and again
+ * through the block + `the_content` chain, so this fires in practice). It does NOT
+ * touch the hex forms `&#x5B;` / `&#x5D;`, so those survive intact. Using decimal
+ * here is self-defeating; see SMASH-1607 follow-up (CVE-2026-10724 regression).
+ *
+ * @since 2.6.5
+ *
+ * @see https://awesomemotive.atlassian.net/browse/SMASH-1607 (CVE-2026-10724)
+ *
+ * Non-string (e.g. null) or empty input is returned unchanged, so the type is
+ * intentionally permissive — callers pass already-escaped output, but the guard
+ * keeps a stray null/empty safe rather than coercing it.
+ *
+ * @param string|null $text Already-escaped output that may contain shortcode brackets.
+ * @return string|null The text with `[` and `]` encoded to hex HTML entities (`&#x5B;` / `&#x5D;`); the input unchanged if it isn't a non-empty string.
+ */
+function sbr_neutralize_shortcodes($text)
+{
+	if (! is_string($text) || $text === '') {
+		return $text;
+	}
+
+	// Hex entities (not decimal): WordPress core's unescape_invalid_shortcodes()
+	// str_replaces decimal &#91;/&#93; back to [/] inside do_shortcode(), which would
+	// re-arm the shortcode. Hex forms are not reversed. See docblock + SMASH-1607.
+	return str_replace(array( '[', ']' ), array( '&#x5B;', '&#x5D;' ), $text);
+}
+
+/**
+ * Allowlist for rendering a review body. Use this instead of wp_kses_post().
+ *
+ * SMASH-1795 — wp_kses_post() is the *post editor* allowlist and keeps `<img>` with
+ * its class/src/alt, which the feed script then re-parsed out of the alt. This permits
+ * WordPress's comment-formatting set instead: emphasis, lists, quotes, headings and
+ * `a[href|title|rel]`. Links are allowed because Woo/EDD bodies contain them and
+ * wp_kses() drops a disallowed protocol from the href. `img` never is, nor any
+ * attribute the front end reads back and re-parses.
+ *
+ * Runs on the READ path, at every review-text sink, so it also covers bodies already
+ * stored and writers that bypass the write-side filter — Woo and EDD pass
+ * `comment_content` straight into `$review['text']`. `nl2br()` output survives.
+ *
+ * @param string|null $text Raw review body.
+ * @return string Sanitised body, safe to echo.
+ */
+function sbr_kses_review_text($text)
+{
+	if (! is_string($text) || $text === '') {
+		return '';
+	}
+
+	// Resolve an emoji image to its alt BEFORE the allowlist drops the tag, so a 😀
+	// is shown rather than silently deleted. Server-side twin of stripEmojihtml()
+	// (assets/js/sbr-feed.js), resolved the same way — decode once, then escape — so
+	// a payload hidden in the alt lands as inert text here too.
+	// Never let a PCRE failure blank the review. preg_replace_callback() returns NULL
+	// on any engine error (backtrack/recursion limit, JIT stack) and `(string) null`
+	// is '' — which would silently empty the body instead of degrading to unresolved
+	// emoji markup. Same failure shape as the read-more blanking bug (ae11c55): the
+	// safe fallback is the text we already had.
+	//
+	// Measured, so the next reader doesn't have to re-derive it: the pattern is NOT
+	// quadratic on a `>`-less run. Six adversarial shapes — repeated `class=`,
+	// repeated `emoji`, unterminated quotes, stacked `<img` prefixes — at 4 KB to
+	// 36 KB all return in under 1.4ms with preg_last_error() == PREG_NO_ERROR on
+	// PHP 8.2 (pcre.backtrack_limit 1000000). The character classes exclude `>`, so
+	// the required literals gate progression and PCRE fails fast. Invalid UTF-8 is
+	// not a NULL route either: there is no /u modifier, so the match is byte-wise.
+	// The guard is here because the cast was unsafe in principle, not because a
+	// reachable payload was found.
+	$emoji_resolved = preg_replace_callback(
+		'#<img\b[^>]*\bclass\s*=\s*["\']?[^"\'>]*\bemoji\b[^"\'>]*["\']?[^>]*>#i',
+		static function ($match) {
+			if (preg_match('#\balt\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))#i', $match[0], $alt) !== 1) {
+				return '';
+			}
+			$value = $alt[2] ?? '';
+			if ($value === '') {
+				$value = $alt[3] ?? '';
+			}
+			if ($value === '') {
+				$value = $alt[4] ?? '';
+			}
+			return esc_html(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+		},
+		$text
+	);
+	if (is_string($emoji_resolved)) {
+		$text = $emoji_resolved;
+	}
+
+	/**
+	 * Filter the tags allowed in a rendered review body.
+	 *
+	 * Intentionally narrow. Widening this re-opens SMASH-1795 if a tag that can
+	 * carry an attribute the front end later reads back is added.
+	 *
+	 * MUST return an array. A non-array return is ignored — see the guard below.
+	 *
+	 * @param array<string,array<string,array<mixed>>> $tags Allowed tags in wp_kses() format.
+	 */
+	$default = array(
+		'br'         => array(),
+		'em'         => array(),
+		'strong'     => array(),
+		'b'          => array(),
+		'i'          => array(),
+		'p'          => array(),
+		'span'       => array(),
+		// Woo/EDD bodies are raw comment_content, so they legitimately carry the
+		// WP-comment markup below; a narrower list drops it from stored reviews.
+		// No `target`: permitting it without forcing rel="noopener" hands the opened
+		// page a window.opener handle. WP's comment allowlist omits it too.
+		'a'          => array('href' => array(), 'title' => array(), 'rel' => array()),
+		'blockquote' => array('cite' => array()),
+		'q'          => array('cite' => array()),
+		'cite'       => array(),
+		'code'       => array(),
+		'pre'        => array(),
+		'del'        => array(),
+		'ins'        => array(),
+		'ul'         => array(),
+		'ol'         => array(),
+		'li'         => array(),
+		's'          => array(),
+		'strike'     => array(),
+		'u'          => array(),
+		'sub'        => array(),
+		'sup'        => array(),
+		'hr'         => array(),
+		'abbr'       => array('title' => array()),
+		'acronym'    => array('title' => array()),
+		'h1'         => array(),
+		'h2'         => array(),
+		'h3'         => array(),
+		'h4'         => array(),
+		'h5'         => array(),
+		'h6'         => array(),
+	);
+
+	$allowed = apply_filters('sbr_allowed_review_text_tags', $default);
+
+	// wp_kses() reads a STRING second argument as a CONTEXT NAME, so a filter
+	// returning 'post' resolves $allowedposttags — img included — and re-opens this
+	// exact chain. Non-arrays fall back to the default rather than being trusted.
+	if (! is_array($allowed)) {
+		$allowed = $default;
+	}
+
+	return wp_kses($text, $allowed);
 }
 
 
@@ -580,6 +923,112 @@ function sbr_text_domain()
 }
 add_action('init', 'sbr_text_domain');
 
+/**
+ * Drop the cached feed-location map whenever scanned post content changes.
+ *
+ * The map is cached for 12 hours (SMASH-2103), so edits have to invalidate it
+ * rather than wait it out. Revisions and autosaves carry no new embed the parent
+ * post does not already have.
+ *
+ * Scoped to the post types the scan reads: a row of a type the scan skips cannot
+ * change the map, and flushing on one made a site that writes them in volume —
+ * 4M edd_license_log on the reporting site — re-scan on nearly every page load,
+ * which is the cost SMASH-2103 removed.
+ *
+ * $post comes from the action because get_post_type() returns false on
+ * `deleted_post`: core fires it after the row is gone (wp-includes/post.php:3996).
+ * That argument only exists from WP 5.5 and readme.txt:5 still declares 4.1, so an
+ * unresolvable type flushes rather than returns — on older core the alternative is
+ * that no deletion invalidates at all, which is the staleness this hook exists for.
+ *
+ * @param int          $post_id Post being written or deleted.
+ * @param \WP_Post|null $post    Post object as passed by save_post/deleted_post.
+ */
+function sbr_flush_feed_locations_cache($post_id, $post = null): void
+{
+	if (! sbr_post_write_touches_scanned_content($post_id, $post)) {
+		return;
+	}
+
+	\SmashBalloon\Reviews\Common\Customizer\DB::flush_feed_shortcode_locations();
+}
+add_action('save_post', 'sbr_flush_feed_locations_cache', 10, 2);
+add_action('deleted_post', 'sbr_flush_feed_locations_cache', 10, 2);
+
+/**
+ * Whether a post write can have changed what the placement scans see.
+ *
+ * Shared by the feed-location and badge-placement caches, which read the same
+ * post types. Both are 12-hour maps, so both have the same two ways to be wrong:
+ * not flushing on a write that mattered, and flushing on the millions of rows of
+ * a type neither of them reads. See SMASH-2103 and SMASH-2116.
+ *
+ * $post comes from the action because get_post_type() returns false on
+ * `deleted_post`: core fires it after the row is gone (wp-includes/post.php:3996).
+ * That argument only exists from WP 5.5 and readme.txt:5 still declares 4.1, so an
+ * unresolvable type answers true rather than false — on older core the alternative
+ * is that no deletion invalidates at all.
+ *
+ * @param int           $post_id    Post being written or deleted.
+ * @param \WP_Post|null $post       Post object as passed by save_post/deleted_post.
+ * @param string[]|null $post_types The scan's post types. Defaults to the feed
+ *                                  scan's list; the badge scan passes its own,
+ *                                  because its filter can widen it separately.
+ *
+ * @return bool
+ */
+function sbr_post_write_touches_scanned_content($post_id, $post = null, $post_types = null): bool
+{
+	if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) {
+		return false;
+	}
+
+	$post_type = ( is_object($post) && ! empty($post->post_type) )
+		? (string) $post->post_type
+		: (string) get_post_type($post_id);
+
+	if ($post_type === '') {
+		return true;
+	}
+
+	if (! is_array($post_types)) {
+		$post_types = \SmashBalloon\Reviews\Common\Customizer\DB::scanned_post_types();
+	}
+
+	return in_array($post_type, $post_types, true);
+}
+
+/**
+ * Drop the cached badge-placement map when scanned post content changes.
+ *
+ * Separate hook rather than a second line inside the feed one: the two caches are
+ * invalidated by the same writes today, but they belong to different features and
+ * a future change to one should not silently move the other. See SMASH-2116.
+ *
+ * @param int           $post_id Post being written or deleted.
+ * @param \WP_Post|null $post    Post object as passed by save_post/deleted_post.
+ */
+function sbr_flush_badge_instances_cache($post_id, $post = null): void
+{
+	// Tested against the badge scan's OWN list, not DB::scanned_post_types(): the
+	// `sbr_badge_instance_post_types` filter can widen the scan, and a type that is
+	// scanned but cannot invalidate is 12 hours of stale counts on exactly the type
+	// the site opted into.
+	if (
+		! sbr_post_write_touches_scanned_content(
+			$post_id,
+			$post,
+			\SmashBalloon\Reviews\Common\Badges\SBR_Trust_Badge_Store::instance_scan_post_types()
+		)
+	) {
+		return;
+	}
+
+	\SmashBalloon\Reviews\Common\Badges\SBR_Trust_Badge_Store::flush_instance_scans();
+}
+add_action('save_post', 'sbr_flush_badge_instances_cache', 10, 2);
+add_action('deleted_post', 'sbr_flush_badge_instances_cache', 10, 2);
+
 function sbr_get_current_time()
 {
 	$current_time = time();
@@ -700,5 +1149,114 @@ function sbr_get_lang_providers()
 {
 	return [
 		'google'
+	];
+}
+
+/**
+ * Booking.com score band for a single review, on Booking's native 0-10 scale.
+ *
+ * Booking does NOT send a per-review qualifier: the only word its API returns is
+ * `review_score_word`, and that belongs to the PROPERTY (sb-relay
+ * RapidBookingRemoteSourcesRepository:492 — the SOURCE repository, not the reviews one).
+ * Verified on booking.com itself: the property block reads "Scored 9.5 / Exceptional",
+ * while an individual review card reads "Scored 8.0" followed straight by the review text,
+ * with no word. The per-review `title` is the guest's own headline, not a band — at rating 4
+ * our cached rows carry "Very good", "Fabulous", "Wonderful", "Good" and "Fantasico" all at
+ * once, so it cannot be a label.
+ *
+ * So the band is derived from the reviewer's own score. Provenance of each threshold,
+ * because it matters if these ever need defending:
+ *   9.5+  Exceptional  — confirmed twice: Booking's API sent it for source 12166067 at 9.5,
+ *                        and booking.com renders "Rated exceptional / Exceptional" there.
+ *   9.0+  Superb       — confirmed: Booking's API sent it for source 280149 at 9.4. Note
+ *                        third-party write-ups claim "Excellent" for this band; the API
+ *                        disagrees, and the API wins.
+ *   8.0+  Very good    — Booking's published ladder. Their capitalisation, not "Very Good".
+ *   7.0+  Good         — Booking's published ladder.
+ *   6.0+  Pleasant     — Booking's published ladder.
+ *   below              — no word; Booking shows only the number.
+ *
+ * @param float $score Score on the 0-10 scale.
+ * @return string Band word, or '' when the score is below the lowest named band.
+ */
+function sbr_booking_score_word($score)
+{
+	$score = (float) $score;
+
+	if ($score >= 9.5) {
+		return __('Exceptional', 'reviews-feed');
+	}
+	if ($score >= 9) {
+		return __('Superb', 'reviews-feed');
+	}
+	if ($score >= 8) {
+		return __('Very good', 'reviews-feed');
+	}
+	if ($score >= 7) {
+		return __('Good', 'reviews-feed');
+	}
+	if ($score >= 6) {
+		return __('Pleasant', 'reviews-feed');
+	}
+
+	return '';
+}
+
+/**
+ * A single review's Booking score on the native 0-10 scale, from the reviewer's own rating.
+ *
+ * `$post['rating']` is stored 0-5 like every other provider. Booking's reviews API actually
+ * sends `average_score` on a 0-4 scale and the relay converts it with
+ * `round($value * 1.25, 1)` (sb-relay RapidRemoteBookingReviewsRepository::convertRating),
+ * so doubling back inherits up to ±0.125 of that rounding. Exactness needs the relay to
+ * forward the raw score. Verified against booking.com: our 4 -> 8.0 and 4.5 -> 9.0 match the
+ * "Scored 8.0" / "Scored 9.0" cards on the live page for source 12166067.
+ *
+ * @param array $post Normalised review.
+ * @return float Score on the 0-10 scale; 0.0 when there is no usable rating.
+ */
+function sbr_booking_review_score($post)
+{
+	$rating = isset($post['rating']) ? (float) $post['rating'] : 0.0;
+
+	return $rating > 0 ? round($rating * 2, 1) : 0.0;
+}
+
+/**
+ * The colours a Review Alert needs when its accent is an exact hex (SMASH-2220).
+ *
+ * `contrast` is the text colour drawn ON the accent (footer text, link hover): white or the
+ * popup's dark text (#18181B, zinc-900), whichever has the higher WCAG contrast ratio.
+ * `ink` is the accent drawn as a foreground on the white card (stars, icons): the colour itself,
+ * or a dark neutral when it is too light to see on white (contrast ratio vs white under 1.2,
+ * i.e. relative luminance above 0.825: #FFFFFF, #EEEEEE). Gold (#FFD700, 0.70) stays itself.
+ * Mirrored by exactAccentColors() in the customizer's Utils/ColorUtils.js.
+ *
+ * @param mixed $hex Accent colour.
+ * @return array{color: string, contrast: string, ink: string}|null Null unless $hex is #RRGGBB.
+ */
+function sbr_review_alert_accent_colors($hex)
+{
+	if (!is_string($hex) || !preg_match('/^#[0-9a-fA-F]{6}$/', $hex)) {
+		return null;
+	}
+
+	$hex    = strtoupper($hex);
+	$linear = static function (string $pair): float {
+		$value = hexdec($pair) / 255;
+		return $value <= 0.04045 ? $value / 12.92 : (($value + 0.055) / 1.055) ** 2.4;
+	};
+	$luminance = 0.2126 * $linear(substr($hex, 1, 2))
+		+ 0.7152 * $linear(substr($hex, 3, 2))
+		+ 0.0722 * $linear(substr($hex, 5, 2));
+
+	$dark_luminance = 0.009266; // #18181B
+	$on_white       = 1.05 / ($luminance + 0.05);
+	$on_dark        = ($luminance + 0.05) / ($dark_luminance + 0.05);
+
+	return [
+		'color'    => $hex,
+		'contrast' => $on_white >= $on_dark ? '#FFFFFF' : '#18181B',
+		'ink'      => $luminance <= 0.825 ? $hex : '#3F3F46',
 	];
 }

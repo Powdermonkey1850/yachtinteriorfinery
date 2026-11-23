@@ -29,7 +29,10 @@ class SinglePostCache {
 
 	public function __construct($post_data, $media_finder = null, $provider_id = null)
 	{
-		$this->post_data = $post_data;
+		// SMASH-1587: coerce a scalar 'provider' slug into ['name' => ...] before
+		// any $this->post_data['provider']['name'] read in this class (which would
+		// fatal on PHP 8). Shared normalizer in Util — single source of truth.
+		$this->post_data = Util::normalize_review_shape($post_data);
 
 		$upload = wp_upload_dir();
 		$upload_dir = $upload['basedir'];
@@ -91,6 +94,83 @@ class SinglePostCache {
 	}
 
 
+	/**
+	 * Download a remote review image to a local temp file.
+	 *
+	 * Given a URL, the GD image editor calls exif_imagetype() on it, which prints
+	 * a PHP notice when the host refuses PHP's stream reader (Facebook's CDN does).
+	 * So the image is fetched with the WordPress HTTP API and edited locally.
+	 * This runs during a feed render, so the request is short and size-capped.
+	 * The caller deletes the file.
+	 *
+	 * @param string $url Remote image URL.
+	 * @return string|\WP_Error Temp file path, or the download error.
+	 */
+	protected function download_image($url)
+	{
+		if (! function_exists('wp_tempnam')) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+		}
+
+		$max_size = 5 * MB_IN_BYTES;
+		$path     = wp_parse_url($url, PHP_URL_PATH);
+		$file     = wp_tempnam(is_string($path) ? basename($path) : '');
+		$response = wp_safe_remote_get($url, array(
+			'timeout'             => 10,
+			'stream'              => true,
+			'filename'            => $file,
+			'limit_response_size' => $max_size,
+		));
+		$code     = (int) wp_remote_retrieve_response_code($response);
+
+		if (is_wp_error($response)) {
+			$error = $response;
+		} elseif (200 !== $code) {
+			$error = new \WP_Error('http_' . $code, 'HTTP ' . $code);
+		} elseif (filesize($file) >= $max_size) {
+			// The HTTP API stops at the cap but still reports 200, so the file is cut off.
+			$error = new \WP_Error('image_too_large', 'Image is larger than 5 MB');
+		} else {
+			return $file;
+		}
+
+		wp_delete_file($file);
+
+		if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
+			// Host only: Facebook CDN URLs carry signed query parameters.
+			error_log('[SBR] Review image download failed for ' . wp_parse_url($url, PHP_URL_HOST) . ': ' . $error->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- debug-gated diagnostic.
+		}
+
+		return $error;
+	}
+
+	/**
+	 * Resize a downloaded image to each size and save it as "<prefix>-<size>.jpg".
+	 *
+	 * @param string $file        Local image file.
+	 * @param array  $image_sizes Widths to save.
+	 * @param string $prefix      Target path without the size suffix.
+	 * @return array{width: int, height: int}|false The source image size when at least one save worked.
+	 */
+	protected function resize_to_sizes($file, $image_sizes, $prefix)
+	{
+		$saved = false;
+		foreach ($image_sizes as $image_size) {
+			$image_editor = wp_get_image_editor($file);
+			if (is_wp_error($image_editor)) {
+				continue;
+			}
+
+			$sizes = $image_editor->get_size();
+			$image_editor->resize($image_size, null);
+			if ($image_editor->save($prefix . '-' . $image_size . '.jpg')) {
+				$saved = $sizes;
+			}
+		}
+
+		return $saved;
+	}
+
 	public function resize_images($image_sizes)
 	{
 		$new_file_name    = $this->post_data['provider']['name'] . '-' . $this->post_data['review_id'];
@@ -101,33 +181,25 @@ class SinglePostCache {
 		// the process is considered a success if one image is successfully resized
 		$one_successful_image_resize = false;
 
-		foreach ($image_sizes as $image_size) {
-			$i = 0;
-			foreach ($image_source_set as $image_file_to_resize) {
-				if ($i < 10  && $image_file_to_resize['type'] === 'image') {
-					$this_image_file_name = $new_file_name . '-' . $i . '-' .  $image_size . '.jpg';
-
-					$image_editor = wp_get_image_editor($image_file_to_resize['url']);
-					// not uncommon for the image editor to not work using it this way
-					if (! is_wp_error($image_editor)) {
-						$sizes = $image_editor->get_size();
-
-						$image_editor->resize($image_size, null);
-
-						$full_file_name = trailingslashit($this->upload_dir) . $this_image_file_name;
-
-						$saved_image = $image_editor->save($full_file_name);
-
-						if ($saved_image) {
-							$one_successful_image_resize = true;
-						}
-					} else {
-						// was error
+		$i = 0;
+		foreach ($image_source_set as $image_file_to_resize) {
+			// A scalar element (e.g. a flat URL string in reviews_photos) would
+			// fatal the ['type'] read on PHP 8; a partial array element (no
+			// 'type'/'url') would notice. Guard both (SMASH-1587 + PR #482 Copilot).
+			if ($i < 10  && is_array($image_file_to_resize) && isset($image_file_to_resize['type'], $image_file_to_resize['url']) && $image_file_to_resize['type'] === 'image') {
+				// One download per image, resized to every size.
+				$file = $this->download_image($image_file_to_resize['url']);
+				if (! is_wp_error($file)) {
+					$saved_sizes = $this->resize_to_sizes($file, $image_sizes, trailingslashit($this->upload_dir) . $new_file_name . '-' . $i);
+					wp_delete_file($file);
+					if ($saved_sizes) {
+						$sizes                       = $saved_sizes;
+						$one_successful_image_resize = true;
 					}
 				}
-
-				$i++;
 			}
+
+			$i++;
 		}
 
 		if ($one_successful_image_resize) {
@@ -161,7 +233,8 @@ class SinglePostCache {
 		$avatar_id            = $new_file_name . '-' .  $image_size;
 		$this_image_file_name = $avatar_id . '.png';
 
-		$image_editor = wp_get_image_editor($avatar);
+		$file = $this->download_image($avatar);
+		$image_editor = is_wp_error($file) ? $file : wp_get_image_editor($file);
 		// not uncommon for the image editor to not work using it this way
 		if (! is_wp_error($image_editor)) {
 			$sizes = $image_editor->get_size();
@@ -179,6 +252,10 @@ class SinglePostCache {
 			$avatar_id = 'error';
 		}
 
+		// Delete only after save(): WebP editors re-read the file during resize().
+		if (! is_wp_error($file)) {
+			wp_delete_file($file);
+		}
 
 		$this->storage_data['avatar_id'] = $avatar_id;
 	}
@@ -192,8 +269,42 @@ class SinglePostCache {
 			$this->storage_data['aspect_ratio'] = $feed_id_match['aspect_ratio'];
 			$this->storage_data['images_done'] = $feed_id_match['images_done'];
 			$this->storage_data['json_data'] = $feed_id_match['json_data'];
+			// SMASH-1785: mirror the stored avatar_id so update_single() writes back
+			// the same value it read, and so localized_avatar_missing() can see it.
+			$this->storage_data['avatar_id'] = $feed_id_match['avatar_id'] ?? '';
 		}
 		return null !== $feed_id_match;
+	}
+
+	/**
+	 * Whether this review's localized avatar file has gone missing.
+	 *
+	 * `avatar_id` is written once, when the review is first cached, and
+	 * `resize_avatar()` only runs for new reviews. So a cleared or deleted avatar
+	 * file left the row pointing at something that no longer exists, forever
+	 * (SMASH-1785). Callers use this on the fetch path to re-resize.
+	 *
+	 * `error` means the original download/resize already failed; retrying it on
+	 * every fetch would hammer a permanently bad remote URL, so it is left alone.
+	 *
+	 * @return bool
+	 */
+	public function localized_avatar_missing()
+	{
+		// Read through the getter, NOT $this->storage_data: both this class and
+		// Pro\SinglePostCache declare `private $storage_data`, so a method defined here
+		// only ever sees the Common copy, which the Pro subclass never populates. The
+		// getter is overridden in Pro, so it returns whichever copy is actually in use.
+		$storage_data = $this->get_storage_data();
+		$avatar_id    = is_array($storage_data) && isset($storage_data['avatar_id'])
+			? $storage_data['avatar_id']
+			: '';
+
+		if (! is_string($avatar_id) || $avatar_id === '' || $avatar_id === 'error') {
+			return false;
+		}
+
+		return ! file_exists(Util::get_upload_folder_name() . $avatar_id . '.png');
 	}
 
 	public function db_record()
@@ -230,7 +341,7 @@ class SinglePostCache {
 	{
 		$rating = $this->post_data['rating'];
 		if (Util::is_facebook_collection_post($this->post_data)) {
-			$rating = $this->post_data['rating'] === 'positive' ? 5 : 1;
+			$rating = Util::facebook_collection_rating($this->post_data);
 		}
 
 		$now = date('Y-m-d H:i:s');
@@ -291,7 +402,7 @@ class SinglePostCache {
 	{
 		$rating = $this->post_data['rating'];
 		if (Util::is_facebook_collection_post($this->post_data)) {
-			$rating = $this->post_data['rating'] === 'positive' ? 5 : 1;
+			$rating = Util::facebook_collection_rating($this->post_data);
 		}
 
 		$to_store = array(
@@ -309,6 +420,20 @@ class SinglePostCache {
 			array('images_done', $this->storage_data['images_done'], '%d'),
 			array('last_requested', date('Y-m-d H:i:s'), '%s'),
 		);
+
+		// SMASH-1785 (hardened after PR #510 review): persist avatar_id ONLY when we
+		// actually hold one. db_record_exists() mirrors the stored value, but not every
+		// caller routes through it — SBR_Feed_Saver_Manager::create_update_collection_review()
+		// branches on its own $is_new flag and reaches update_single() with storage_data
+		// still at the constructor default. Writing unconditionally clobbered that
+		// review's stored avatar_id to '' and un-localized its avatar. Omitting the
+		// column leaves the stored value untouched, so a caller that skipped the mirror
+		// is a no-op instead of destructive. Nothing legitimately needs to blank it —
+		// a failed resize stores the non-empty marker 'error'.
+		$avatar_id = $this->storage_data['avatar_id'] ?? '';
+		if (is_string($avatar_id) && $avatar_id !== '') {
+			$to_store[] = array('avatar_id', $avatar_id, '%s');
+		}
 		$data = array();
 		$format = array();
 		foreach ($to_store as $single_store) {
@@ -322,6 +447,14 @@ class SinglePostCache {
 		$where_format = array();
 
 		$where['post_id'] = $this->post_data['review_id'];
+		$where_format[] = '%s';
+
+		// Scope by language: db_record() (the existence gate that precedes this update)
+		// keys on (post_id, lang, provider_id), but this UPDATE matched post_id alone —
+		// so a single-language update overwrote every sibling-language row for the same
+		// review, collapsing them onto the last-written text. Only 'google' carries a
+		// non-'' lang, so other providers keep lang='' here and are unaffected (SMASH-1631).
+		$where['lang'] = $this->lang;
 		$where_format[] = '%s';
 
 		if ($strict_update) {
@@ -352,6 +485,12 @@ class SinglePostCache {
 		$where_format = array();
 
 		$where['post_id'] = $this->post_data['review_id'];
+		$where_format[] = '%s';
+		// Scope by language, same reason as update_single(): without it a post_id-only
+		// UPDATE overwrites every sibling-language row for the review. Callers set
+		// $this->lang to the row's own language (or leave the '' default for non-lang
+		// providers), so this targets exactly the intended row (SMASH-1631).
+		$where['lang'] = $this->lang;
 		$where_format[] = '%s';
 		$table_name = esc_sql($wpdb->prefix . self::POSTS_TABLE_NAME);
 		$error      = $wpdb->update($table_name, $data, $where, $format, $where_format);

@@ -37,3 +37,12 @@ html body {
 }
 
 }
+
+
+.slide-in-menu-container {
+  pointer-events: none;
+}
+
+.slide-in-menu-container.slide-in-menu {
+  pointer-events: auto;
+}

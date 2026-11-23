@@ -55,14 +55,16 @@ class Tooltip_Wizard {
 
 		wp_enqueue_script(
 			'sby-admin-tooltip-wizard',
-			Util::getPluginAssets('js', 'tooltip-wizard'), 
+			Util::getPluginAssets('js', 'tooltip-wizard'),
 			[ 'jquery' ],
-			SBYVER
+			Util::assetVersion(Util::getPluginAssets('js', 'tooltip-wizard'))
 		);
 
 		$wp_localize_data = [];
 		if( $this->check_gutenberg_wizard() ){
 			$wp_localize_data['sby_wizard_gutenberg'] = true;
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$wp_localize_data['sby_wizard_feed_id'] = absint($_GET['sby_wizard']);
 		}
 
 		wp_localize_script(

@@ -15,6 +15,27 @@ if (! is_array($settings)) {
 
 $preserve_settings = ! empty($settings['preserve_settings']) && $settings['preserve_settings'];
 
+// Cron events are cleared unconditionally: they are runtime state, not
+// settings, and leaving them scheduled after deletion fires handler-less
+// events weekly forever.
+$cron_keys = array(
+	'sbr_cron_additional_batch',
+	'sbr_feed_update',
+	'sbr_usage_tracking_cron',
+	'sbr_smash_usage_tracking_cron',
+);
+foreach ($cron_keys as $key) {
+	wp_clear_scheduled_hook($key);
+}
+
+// Abilities API state tokens + slots (SBR_State_Token::PREFIX) are 15-minute
+// transients, i.e. runtime state, so they are removed even when settings are
+// preserved. They deliberately do not start with `sbr_`, so no cache-wipe
+// pattern reaches them; remove the transient and its timeout row explicitly.
+global $wpdb;
+$wpdb->query("DELETE FROM {$wpdb->options} WHERE `option_name` LIKE ('\_transient\_sb\_abilities\_sbr\_state\_%')");
+$wpdb->query("DELETE FROM {$wpdb->options} WHERE `option_name` LIKE ('\_transient\_timeout\_sb\_abilities\_sbr\_state\_%')");
+
 if (! $preserve_settings) {
 	// wp_options
 	$wp_options_keys = array(
@@ -24,6 +45,15 @@ if (! $preserve_settings) {
 		'sbr_db_version',
 		'sbr_settings',
 		'sbr_statuses',
+		'sbr_usage_tracking_config',
+		'sbr_smash_usage_tracking',
+		'sbr_smash_usage_tracking_site_token',
+		'sbr_smash_usage_tracking_schedule',
+		'sbr_smash_usage_events',
+		'sbr_smash_usage_active_dates',
+		'sbr_smash_usage_session_durations',
+		// RemoteRequest::GAP_OPTION; a leftover `closed` entry stops a re-added place from getting its fill.
+		'sbr_google_gap_fill',
 	);
 	foreach ($wp_options_keys as $key) {
 		delete_option($key);
@@ -32,15 +62,6 @@ if (! $preserve_settings) {
 	// user roles
 	global $wp_roles;
 	$wp_roles->remove_cap('administrator', 'manage_reviews_feed_options');
-
-	// cron events
-	$cron_keys = array(
-		'sbr_cron_additional_batch',
-		'sbr_feed_update',
-	);
-	foreach ($cron_keys as $key) {
-		wp_clear_scheduled_hook($key);
-	}
 
 	// custom tables
 	global $wpdb;
@@ -63,12 +84,26 @@ if (! $preserve_settings) {
 	$upload = wp_upload_dir();
 	$folder = trailingslashit($upload['basedir']) . trailingslashit('sbr-feed-images');
 	$image_files = glob($folder . '*'); // get all file names
-	foreach ($image_files as $file) { // iterate files
+	foreach ((array) $image_files as $file) { // iterate files (glob can return false)
 		if (is_file($file)) {
 			unlink($file);
 		}
 	}
 
+	// $wp_filesystem is not initialised during plugin deletion — calling
+	// ->delete() on null fatals and aborts the uninstall midway.
 	global $wp_filesystem;
-	$wp_filesystem->delete($folder, true);
+	if (! $wp_filesystem && function_exists('WP_Filesystem')) {
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		WP_Filesystem();
+	}
+	if ($wp_filesystem) {
+		$wp_filesystem->delete($folder, true);
+	}
 }
+
+// Gate epoch (SBR_Write_Gate::EPOCH_OPTION). Deleted LAST, after sbr_settings: if the
+// plugin's hooks were ever live in this request, deleting the settings option fires
+// delete_option_sbr_settings, which re-creates the epoch. Runtime state, so removed
+// even when settings are preserved (the tokens it guards are already gone).
+delete_option('sb_abilities_sbr_gate_epoch');

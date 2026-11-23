@@ -103,6 +103,18 @@ class SBR_Feed_Builder extends Feed_Builder {
 			'collectionsPageUrl' => admin_url('admin.php?page=sbr-collections'),
 			'aboutPageUrl' => admin_url('admin.php?page=sbr-about'),
 			'builderUrl'           => admin_url('admin.php?page=sbr'),
+			// Embed destinations for the shared modal. The same list the badge
+			// builder localises, from the same provider — the modal is one
+			// component now, so the two rails cannot offer different places.
+			'embedTargets'         => \SmashBalloon\Reviews\Common\SBR_Embed_Targets::get(),
+			// function_exists: wp_is_block_theme() is WP 5.9, readme.txt declares
+			// "Requires at least: 4.1". Unguarded this is a fatal on the main
+			// admin screen for anyone below that, which is the same guard the
+			// codebase already puts on parse_blocks() and
+			// get_block_wrapper_attributes().
+			'siteEditorURL' => ( function_exists('wp_is_block_theme') && wp_is_block_theme() )
+				? admin_url('site-editor.php')
+				: '',
 			'bulkHistorySources'    => get_option('sbr_bulk_sources', []),
 			'freeRetrieverData'     => Util::get_free_retriever_data(),
 			'emailVerificationURL'    => EmailVerification::build_email_verification_url(admin_url('admin.php?page=sbr')),
@@ -225,13 +237,22 @@ class SBR_Feed_Builder extends Feed_Builder {
 				shuffle($posts);
 			}
 
+			// SMASH-1583: backfill empty per-source counts (Facebook recommendations
+			// persist total_rating: 0) on the initial customizer hydration too, so the
+			// preview header is correct on first open — not only after the first edit
+			// triggers the fly-preview AJAX. Same helper, same rule as the front end.
+			$sources_list = SBR_Sources::get_sources_list([
+				'id' => !empty($settings['sources']) && isset($settings['sources']) ? $settings['sources'] : [],
+			]);
+			$sources_list = SBR_Feed_Saver_Manager::backfill_preview_source_counts($sources_list, $feed->get_posts());
+
 			return [
 				'feed_info' => $feed_db_data,
 				'settings' => $settings,
 				'posts' => !empty($posts) ? $posts : [],
-				'sourcesList' => SBR_Sources::get_sources_list([
-					'id' => !empty($settings['sources']) && isset($settings['sources']) ? $settings['sources'] : [],
-				])
+				'sourcesList' => $sources_list,
+				// SMASH-1610: why the preview may be empty, for the editor to say so.
+				'relayErrors' => $feed->get_relay_errors(),
 			];
 		}
 		return [];

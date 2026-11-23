@@ -2,4 +2,4 @@
 
 namespace Smashballoon\TwitterFeed\Vendor;
 
-return array('dependencies' => array('react', 'react-dom', 'wp-components', 'wp-i18n'), 'version' => '58f662d5f938e9d3f65e');
+return array('dependencies' => array('react', 'react-dom', 'wp-components', 'wp-i18n'), 'version' => '66aaa63d29073d800ac7');

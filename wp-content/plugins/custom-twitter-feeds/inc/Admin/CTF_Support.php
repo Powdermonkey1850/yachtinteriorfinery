@@ -87,12 +87,9 @@ class CTF_Support {
             return;
         }
 
-        wp_enqueue_style(
-            'ctf-fira-code-font',
-            'https://fonts.googleapis.com/css2?family=Fira+Code&display=swap',
-            false,
-            CTF_VERSION
-        );
+        // Fira Code was loaded from Google Fonts (external CDN, disallowed by
+        // WP.org). Dropped — the code sample falls back to the system monospace
+        // font, with no external request.
 
         wp_enqueue_style(
             'support-style',
@@ -103,7 +100,7 @@ class CTF_Support {
 
         wp_enqueue_script(
             'vue-main',
-            'https://cdn.jsdelivr.net/npm/vue@2.6.12',
+            CTF_PLUGIN_URL . 'admin/builder/assets/js/vue.min.js',
             null,
             '2.6.12',
             true
@@ -143,6 +140,10 @@ class CTF_Support {
             );
         }
 
+        // Plain text, rendered with v-text. wp_localize_script() decodes the entities
+        // esc_html() added, so this string can never go through v-html (SMASH-2491).
+        $system_info = str_replace( array( '</br>', '<br>' ), "\n", $this->get_system_info() );
+
         $return = array(
             'admin_url'         => admin_url(),
             'ajax_handler'      => admin_url( 'admin-ajax.php' ),
@@ -150,8 +151,8 @@ class CTF_Support {
             'links'             => \TwitterFeed\Builder\CTF_Feed_Builder::get_links_with_utm(),
             'supportPageUrl'    => admin_url( 'admin.php?page=ctf-support' ),
             'siteSearchUrl'     => 'https://smashballoon.com/search/?utm_campaign=twitter-free&utm_source=support&utm_medium=search',
-            'system_info'       => $this->get_system_info(),
-            'system_info_n'     => str_replace("</br>", "\n", $this->get_system_info()),
+            'system_info'       => $system_info,
+            'system_info_n'     => $system_info,
             'feeds'             => $feeds,
             'supportUrl'        => $this->get_support_url(),
             'svgIcons'          => CTF_Feed_Builder::builder_svg_icons(),
@@ -553,7 +554,8 @@ class CTF_Support {
 			$output .= '</br>';
 
 			foreach ( $cron_report as $key => $value ) {
-				if ( $key !== 'notes' ) {
+				// Keys are feed IDs. A report written before SMASH-2491 can hold one a request planted.
+				if ( 'notes' !== $key && ctf_is_valid_feed_cache_id( (string) $key ) ) {
 					$output .= esc_html( $key ) . ':';
 					$output .= '</br>';
 					if ( ! empty( $value['last_retrieve'] ) ) {

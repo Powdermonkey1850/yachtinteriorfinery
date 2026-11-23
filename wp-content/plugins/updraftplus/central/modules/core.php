@@ -1,6 +1,6 @@
 <?php
 
-if (!defined('UPDRAFTCENTRAL_CLIENT_DIR')) die('No access.');
+if (!defined('ABSPATH')) die('No direct access allowed');
 
 /**
  * - A container for RPC commands (core UpdraftCentral commands). Commands map exactly onto method names (and hence this class should not implement anything else, beyond the constructor, and private methods)
@@ -68,8 +68,24 @@ class UpdraftCentral_Core_Commands extends UpdraftCentral_Commands {
 		if (!empty($site_icon_url)) {
 			$content = file_get_contents($site_icon_url);
 
+			$headers = array();
+
+			if (function_exists('http_get_last_response_headers')) {
+				// Preferred approach in PHP 8.4+ where $http_response_header is deprecated.
+				$headers = http_get_last_response_headers();
+			} else {
+				// Legacy fallback for older PHP versions.
+				// Used get_defined_vars() to avoid directly referencing
+				// $http_response_header, which is injected into local scope by PHP.
+				$defined_vars = get_defined_vars();
+
+				if (isset($defined_vars['http_response_header'])) {
+					$headers = $defined_vars['http_response_header'];
+				}
+			}
+
 			$mime_type = '';
-			foreach ($http_response_header as $value) {
+			foreach ($headers as $value) {
 				if (false !== stripos($value, 'content-type:')) {
 					list(, $mime_type) = explode(':', preg_replace('/\s+/', '', $value));
 					break;
@@ -111,7 +127,12 @@ class UpdraftCentral_Core_Commands extends UpdraftCentral_Commands {
 			if (!class_exists('wp_tempnam')) include_once(ABSPATH.'/wp-admin/includes/file.php');
 			$temp_img_file = wp_tempnam();
 			@file_put_contents($temp_img_file, $decoded_data); // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged -- Silenced to suppress errors that may arise because of the call.
-			$mime_type = wp_get_image_mime($temp_img_file);
+			if (function_exists('wp_get_image_mime')) {
+				$mime_type = wp_get_image_mime($temp_img_file);
+			} else {
+				$image_info = @getimagesize($temp_img_file); // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged -- Silenced to suppress errors that may arise because of the call.
+				$mime_type = !empty($image_info['mime']) ? $image_info['mime'] : false;
+			}
 			@unlink($temp_img_file); // phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged -- Silenced to suppress errors that may arise if the file doesn't exist.
 			$allowed_ext = array('jpg', 'jpeg', 'png', 'gif', 'bmp', 'tif', 'webp', 'avif', 'heic');
 			if (false !== $mime_type && !empty($matches[1]) && strtolower($mime_type) === strtolower($matches[1]) && !empty($file_ext) && in_array(strtolower($file_ext), $allowed_ext)) {

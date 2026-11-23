@@ -4,8 +4,8 @@ jQuery(function ($) {
    const disableOptionsInit = function () {
       const container = $(this);
       // Disable some options
-      const disableOptions = function (select) {
-         select.find('option[value="***disabled***"]').attr('disabled', 'disabled');
+      const disableOptions = function () {
+         container.find('.gform-settings-generic-map__row select option[value="***disabled***"]').attr('disabled', 'disabled');
       };
       const addFieldLimit = 2;
       const disableAddFieldButton = function () {
@@ -14,22 +14,16 @@ jQuery(function ($) {
              container.find('.gform-settings-generic-map__table tbody').find('.gform-settings-generic-map__row').length >= addFieldLimit + 1
          );
       };
-      disableOptions(container.find('.gform-settings-generic-map__row select'));
-      disableAddFieldButton();
-      // Disable select options when a new row is added + disable + button if we already have two rows (email & consent)
-      container.find('.gform-settings-generic-map__table tbody').each(function () {
-         var targetNode = this;
-         var config = { childList: true };
-         var observer = new MutationObserver(function(mutationsList) {
-            for(var mutation of mutationsList) {
-               if (mutation.type == 'childList') {
-                  disableOptions($(targetNode).find('select'));
-                  disableAddFieldButton();
-               }
-            }
-         });
-         observer.observe(targetNode, config);
-      });
+      const refresh = function () {
+         disableOptions();
+         disableAddFieldButton();
+      };
+      refresh();
+      // The mapping table is rendered by Gravity Forms after DOM ready, so watch the whole
+      // section: re-apply on any node insertion/removal (initial render, added/removed rows).
+      // Only childList mutations are observed, so setting attributes above cannot re-trigger it.
+      const observer = new MutationObserver(refresh);
+      observer.observe(container.get(0), { childList: true, subtree: true });
    };
 
    $('#gform-settings-section-wpco-sib-integration-settings').each(disableOptionsInit);

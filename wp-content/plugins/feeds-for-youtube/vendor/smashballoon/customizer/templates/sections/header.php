@@ -42,9 +42,9 @@
             <span>{{genericText.backAllFeeds}}</span>
 		</button>
 		<div class="sbc-csz-hd-name" :data-edit="viewsActive.editName">
-			<input id="sbc-csz-hd-input" v-model="customizerFeedData.feed_info.feed_name" type="text" :style="'width:' + customizerScreens.inputNameWidth + ';'" :onfocus="updateInputWidth()" :onkeypress="updateInputWidth()" @keyup.enter="activateView('editName')">
+			<input id="sbc-csz-hd-input" :aria-label="genericText.feedName" v-model="customizerFeedData.feed_info.feed_name" type="text" :style="'width:' + customizerScreens.inputNameWidth + ';'" :onfocus="updateInputWidth()" :onkeypress="updateInputWidth()" @keyup.enter="activateView('editName')">
 			<span class="sb-bold sb-standard-p" v-if="!viewsActive['editName']">{{customizerFeedData.feed_info.feed_name}}</span>
-			<button v-if="customizerFeedData.feed_info.id !== 'legacy'" class="sbc-csz-name-ed-btn" v-html="viewsActive.editName ? svgIcons['checkmarklarge'] : svgIcons['edit']" @click.prevent.default="activateView('editName')"></button>
+			<button v-if="customizerFeedData.feed_info.id !== 'legacy'" class="sbc-csz-name-ed-btn" :aria-label="(viewsActive.editName ? genericText.saveSettings : genericText.edit) + ' — ' + (genericText.feedName || 'Feed Name')" v-html="viewsActive.editName ? svgIcons['checkmarklarge'] : svgIcons['edit']" @click.prevent.default="activateView('editName')"></button>
 		</div>
 
 		<div class="sbc-csz-hd-actions">
@@ -54,7 +54,7 @@
                     </svg>
 				<span>{{genericText.help}}</span>
 			</a>
-			<button v-if="customizerFeedData.feed_info.id !== 'legacy'" class="sbc-yt-hd-btn sbc-csz-btn-embd sbc-btn-dark sb-button-standard" @click.prevent.default="activateView('embedPopup', null, true)">
+			<button v-if="customizerFeedData.feed_info.id !== 'legacy'" class="sbc-yt-hd-btn sbc-csz-btn-embd sbc-btn-dark sb-button-standard" @click.prevent.default="openEmbedModal()">
                 <svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M16 6L12.2287 9.77133L11.286 8.82867L14.1147 6L11.286 3.17133L12.2287 2.22867L16 6ZM1.88533 6L4.714 8.82867L3.77133 9.77133L0 6L3.77133 2.22867L4.71333 3.17133L1.88533 6ZM6.52533 12H5.10667L9.47467 0H10.8933L6.52533 12Z" fill="white"/>
                 </svg>

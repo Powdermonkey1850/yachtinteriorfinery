@@ -134,8 +134,6 @@ cffBuilder = new Vue({
 		pluginType	: cff_builder.pluginType,
 		genericText	: cff_builder.genericText,
 		ajaxHandler : cff_builder.ajax_handler,
-		adminPostURL : cff_builder.adminPostURL,
-		widgetsPageURL : cff_builder.widgetsPageURL,
 		translatedText : cff_builder.translatedText,
 		socialShareLink : cff_builder.socialShareLink,
 		licenseType: cff_builder.licenseType,
@@ -146,7 +144,6 @@ cffBuilder = new Vue({
 		allFeedsScreen 	 : cff_builder.allFeedsScreen,
 		extensionsPopup  : cff_builder.extensionsPopup,
 		mainFooterScreen : cff_builder.mainFooterScreen,
-		embedPopupScreen : cff_builder.embedPopupScreen,
 
 		newManualSourcePopup : cff_builder.newManualSourcePopup,
 
@@ -190,7 +187,6 @@ cffBuilder = new Vue({
 				'welcome',
 				'selectFeed'
 			],
-			footerWidget : false,
 
 			// welcome, selectFeed
 			pageScreen : 'welcome',
@@ -212,9 +208,6 @@ cffBuilder = new Vue({
 			clipboardCopiedNotif : false,
 			legacyFeedsShown : false,
 			editName : false,
-			embedPopup : false,
-			embedPopupScreen : 'step_1',
-			embedPopupSelectedPage : null,
 
             // onboarding
 			onboardingPopup : cff_builder.allFeedsScreen.onboarding.active,
@@ -280,7 +273,6 @@ cffBuilder = new Vue({
 
 		customizerFeedDataInitial : null,
 		customizerFeedData 	: cff_builder.customizerFeedData,
-		wordpressPageLists  : cff_builder.wordpressPageLists,
 		iscustomizerScreen  	: (cff_builder.customizerFeedData != undefined && cff_builder.customizerFeedData != false),
 
 		customizerSidebarBuilder : cff_builder.customizerSidebarBuilder,
@@ -364,6 +356,7 @@ cffBuilder = new Vue({
 		//Onboarding Wizard
 		onboardingWizardContent : cff_builder.onboardingWizardContent,
 		currentOnboardingWizardStep : 0,
+		stepAnnouncement : '',
 		onboardingWizardStepContent : {},
 		currentOnboardingWizardActiveSettings : {},
 		onboardingSuccessMessages : cff_builder.onboardingWizardContent.successMessages,
@@ -436,6 +429,7 @@ cffBuilder = new Vue({
 
 		if(cffStorage?.setCurrentStep !== undefined){
 			self.currentOnboardingWizardStep = 1;
+			self.recordUsageEvent( 'setup_wizard_started' );
 			cffStorage.removeItem("setCurrentStep");
 		}
 
@@ -445,6 +439,47 @@ cffBuilder = new Vue({
 			var self = this;
 			self.customizerFeedData.settings[id] = (self.customizerFeedData.settings[id].a == 1) ? self.customizerFeedData.settings[id].hex : self.customizerFeedData.settings[id].hex8;
 		},
+		/**
+		 * Save the feed, then open the sb-customizer Embed Feed modal.
+		 */
+		openEmbedModal : function(){
+			var self = this,
+				notify = function(type, text, ms){
+					var el = {type : type, text : text, shown : 'shown'};
+					self.notificationElement = el;
+					setTimeout(function(){
+						el.shown = 'hidden';
+					}, ms || 3000);
+				},
+				showShortcode = function(textKey){
+					// Show the shortcode after the save toast, which shares the one notification slot.
+					self.saveFeedSettings(function(){
+						notify('error', self.genericText[textKey].replace('%s', '[custom-facebook-feed feed=' + self.customizerFeedData.feed_info.id + ']'), 15000);
+					});
+				};
+			// Add to a Page relies on the feed block, which registers through block.json (WordPress 5.8+).
+			if (!window.SBEmbedModal || !cff_builder.embedModalSupported) {
+				showShortcode('embedUnavailable');
+				return;
+			}
+			try {
+				window.SBEmbedModal.open({
+					feedId : self.customizerFeedData.feed_info.id,
+					onCopy : function(text){
+						notify('success', text);
+					},
+					onCopyFailed : function(){
+						notify('error', self.genericText.copyFailed);
+					}
+				});
+			} catch (e) {
+				// The modal could not mount: give the shortcode instead.
+				showShortcode('embedOpenFailed');
+				return;
+			}
+			self.saveFeedSettings();
+		},
+
 		/**
 		 * Show & Hide View
 		 *
@@ -483,9 +518,6 @@ cffBuilder = new Vue({
 				}
 				if(viewName == 'editName'){
 					document.getElementById("cff-csz-hd-input").focus();
-				}
-				if(viewName == 'embedPopup' && ajaxAction == true){
-					self.saveFeedSettings();
 				}
 				if((viewName == 'sourcePopup' || viewName == 'sourcePopupType') && sourcePopupType == 'creationRedirect'){
 					setTimeout(function(){
@@ -546,8 +578,32 @@ cffBuilder = new Vue({
 		 * @since 4.0
 		 */
 		switchScreen: function(screenType, screenName){
+			let self = this;
 			this.viewsActive[screenType] = screenName;
 			cffBuilder.$forceUpdate();
+			// SMASH-1378 a11y (WCAG 2.4.3): step transitions swap the visible
+			// section via v-if, but focus stayed on the now-hidden Next button
+			// and fell through to the next focusable in the DOM (the floating
+			// Help Widget button). Move focus into the newly shown step's
+			// heading so keyboard/SR users keep their place in the flow. Mirrors
+			// the IG builder step-heading-focus pattern used elsewhere in 1378.
+			self.$nextTick(function () {
+				let createCtn = document.querySelector('.cff-fb-create-ctn');
+				if (!createCtn) return;
+				// The visible step is the section container that is NOT hidden
+				// by its v-if (Vue removes hidden v-if nodes from the DOM).
+				let heading = createCtn.querySelector(
+					'.cff-fb-types-ctn h4, .cff-fb-slctsrc-ctn h4, .cff-fb-sec-heading h4'
+				);
+				if (!heading) return;
+				if (!heading.hasAttribute('tabindex')) {
+					heading.setAttribute('tabindex', '-1');
+				}
+				heading.focus();
+				if (typeof heading.scrollIntoView === 'function') {
+					heading.scrollIntoView({ block: 'nearest' });
+				}
+			});
 		},
 
 		/**
@@ -608,10 +664,10 @@ cffBuilder = new Vue({
 		 *
 		 * @since 4.0
 		 */
-		ajaxPost : function(data, callback){
+		ajaxPost : function(data, callback, onError){
 			var self = this;
 			data['nonce'] = data.nonce ? data.nonce : this.nonce;
-			self.$http.post(self.ajaxHandler,data).then(callback);
+			self.$http.post(self.ajaxHandler,data).then(callback, onError);
 		},
 
 		/**
@@ -621,6 +677,28 @@ cffBuilder = new Vue({
 		 *
 		 * @return boolean
 		 */
+		/**
+		 * HTML-encode a value before it is concatenated into markup or bound with v-html.
+		 * Used by printPostText() / processPostTags() to neutralize HTML in untrusted
+		 * Facebook content (post message, description, link title, tagged names) before
+		 * the link/tag/newline transforms run.
+		 *
+		 * @since 4.13.1
+		 *
+		 * @return String
+		 */
+		escapeHtml : function( value ){
+			if ( value === null || value === undefined ) {
+				return '';
+			}
+			return String( value )
+				.replace( /&/g, '&amp;' )
+				.replace( /</g, '&lt;' )
+				.replace( />/g, '&gt;' )
+				.replace( /"/g, '&quot;' )
+				.replace( /'/g, '&#39;' );
+		},
+
 		hasOwnNestedProperty : function(obj,propertyPath) {
 		  if (!propertyPath){return false;}var properties = propertyPath.split('.');
 		  for (var i = 0; i < properties.length; i++) {
@@ -1145,7 +1223,6 @@ cffBuilder = new Vue({
 		closeTooltipBig : function(){
 			var self = this;
 			self.processDomList('.cff-fb-onbrd-tltp-elem', [['data-active', 'false']]);
-			window.event.stopPropagation();
 			cffBuilder.$forceUpdate();
 		},
 
@@ -1389,16 +1466,59 @@ cffBuilder = new Vue({
 		 * @since 4.0
 		 */
  		showColorPickerPospup : function(controlId){
-			this.customizerScreens.activeColorPicker = controlId;
+			let self = this;
+			self.customizerScreens.activeColorPicker = controlId;
+			// SMASH-1378 a11y: move focus into the picker dialog when it
+			// opens so keyboard users can immediately interact with it.
+			self.$nextTick(function () {
+				let popup = document.getElementById('sb-colorpicker-popup-' + controlId);
+				if (!popup) return;
+				// Prefer the first focusable input inside the sketch-picker
+				// (hex/RGB/A inputs). Fall back to the picker dialog itself.
+				let focusable = popup.querySelector('input, [tabindex]:not([tabindex="-1"]), button');
+				if (focusable && focusable !== popup) {
+					focusable.focus();
+				} else {
+					popup.focus();
+				}
+			});
  		},
 
  		/**
 		 * Hide Color Picker
 		 *
+		 * When a controlId is passed (keyboard dismissal via Esc), focus is
+		 * returned to the swatch button so tab order stays predictable. The
+		 * mouse-driven clickaway path calls this without an argument, which
+		 * skips the refocus so we don't steal focus from wherever the user
+		 * just clicked.
+		 *
 		 * @since 4.0
 		 */
- 		hideColorPickerPospup : function(){
-			this.customizerScreens.activeColorPicker = null;
+ 		hideColorPickerPospup : function(controlId){
+			let self = this;
+			self.customizerScreens.activeColorPicker = null;
+			if (typeof controlId === 'string' && controlId) {
+				// SMASH-1378 a11y: explicit keyboard dismissal — return
+				// focus to the originating swatch button.
+				self.$nextTick(function () {
+					let swatch = document.getElementById('sb-colorpicker-swatch-' + controlId);
+					if (swatch) swatch.focus();
+				});
+			}
+ 		},
+
+ 		/**
+		 * Toggle Color Picker (open if closed, close if open)
+		 *
+		 * @since SMASH-1378
+		 */
+ 		toggleColorPickerPospup : function(controlId){
+			if (this.customizerScreens.activeColorPicker === controlId) {
+				this.hideColorPickerPospup(controlId);
+			} else {
+				this.showColorPickerPospup(controlId);
+			}
  		},
 
 		switchCustomizerPreviewDevice : function(previewScreen){
@@ -1412,6 +1532,35 @@ cffBuilder = new Vue({
 			},200)
 			cffBuilder.$forceUpdate();
 		},
+		/**
+		 * Roving-tabindex arrow-key navigation for the customizer sidebar
+		 * tablist (Customize / Settings). Ported from instagram-feed-pro.
+		 *
+		 * @since 4.0
+		 */
+		handleCustomizerTabKeydown: function (event, direction) {
+			let self = this,
+				tabIds = Object.keys(self.customizerSidebarBuilder || {}),
+				currentIdx = tabIds.indexOf(self.customizerScreens.activeTab),
+				nextIdx = currentIdx;
+			if (tabIds.length === 0 || currentIdx === -1) return;
+			if (direction === 'right') {
+				nextIdx = (currentIdx + 1) % tabIds.length;
+			} else if (direction === 'left') {
+				nextIdx = (currentIdx - 1 + tabIds.length) % tabIds.length;
+			} else if (direction === 'home') {
+				nextIdx = 0;
+			} else if (direction === 'end') {
+				nextIdx = tabIds.length - 1;
+			}
+			if (nextIdx === currentIdx) return;
+			self.switchCustomizerTab(tabIds[nextIdx]);
+			self.$nextTick(function () {
+				let nextBtn = document.getElementById('sb-customizer-tab-' + tabIds[nextIdx]);
+				if (nextBtn) nextBtn.focus();
+			});
+		},
+
 		switchCustomizerTab : function(tabId){
 			var self = this,
 				domBody = document.getElementsByTagName("body")[0];
@@ -1481,6 +1630,86 @@ cffBuilder = new Vue({
 			}
 
 			self.customizerControlAjaxAction('feedFlyPreview');
+		},
+
+		/**
+		 * Roving tabindex + arrow-key navigation for radiogroup-pattern
+		 * controls (toggleset, togglebutton). Walks the rendered DOM so
+		 * we honor v-show / aria-disabled visibility, moves focus to the
+		 * target option, and auto-activates per the WAI-ARIA radio pattern.
+		 *
+		 * @param {KeyboardEvent} event   Keyboard event from the current radio.
+		 * @param {Object}        control Control definition (id, options, ajaxAction).
+		 * @param {String}        action  'prev' | 'next' | 'first' | 'last'.
+		 * @since 4.0
+		 */
+		onTogglesetArrowKey: function (event, control, action) {
+			let self = this;
+			let currentEl = event.currentTarget;
+			if (!currentEl) {
+				return;
+			}
+			let group = currentEl.closest('[role="radiogroup"]');
+			if (!group) {
+				return;
+			}
+			// Only options that are currently rendered (v-show keeps the
+			// node but sets display:none) and not aria-disabled.
+			let radios = Array.prototype.filter.call(
+				group.querySelectorAll('[role="radio"]'),
+				function (el) {
+					if (el.getAttribute('aria-disabled') === 'true') {
+						return false;
+					}
+					// v-show toggles inline `display: none`.
+					return el.style.display !== 'none';
+				}
+			);
+			if (radios.length === 0) {
+				return;
+			}
+			let currentIndex = radios.indexOf(currentEl);
+			if (currentIndex === -1) {
+				currentIndex = 0;
+			}
+			let targetIndex;
+			switch (action) {
+				case 'prev':
+					targetIndex = (currentIndex - 1 + radios.length) % radios.length;
+					break;
+				case 'next':
+					targetIndex = (currentIndex + 1) % radios.length;
+					break;
+				case 'first':
+					targetIndex = 0;
+					break;
+				case 'last':
+					targetIndex = radios.length - 1;
+					break;
+				default:
+					return;
+			}
+			let targetEl = radios[targetIndex];
+			if (!targetEl) {
+				return;
+			}
+			let targetValue = targetEl.getAttribute('data-toggle-value');
+			if (targetValue === null) {
+				// Fall back to mapping by visible position in control.options.
+				let visibleOptions = (control.options || []).filter(function (opt) {
+					return opt.condition === undefined || self.checkControlCondition(opt.condition);
+				});
+				if (visibleOptions[targetIndex]) {
+					targetValue = visibleOptions[targetIndex].value;
+				}
+			}
+			targetEl.focus();
+			if (targetValue !== null && targetValue !== undefined) {
+				// Per ARIA radio pattern: arrow keys auto-activate.
+				let opt = (control.options || []).find(function (o) { return String(o.value) === String(targetValue); }) || {};
+				let doProcess = opt.checkExtension !== undefined ? self.checkExtensionActive(opt.checkExtension) : true;
+				self.changeSettingValue(control.id, opt.value !== undefined ? opt.value : targetValue, doProcess);
+			}
 		},
 
 		changeSettingValue : function(settingID, value, doProcess = true, ajaxAction = false) {
@@ -1645,7 +1874,6 @@ cffBuilder = new Vue({
 		expandSourceInfo : function(sourceId){
 			var self = this;
 			self.customizerScreens.sourceExpanded = (self.customizerScreens.sourceExpanded === sourceId) ? null : sourceId;
-			window.event.stopPropagation()
 		},
 
 		resetColor: function(controlId){
@@ -2140,7 +2368,7 @@ cffBuilder = new Vue({
 		 *
 		 * @since 4.0
 		 */
-		saveFeedSettings : function(){
+		saveFeedSettings : function(onDone){
 			var self = this,
 				sources = [],
 				updateFeedData = {
@@ -2165,6 +2393,15 @@ cffBuilder = new Vue({
 					self.customizerFeedDataInitial = self.customizerFeedData;
 				}else{
 					self.processNotification('feedSavedError');
+				}
+				if(typeof onDone === 'function'){
+					onDone();
+				}
+			}, function(){
+				// An HTTP-level failure, for example a 403 from an expired nonce, still reaches onDone.
+				self.processNotification('feedSavedError');
+				if(typeof onDone === 'function'){
+					onDone();
 				}
 			});
 			cffBuilder.$forceUpdate();
@@ -2589,6 +2826,10 @@ cffBuilder = new Vue({
 
 			//postVideoEmbed = self.processIframeAndLink( post, postText ),
 			postText = (!fullText && postText != null) ? postText.substring(0, self.customizerFeedData.settings.textlength) : postText,
+			// Neutralize any HTML in the untrusted Facebook text before it is turned into markup below
+			// (and before the plain-anchor branch concatenates it into an <a> with no processing at all).
+			// Defence in depth on top of the PHP-side ingestion sanitize in CFF_Shortcode::cff_get_json_data().
+			postText = self.escapeHtml( postText ),
 			postTags = post.message_tags ? post.message_tags : null,
 			postText = ( !self.valueIsEnabled(self.customizerFeedData.settings.textlink) ) ? self.processPostTags( self.processPostUrls( self.processNewLine( postText ) ), postTags ) : '<a href="https://www.facebook.com/'+post.id+'" target="_blank">' + postText + '</a>';
 			return postText;
@@ -2602,10 +2843,15 @@ cffBuilder = new Vue({
 		 * @return String
 		 */
 		processPostTags : function( postText, postTags ){
+			var self = this;
 			if(postTags !== null){
 				postTags.forEach( function( singleTag ) {
-					var regEx = new RegExp(singleTag.name, "ig");
-					postText = postText.replace(regEx, '<a href="https://facebook.com/' + singleTag.id + '" target="_blank" rel="nofollow">' + singleTag.name + '</a>');
+					// postText is already HTML-escaped, so match the escaped form of the name and
+					// neutralize regex metacharacters in it (a name like "A+B (Official)" used to throw).
+					var escapedName = self.escapeHtml( singleTag.name ),
+						regEx = new RegExp( escapedName.replace( /[.*+?^${}()|[\]\\]/g, '\\$&' ), "ig" );
+					// Function replacement: a literal "$&" / "$1" in the name must not be expanded.
+					postText = postText.replace(regEx, function(){ return '<a href="https://facebook.com/' + encodeURIComponent( singleTag.id ) + '" target="_blank" rel="nofollow">' + escapedName + '</a>'; });
 				});
 			}
 			return postText;
@@ -2810,10 +3056,14 @@ cffBuilder = new Vue({
 			var self = this,
 				feedType = self.customizerFeedData.settings.feedtype,
 				type = self.customizerFeedData.settings.type,
+				showPostsTypes = self.customizerFeedData.settings.showpoststypes,
 				postType = self.getPostTypeTimeline( post ),
 				showPost = true;
 			//'links,events,videos,photos,albums,statuses',
-			if(feedType == 'timeline'){
+			// Same rule as CFF_Shortcode: no or 'all' post type choice shows every type. An empty or
+			// legacy 'timeline' type list is not a filter either, so it must not hide every post.
+			var filtersTypes = showPostsTypes && showPostsTypes !== 'all' && type && type.length && type !== 'timeline';
+			if(feedType == 'timeline' && filtersTypes){
 				showPost = type.includes( postType );
 			}
 			return showPost;
@@ -2987,7 +3237,6 @@ cffBuilder = new Vue({
 				heading : heading,
 				description : description
 			};
-			window.event.stopPropagation();
 		},
 
 
@@ -3078,13 +3327,14 @@ cffBuilder = new Vue({
 			var self = this,
 				notification = self.genericText.notification[ notificationType ];
 			self.loadingBar = false;
-			self.notificationElement =  {
+			var el = {
 				type : notification.type,
 				text : notification.text,
 				shown : "shown"
 			};
+			self.notificationElement = el;
 			setTimeout(function(){
-				self.notificationElement.shown =  "hidden";
+				el.shown =  "hidden";
 			}, 5000);
 		},
 
@@ -3105,6 +3355,12 @@ cffBuilder = new Vue({
 
 			if( self.currentOnboardingWizardStep <  self.onboardingWizardContent.steps.length ){
 				self.currentOnboardingWizardStep +=1;
+				self.recordUsageEvent( 'setup_wizard_step_completed' );
+				self.announceWizardStep();
+				self.$nextTick(function () {
+					const heading = document.querySelector('.sb-onboarding-wizard-step-ctn:not([style*="display: none"]) .sb-onboarding-wizard-step-heading, .sb-onboarding-wizard-step-ctn:not([style*="display: none"]) h3, .sb-onboarding-wizard-step-ctn:not([style*="display: none"]) h4');
+					if (heading) { heading.focus(); }
+				});
 			}
 		},
 
@@ -3131,12 +3387,15 @@ cffBuilder = new Vue({
 					self.onboardingSuccessMessagesDisplay.push( self.onboardingSuccessMessages.feedPlugins.replace('#', settingsKeys[stInd])  );
 				}else if( st?.id === 'reviews' ){
 					self.onboardingSuccessMessagesDisplay.push( 'Reviews ' + self.genericText.installed );
+				}else if( st?.id === 'wpchat' ){
+					self.onboardingSuccessMessagesDisplay.push( 'WPChat ' + self.genericText.installed );
 				}else if( st?.type === 'install_plugins' ){
 					self.onboardingSuccessMessagesDisplay.push( '<span class="sb-onboarding-wizard-succes-name"> ' + st?.pluginName + '</span> ' + self.genericText.installed );
 				}
 			} )
 			setTimeout(function(){
 				self.onboardingWizardDone = 'true';
+				self.recordUsageEvent( 'setup_wizard_completed' );
 			}, 100)
 			cffBuilder.$forceUpdate();
 		},
@@ -3150,7 +3409,34 @@ cffBuilder = new Vue({
 			const self = this;
 			if( self.currentOnboardingWizardStep >  0 ){
 				self.currentOnboardingWizardStep -=1;
+				self.announceWizardStep();
+				self.$nextTick(function () {
+					const heading = document.querySelector('.sb-onboarding-wizard-step-ctn:not([style*="display: none"]) .sb-onboarding-wizard-step-heading, .sb-onboarding-wizard-step-ctn:not([style*="display: none"]) h3, .sb-onboarding-wizard-step-ctn:not([style*="display: none"]) h4');
+					if (heading) { heading.focus(); }
+				});
 			}
+		},
+
+		/**
+		 * Update the sr-only wizard step announcement ("Step N of M: Label").
+		 * Ported from instagram-feed (announceWizardStep).
+		 *
+		 * @since 4.0
+		 */
+		announceWizardStep : function(){
+			const self = this;
+			const steps = self.onboardingWizardContent && self.onboardingWizardContent.steps ? self.onboardingWizardContent.steps : [];
+			const total = Math.max(steps.length - 1, 0);
+			const current = self.currentOnboardingWizardStep;
+			if (current < 1 || total < 1) {
+				self.stepAnnouncement = '';
+				return;
+			}
+			const step = steps[current] || {};
+			const label = step.label || step.title || step.heading || '';
+			const stepWord = (self.genericText && self.genericText.wizardStep) ? self.genericText.wizardStep : 'Step';
+			const ofWord = (self.genericText && self.genericText.wizardStepOf) ? self.genericText.wizardStepOf : 'of';
+			self.stepAnnouncement = stepWord + ' ' + current + ' ' + ofWord + ' ' + total + (label ? ': ' + label : '');
 		},
 
 		/**
@@ -3234,7 +3520,14 @@ cffBuilder = new Vue({
 				});
 		},
 
+		recordUsageEvent : function( eventName ) {
+			if ( typeof window.cffSmashUsageRecordEvent === 'function' ) {
+				window.cffSmashUsageRecordEvent( eventName );
+			}
+		},
+
 		dismissOnboardingWizard : function(){
+			this.recordUsageEvent( 'setup_wizard_abandoned' );
 			const self = this,
 				dismissWizardData = {
 					action: 'cff_feed_saver_manager_dismiss_wizard'

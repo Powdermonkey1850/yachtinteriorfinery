@@ -2,6 +2,26 @@ var ctfBuilder,
 	ctfStorage = window.localStorage,
 	sketch = VueColor.Sketch;
 
+/**
+ * Preview interpolation delimiters, minted per page load so stored feed
+ * content cannot match them.
+ */
+function ctfBuilderPreviewDelimiters() {
+	var random = new Uint32Array( 4 ),
+		token = '';
+
+	if ( window.crypto && window.crypto.getRandomValues ) {
+		window.crypto.getRandomValues( random );
+		for ( var i = 0; i < random.length; i++ ) {
+			token += random[ i ].toString( 36 );
+		}
+	} else {
+		token = String( new Date().getTime() ) + String( Math.random() ).slice( 2 );
+	}
+
+	return [ '[[ctf' + token, token + 'ctf]]' ];
+}
+
 
 
 
@@ -27,6 +47,9 @@ ctfBuilder = new Vue({
 		nonce : ctf_builder.nonce,
 		template :  ctf_builder.feedInitOutput,
 		templateRender : false,
+		// Preview is feed HTML compiled as a template: mustaches in it must never
+		// interpolate. Encoding the braces fails, Vue decodes first. SMASH-1796.
+		previewDelimiters : ctfBuilderPreviewDelimiters(),
 		updatedTimeStamp : new Date().getTime(),
 		feedSettingsDomOptions : null,
 		newAccountData : ctf_builder.newAccountData,
@@ -39,9 +62,7 @@ ctfBuilder = new Vue({
 		pluginType	: ctf_builder.pluginType,
 		genericText	: ctf_builder.genericText,
 		ajaxHandler : ctf_builder.ajax_handler,
-		adminPostURL : ctf_builder.adminPostURL,
 		adminSettingsURL : ctf_builder.adminSettingsURL,
-		widgetsPageURL : ctf_builder.widgetsPageURL,
 		translatedText : ctf_builder.translatedText,
 		socialShareLink : ctf_builder.socialShareLink,
 		licenseType: ctf_builder.pluginType,
@@ -52,7 +73,6 @@ ctfBuilder = new Vue({
 		allFeedsScreen 	 : ctf_builder.allFeedsScreen,
 		extensionsPopup  : ctf_builder.extensionsPopup,
 		mainFooterScreen : ctf_builder.mainFooterScreen,
-		embedPopupScreen : ctf_builder.embedPopupScreen,
 		connectAccountScreen : ctf_builder.connectAccountScreen,
 		freeCtaShowFeatures: false,
 
@@ -130,7 +150,6 @@ ctfBuilder = new Vue({
 				'welcome',
 				'selectFeed'
 			],
-			footerWidget : false,
 
 			// welcome, selectFeed
 			pageScreen : 'welcome',
@@ -158,9 +177,6 @@ ctfBuilder = new Vue({
 			clipboardCopiedNotif : false,
 			legacyFeedsShown : false,
 			editName : false,
-			embedPopup : false,
-			embedPopupScreen : 'step_1',
-			embedPopupSelectedPage : null,
 
 			moderationMode : false,
 
@@ -195,7 +211,6 @@ ctfBuilder = new Vue({
 
 		customizerFeedDataInitial : null,
 		customizerFeedData 	: ctf_builder.customizerFeedData,
-		wordpressPageLists  : ctf_builder.wordpressPageLists,
 		iscustomizerScreen  	: (ctf_builder.customizerFeedData != undefined && ctf_builder.customizerFeedData != false),
 
 		customizerSidebarBuilder : ctf_builder.customizerSidebarBuilder,
@@ -368,6 +383,19 @@ ctfBuilder = new Vue({
 		self.appLoaded = true;
 	},
 	methods: {
+
+		/**
+		 * Options object for the customizer preview <component :is="...">.
+		 *
+		 * A method, not a computed: the old inline `{template}` rebuilt this object on
+		 * every parent render and the preview relies on being recreated that way.
+		 */
+		ctfPreviewComponent : function(){
+			return {
+				template : this.template,
+				delimiters : this.previewDelimiters
+			};
+		},
 		updateColorValue : function(id){
 			var self = this;
 			self.customizerFeedData.settings[id] = (self.customizerFeedData.settings[id].a == 1) ? self.customizerFeedData.settings[id].hex : self.customizerFeedData.settings[id].hex8;
@@ -485,6 +513,45 @@ ctfBuilder = new Vue({
 		},
 
 		/**
+		 * Save the feed, then open the sb-customizer Embed Feed modal.
+		 */
+		openEmbedModal : function(){
+			var self = this,
+				notify = function(type, text, ms){
+					var note = self.notificationElement = {type : type, text : text, shown : 'shown'};
+					setTimeout(function(){
+						note.shown = 'hidden';
+					}, ms || 3000);
+				};
+			// Add to a Page relies on the feed block, which registers through block.json (WordPress 5.8+).
+			if(!window.SBEmbedModal || !ctf_builder.embedModalSupported){
+				// Show the shortcode after the save toast, which shares the one notification slot.
+				self.saveFeedSettings(function(){
+					notify('error', self.genericText.embedUnavailable.replace('%s', '[custom-twitter-feeds feed=' + self.customizerFeedData.feed_info.id + ']'), 15000);
+				});
+				return;
+			}
+			try {
+				window.SBEmbedModal.open({
+					feedId : self.customizerFeedData.feed_info.id,
+					onCopy : function(text){
+						notify('success', text);
+					},
+					onCopyFailed : function(){
+						notify('error', self.genericText.copyFailed);
+					}
+				});
+			} catch (e) {
+				// The modal could not mount: give the shortcode after the save toast, which shares the one notification slot.
+				self.saveFeedSettings(function(){
+					notify('error', self.genericText.embedOpenFailed.replace('%s', '[custom-twitter-feeds feed=' + self.customizerFeedData.feed_info.id + ']'), 15000);
+				});
+				return;
+			}
+			self.saveFeedSettings();
+		},
+
+		/**
 		 * Show & Hide View
 		 *
 		 * @since 2.0
@@ -510,14 +577,38 @@ ctfBuilder = new Vue({
 				if(viewName == 'editName'){
 					document.getElementById("ctf-csz-hd-input").focus();
 				}
-				if(viewName == 'embedPopup' && ajaxAction == true){
-					self.saveFeedSettings();
-				}
 
 				if((viewName == 'sourcePopup' || viewName == 'sourcePopupType') && sourcePopupType == 'creationRedirect'){
 					setTimeout(function(){
 						self.$refs.addSourceRef.processIFConnect()
 					},3500);
+				}
+
+				// a11y: when a source/list dialog opens, move focus INTO the
+				// dialog so keyboard/SR users land on its title instead of being
+				// stranded on the now-hidden trigger. Mirror the switchScreen
+				// idiom: focus the visible dialog's visible <h3> (ring suppressed
+				// in CSS), fall back to its close button.
+				if ((viewName === 'sourcePopup' || viewName === 'sourcesListPopup' || viewName === 'feedtypesCustomizerPopup' || viewName === 'feedtypesPopup') && self.viewsActive[viewName] === true) {
+					this.$nextTick(function(){
+						var dialogs = document.querySelectorAll('[role="dialog"]');
+						for (var i = dialogs.length - 1; i >= 0; i--) {
+							if (dialogs[i].offsetParent === null && dialogs[i].getClientRects().length === 0) continue;
+							var heads = dialogs[i].querySelectorAll('h3');
+							for (var j = 0; j < heads.length; j++) {
+								if (heads[j].offsetParent !== null) {
+									heads[j].setAttribute('tabindex', '-1');
+									heads[j].focus();
+									return;
+								}
+							}
+							var closeBtn = dialogs[i].querySelector('.ctf-fb-popup-cls');
+							if (closeBtn) {
+								closeBtn.focus();
+							}
+							return;
+						}
+					});
 				}
 			}
 
@@ -586,6 +677,66 @@ ctfBuilder = new Vue({
 		switchScreen: function(screenType, screenName){
 			this.viewsActive[screenType] = screenName;
 			ctfBuilder.$forceUpdate();
+			// a11y: popup screen swaps replace the content under the keyboard
+			// user; move focus to the new screen's visible heading so SR
+			// announces the step instead of focus dropping to body.
+			if (screenType === 'sourcePopupScreen') {
+				this.$nextTick(function(){
+					var dialogs = document.querySelectorAll('[role="dialog"]');
+					for (var i = dialogs.length - 1; i >= 0; i--) {
+						if (dialogs[i].offsetParent === null && dialogs[i].getClientRects().length === 0) continue;
+						var heads = dialogs[i].querySelectorAll('h3');
+						for (var j = 0; j < heads.length; j++) {
+							if (heads[j].offsetParent !== null) {
+								heads[j].setAttribute('tabindex', '-1');
+								heads[j].focus();
+								return;
+							}
+						}
+						// No visible <h3> on this step (e.g. the redirect_1 loading screen) —
+						// keep focus inside the dialog by moving it to the close control
+						// instead of letting it fall through to <body>.
+						var closeBtn = dialogs[i].querySelector('.ctf-fb-popup-cls, [aria-label*="Close" i]');
+						if (closeBtn) {
+							if (!closeBtn.hasAttribute('tabindex')) closeBtn.setAttribute('tabindex', '-1');
+							closeBtn.focus();
+						}
+						return;
+					}
+				});
+			}
+			// SMASH-1378 a11y (WCAG 2.4.3): in-page create-flow step transitions
+			// swap the visible section via v-if, but focus stayed on the now-hidden
+			// Next button and fell through to the next focusable in the DOM (the
+			// floating Help Widget button). Move focus into the newly shown step's
+			// heading so keyboard/SR users keep their place in the flow. Mirrors the
+			// IG builder step-heading-focus pattern used elsewhere in 1378.
+			var self = this;
+			// SMASH-1378 a11y: only the in-page create-flow step swaps should move
+			// focus into the create container heading. Other switchScreen callers
+			// (e.g. closing the feed-instances dialog via
+			// switchScreen('instanceSourceActive', null)) must NOT steal focus to a
+			// background create-flow heading while a dialog is/was active.
+			if (screenType !== 'pageScreen' && screenType !== 'selectedFeedSection') {
+				return;
+			}
+			self.$nextTick(function () {
+				var createCtn = document.querySelector('.ctf-fb-create-ctn');
+				if (!createCtn) return;
+				// The visible step is the section container that is NOT hidden by
+				// its v-if (Vue removes hidden v-if nodes from the DOM).
+				var heading = createCtn.querySelector(
+					'.ctf-fb-types-ctn h4, .ctf-fb-slctsrc-ctn h4'
+				);
+				if (!heading) return;
+				if (!heading.hasAttribute('tabindex')) {
+					heading.setAttribute('tabindex', '-1');
+				}
+				heading.focus();
+				if (typeof heading.scrollIntoView === 'function') {
+					heading.scrollIntoView({ block: 'nearest' });
+				}
+			});
 		},
 
 		/**
@@ -1129,7 +1280,19 @@ ctfBuilder = new Vue({
 			for (var i = 0; i < tooltips.length; i++){
 				tooltips[i].style.display = "none";
 			}
-			document.querySelectorAll(".sb-onboarding-tooltip-"+this.viewsActive.onboardingStep)[0].style.display = "block";
+			var ctfShownTooltip = document.querySelectorAll(".sb-onboarding-tooltip-"+this.viewsActive.onboardingStep)[0];
+			ctfShownTooltip.style.display = "block";
+			// a11y: move focus to the revealed step's heading so keyboard/SR
+			// users land on the new step announcement (ring suppressed in CSS).
+			// $nextTick equivalent: the tooltip is now display:block, so the
+			// heading is focusable; defer to a microtask so layout is settled.
+			var ctfStepHeading = ctfShownTooltip.querySelector('.sb-onboarding-wizard-step-heading');
+			if (ctfStepHeading) {
+				ctfStepHeading.setAttribute('tabindex', '-1');
+				window.requestAnimationFrame(function () {
+					ctfStepHeading.focus();
+				});
+			}
 
 			if (this.viewsActive.onboardingCustomizerPopup) {
 				if (this.viewsActive.onboardingStep === 2) {
@@ -1725,6 +1888,87 @@ ctfBuilder = new Vue({
 
 		},
 
+		/**
+		 * Roving tabindex + arrow-key navigation for radiogroup-pattern
+		 * controls (toggleset, togglebutton). Walks the rendered DOM so
+		 * we honor v-show / aria-disabled visibility, moves focus to the
+		 * target option, and auto-activates per the WAI-ARIA radio pattern.
+		 *
+		 * @param {KeyboardEvent} event   Keyboard event from the current radio.
+		 * @param {Object}        control Control definition (id, options, ajaxAction).
+		 * @param {String}        action  'prev' | 'next' | 'first' | 'last'.
+		 * @since 2.0
+		 */
+		onTogglesetArrowKey: function (event, control, action) {
+			let self = this;
+			let currentEl = event.currentTarget;
+			if (!currentEl) {
+				return;
+			}
+			let group = currentEl.closest('[role="radiogroup"]');
+			if (!group) {
+				return;
+			}
+			// Only options that are currently rendered (v-show keeps the
+			// node but sets display:none) and not aria-disabled.
+			let radios = Array.prototype.filter.call(
+				group.querySelectorAll('[role="radio"]'),
+				function (el) {
+					if (el.getAttribute('aria-disabled') === 'true') {
+						return false;
+					}
+					// v-show toggles inline `display: none`.
+					return el.style.display !== 'none';
+				}
+			);
+			if (radios.length === 0) {
+				return;
+			}
+			let currentIndex = radios.indexOf(currentEl);
+			if (currentIndex === -1) {
+				currentIndex = 0;
+			}
+			let targetIndex;
+			switch (action) {
+				case 'prev':
+					targetIndex = (currentIndex - 1 + radios.length) % radios.length;
+					break;
+				case 'next':
+					targetIndex = (currentIndex + 1) % radios.length;
+					break;
+				case 'first':
+					targetIndex = 0;
+					break;
+				case 'last':
+					targetIndex = radios.length - 1;
+					break;
+				default:
+					return;
+			}
+			let targetEl = radios[targetIndex];
+			if (!targetEl) {
+				return;
+			}
+			let targetValue = targetEl.getAttribute('data-toggle-value');
+			if (targetValue === null) {
+				// Fall back to mapping by visible position in control.options.
+				let visibleOptions = (control.options || []).filter(function (opt) {
+					return opt.condition === undefined || self.checkControlCondition(opt.condition);
+				});
+				if (visibleOptions[targetIndex]) {
+					targetValue = visibleOptions[targetIndex].value;
+				}
+			}
+			targetEl.focus();
+			if (targetValue !== null && targetValue !== undefined) {
+				// Per ARIA radio pattern: arrow keys auto-activate.
+				let opt = (control.options || []).find(function (o) { return String(o.value) === String(targetValue); }) || {};
+				let doProcess = opt.checkExtension !== undefined ? self.checkExtensionActive(opt.checkExtension) : true;
+				let ajaxAction = control.ajaxAction !== undefined ? control.ajaxAction : false;
+				self.changeSettingValue(control.id, opt.value !== undefined ? opt.value : targetValue, doProcess, ajaxAction);
+			}
+		},
+
 		changeSettingValue : function(settingID, value, doProcess = true, ajaxAction = false) {
 			var self = this;
 			if(Object.keys(self.inActiveExtensions).includes(settingID)){
@@ -2073,7 +2317,7 @@ ctfBuilder = new Vue({
 
 
 		//Section Checkbox
-		changeCheckboxSectionValue : function(settingID, value, ajaxAction = false, checkBoxAction = false){
+		changeCheckboxSectionValue : function(settingID, value, ajaxAction = false, checkBoxAction = false, e){
 			var self = this;
 			if(checkBoxAction !== false){
 				self.customizerFeedData.settings[settingID] = self.customizerFeedData.settings[settingID] == checkBoxAction.options.enabled ? checkBoxAction.options.disabled : checkBoxAction.options.enabled;
@@ -2097,7 +2341,7 @@ ctfBuilder = new Vue({
 			if(ajaxAction !== false){
 				self.customizerControlAjaxAction(ajaxAction);
 			}
-			event.stopPropagation()
+			if (e && e.stopPropagation) e.stopPropagation();
 
 		},
 		checkboxSectionValueExists : function(settingID, value){
@@ -2411,7 +2655,7 @@ ctfBuilder = new Vue({
 		 *
 		 * @since 2.0
 		 */
-		saveFeedSettings : function(){
+		saveFeedSettings : function(onDone){
 			var self = this,
 				sources = [],
 				updateFeedData = {
@@ -2433,6 +2677,9 @@ ctfBuilder = new Vue({
 					self.customizerFeedDataInitial = self.customizerFeedData;
 				}else{
 					self.processNotification('feedSavedError');
+				}
+				if(typeof onDone === 'function'){
+					onDone();
 				}
 			});
 			ctfBuilder.$forceUpdate();
@@ -2602,9 +2849,9 @@ ctfBuilder = new Vue({
 		 *
 		 * @since 2.0
 		 */
-		toggleElementTooltip : function(tooltipText, type, align = 'center'){
+		toggleElementTooltip : function(tooltipText, type, align = 'center', event){
 			var self = this,
-				target = window.event.currentTarget,
+				target = (event && event.currentTarget) || (window.event && window.event.currentTarget),
 				tooltip = (target != undefined && target != null) ? document.querySelector('.sb-control-elem-tltp-content') : null;
 			if(tooltip != null && type == 'show'){
 				self.tooltip.text = tooltipText;
@@ -2646,7 +2893,7 @@ ctfBuilder = new Vue({
 			postText = postText.replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/&lt;br&gt;|&lt;br \/&gt;/g, '<br>');
 			if( self.checkNotEmpty(customizerSettings.textlength) ){
 				return ( self.expandedCaptions.includes(postID) ? postText : postText.substring( 0, parseInt(customizerSettings.textlength) ) ) +
-				( postText.length > parseInt( customizerSettings.textlength ) ? ('<a href="#" class="ctf_more" onclick="ctfBuilderToggleCaption('+postID+')">...</a>') : '');
+				( postText.length > parseInt( customizerSettings.textlength ) ? ('<button type="button" class="ctf_more" aria-expanded="' + (self.expandedCaptions.includes(postID) ? 'true' : 'false') + '" aria-label="Show full tweet text" style="background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;" onclick="ctfBuilderToggleCaption('+postID+')"><span aria-hidden="true">...</span></button>') : '');
 			}
 			var textLength = !self.checkNotEmpty(customizerSettings.textlength) ? 50 : parseInt(customizerSettings.textlength);
 			return postText.substring( 0, textLength);
@@ -2661,13 +2908,14 @@ ctfBuilder = new Vue({
 			var self = this,
 				notification = self.genericText.notification[ notificationType ];
 			self.loadingBar = false;
-			self.notificationElement =  {
+			var el = {
 				type : notification.type,
 				text : notification.text,
 				shown : "shown"
 			};
+			self.notificationElement = el;
 			setTimeout(function(){
-				self.notificationElement.shown =  "hidden";
+				el.shown =  "hidden";
 			}, 5000);
 		},
 

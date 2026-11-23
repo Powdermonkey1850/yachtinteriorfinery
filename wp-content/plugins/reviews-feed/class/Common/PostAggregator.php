@@ -16,6 +16,9 @@ class PostAggregator {
 	public const UPLOAD_FOLDER_NAME = 'sbr-feed-images';
 	public const POSTS_TABLE_NAME = SBR_POSTS_TABLE;
 
+	/** Rows created this long after a source's first row still count as its first import. SMASH-1161. */
+	const FIRST_IMPORT_SECONDS = 3600;
+
 	/**
 	 * @var array
 	 */
@@ -93,22 +96,25 @@ class PostAggregator {
 		$posts_list_result = [];
 		$encryption = new Data_Encryption();
 		foreach ($posts_list as $postKey => $post) {
-			$post = is_array($post) ? $post : json_decode($encryption->maybe_decrypt($post), true);
+			if (!is_array($post)) {
+				$post = is_string($post) ? json_decode($encryption->maybe_decrypt($post), true) : null;
+			}
+			// A cached entry that does not decode to an array is not a review. The
+			// `$post['post_content'] = …` write below is a string-offset write on
+			// anything else, which is a TypeError on PHP 8 (SMASH-2024).
+			if (!is_array($post)) {
+				continue;
+			}
 			if ($type === 'db') {
-				$post['post_content'] = $post['provider'] === 'facebook' ? $encryption->maybe_decrypt($post['post_content']) : $post['post_content'];
-				$post['json_data'] = $post['provider'] === 'facebook' ? $encryption->maybe_decrypt($post['json_data']) : $post['json_data'];
-				$post_json =  isset($post['json_data']) ? json_decode($post['json_data'], true) : null;
-				if (!empty($post_json)) {
-					$post_json['source'] = ['id' => $post['provider_id'], 'url' => $post_json['url'] ?? ''];
-					if (intval($post['images_done']) === 0) {
-						self::cache_review_images($post, $post_json);
-					}
-				}
+				list($post, $post_json) = self::decode_db_row($post, $encryption);
 			} else {
 				$post_json = $post;
 			}
 
 			if ($post_json !== null) {
+				// SMASH-1587: PHP 7-era json_data can hold a scalar 'provider' slug;
+				// the $post_json['provider']['name'] reads below fatal on PHP 8 without this.
+				$post_json = Util::normalize_review_shape($post_json);
 				$search_value = $post_json['source']['id'] . '-' . $post_json['rating'] . '-' . $post_json['reviewer']['name'] . '-' . $post_json['provider']['name'];
 				//IF EDD CHECK WITH TIME TOO SINCE A USER CAN POST MULTIPLE REVIEWS
 				$search_value .= $post_json['provider']['name'] === 'edd' ? $post_json['time'] : '';
@@ -120,11 +126,72 @@ class PostAggregator {
 
 				if (!in_array($search_value, $posts_db)) {
 					array_push($posts_db, $search_value);
-					array_push($posts_list_result, $post);
+					// For the 'json' path (cache-hit render, Feed.php:172) push the
+					// shape-normalized review so display readers (FeedDisplay/Parser)
+					// can't fatal on a scalar provider/reviewer/source from an old
+					// cache. The 'db' path returns raw rows that normalize_db_post_set
+					// re-decodes + normalizes, so it stays as-is. (SMASH-1587/WPSA-63160)
+					array_push($posts_list_result, $type === 'json' ? $post_json : $post);
 				}
 			}
 		}
 		return $posts_list_result;
+	}
+
+	/**
+	 * Decrypt (Facebook) and decode one `wp_sbr_reviews_posts` row for the dedup pass.
+	 *
+	 * @param  array<string,mixed> $post       Row as returned by wpdb (ARRAY_A).
+	 * @param  Data_Encryption     $encryption
+	 * @return array{0:array<string,mixed>,1:array|null} The row with decrypted
+	 *         columns, and its decoded review — null when json_data is not one.
+	 */
+	private static function decode_db_row(array $post, Data_Encryption $encryption)
+	{
+		$post['post_content'] = $post['post_content'] ?? '';
+		$post['json_data']    = $post['json_data'] ?? '';
+		if (($post['provider'] ?? '') === 'facebook') {
+			$post['post_content'] = $encryption->maybe_decrypt($post['post_content']);
+			$post['json_data']    = $encryption->maybe_decrypt($post['json_data']);
+		}
+		$post_json = self::decode_review_json($post['json_data']);
+		if (!empty($post_json)) {
+			$post_json['source'] = ['id' => $post['provider_id'] ?? '', 'url' => $post_json['url'] ?? ''];
+			if (intval($post['images_done'] ?? 0) === 0) {
+				self::cache_review_images($post, $post_json);
+			}
+		}
+
+		return [$post, $post_json];
+	}
+
+	/**
+	 * Decode a stored `json_data` column into a review array, or null.
+	 *
+	 * `json_decode()` hands back whatever the column's top-level JSON value is.
+	 * A review is an object, so anything else — a JSON string literal from a
+	 * double-encoded write, a number, a boolean, invalid JSON — is not one. Every
+	 * caller used `!empty()` / `!== null` as its gate, which a non-empty string
+	 * passes, and the very next line wrote `$post_json['source'] = …` onto it:
+	 * on PHP 8 that is `TypeError: Cannot access offset of type string on string`
+	 * (SMASH-2024, reported from PostAggregator.php:102 on a Google source).
+	 *
+	 * An already-decoded array is passed through so callers can hand in either.
+	 *
+	 * @param  mixed $json_data Raw column value, or an already-decoded review.
+	 * @return array|null       Decoded review, or null when it is not one.
+	 */
+	public static function decode_review_json($json_data)
+	{
+		if (is_array($json_data)) {
+			return $json_data;
+		}
+		if (!is_string($json_data) || $json_data === '') {
+			return null;
+		}
+		$decoded = json_decode($json_data, true);
+
+		return is_array($decoded) ? $decoded : null;
 	}
 
 	public static function cache_review_images($post, $post_json)
@@ -172,8 +239,12 @@ class PostAggregator {
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		foreach ($results as $post) {
-			$post_json =  isset($post['json_data']) ? json_decode($post['json_data'], true) : null;
+			// Non-array json_data (SMASH-2024) decodes to null here, so the row is
+			// neither keyed nor deleted — same as a row that never decoded at all.
+			$post_json = self::decode_review_json($post['json_data'] ?? null);
 			if ($post_json !== null) {
+				// SMASH-1587: scalar 'provider' in old json_data would fatal the reads below on PHP 8.
+				$post_json = Util::normalize_review_shape($post_json);
 				$search_value = $post_json['source']['id'] . '-' . $post_json['rating'] . '-' . $post_json['reviewer']['name'] . '-' . $post_json['provider']['name'];
 				//IF EDD CHECK WITH TIME TOO SINCE A USER CAN POST MULTIPLE REVIEWS
 				$search_value .= $post_json['provider']['name'] === 'edd' ? $post_json['time'] : '';
@@ -225,8 +296,20 @@ class PostAggregator {
 		$normalized_set = array();
 		foreach ($results as $result) {
 			if (! empty($result['json_data'])) {
-				$post = json_decode($result['json_data'], true);
+				$post = self::decode_review_json($result['json_data']);
+				// A row whose json_data is not a review object has nothing to
+				// render; skip it rather than hand a scalar to the readers
+				// downstream (SMASH-2024).
+				if ($post === null) {
+					continue;
+				}
 				if (! empty($post)) {
+					// SMASH-1587/WPSA-63160: PHP 7-era json_data can hold scalar
+					// provider/reviewer/source/media shapes. This is the render-path
+					// source (posts_from_db, moderation, media-finding), so coerce here
+					// once — covers add_local_image_urls below + every FeedDisplay /
+					// Parser reader downstream, which would otherwise fatal on PHP 8.
+					$post = Util::normalize_review_shape($post);
 					$post = self::add_local_image_urls($post, $result);
 				}
 				if ((int)$result['images_done'] === 0) {
@@ -255,6 +338,13 @@ class PostAggregator {
 			$sizes = ! empty($result['sizes']) ? json_decode($result['sizes']) : array();
 			$i     = 0;
 			foreach ($post['media'] as $single_image) {
+				// A scalar media element (e.g. a flat URL string) would make the
+				// $return['media'][$i]['local'] write below a string-offset write =
+				// PHP 8 fatal. Skip it (keep $i aligned to the media index). SMASH-1587.
+				if (! is_array($single_image)) {
+					$i++;
+					continue;
+				}
 				if (! empty($result['media_id']) && $result['media_id'] !== 'error') {
 					$return['media'][ $i ]['local'] = array();
 					$media_id                       = $result['media_id'];
@@ -285,6 +375,89 @@ class PostAggregator {
 			)
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	}
+
+	/**
+	 * The language a source's newest stored row is in, or null when it has none. '' is a real answer: a Google feed on
+	 * the default language stores its rows with lang ''. SMASH-2407.
+	 *
+	 * @param string $provider_id Source account id.
+	 * @return string|null
+	 */
+	public function newest_stored_lang($provider_id)
+	{
+		global $wpdb;
+		$table_name = esc_sql($wpdb->prefix . self::POSTS_TABLE_NAME);
+
+		// get_row, not get_var: wpdb::get_var() returns null for '', which would hide the default language.
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is esc_sql'd
+		$row = $wpdb->get_row(
+			$wpdb->prepare("SELECT lang FROM $table_name WHERE provider_id = %s ORDER BY time_stamp DESC LIMIT 1", (string) $provider_id),
+			ARRAY_A
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return is_array($row) && isset($row['lang']) && is_string($row['lang']) ? $row['lang'] : null;
+	}
+
+	/**
+	 * Unix time of the newest review in a source's first import, any language, or null when it has none. SMASH-1161.
+	 *
+	 * The first import is the keyless 10 a site had before adding a key. Later keyed rows are left out, because their
+	 * newest is Google's own and would hide the gap. A row with no created_on predates the column, so it counts.
+	 *
+	 * @param string $provider_id Source account id.
+	 * @param string $provider    Its provider; no index leads with provider_id, so this one narrows the scan.
+	 * @return int|null
+	 */
+	public static function first_import_newest_time($provider_id, $provider = 'google')
+	{
+		global $wpdb;
+		$table_name = esc_sql($wpdb->prefix . self::POSTS_TABLE_NAME);
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is esc_sql'd
+		$newest = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT MAX(time_stamp) FROM $table_name
+				WHERE provider = %s AND provider_id = %s
+				AND (created_on IS NULL OR created_on <= (
+					SELECT DATE_ADD(MIN(created_on), INTERVAL %d SECOND) FROM $table_name WHERE provider = %s AND provider_id = %s
+				))",
+				(string) $provider,
+				(string) $provider_id,
+				self::FIRST_IMPORT_SECONDS,
+				(string) $provider,
+				(string) $provider_id
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		// SinglePostCache writes time_stamp with date(), which WordPress runs in UTC.
+		$time = is_string($newest) && $newest !== '' ? strtotime($newest . ' UTC') : false;
+
+		return is_int($time) && $time > 0 ? $time : null;
+	}
+
+	/**
+	 * Does a source have any stored row in this language? Raw (no decode, no dedup), so every reader asks the
+	 * same question the same way. SMASH-2407.
+	 *
+	 * @param string $provider_id
+	 * @param string $lang
+	 * @return bool
+	 */
+	public function has_rows_in_lang($provider_id, $lang)
+	{
+		global $wpdb;
+		$table_name = esc_sql($wpdb->prefix . self::POSTS_TABLE_NAME);
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- Table name is esc_sql'd
+		$found = $wpdb->get_var(
+			$wpdb->prepare("SELECT 1 FROM $table_name WHERE provider_id = %s AND lang = %s LIMIT 1", (string) $provider_id, (string) $lang)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return $found !== null;
 	}
 
 	private function build_provider_business_where_clause($requests_needed)
@@ -350,9 +523,9 @@ class PostAggregator {
 				$s_post['json_data'] = $encryption->maybe_decrypt($s_post['json_data']);
 				$json_data = json_decode($s_post['json_data'], true);
 
-				if (isset($json_data['rating']) && !is_numeric($json_data['rating'])) {
-					$rating = isset($json_data['rating']) && $json_data['rating'] === 'negative' ? 1 : 5;
-					$json_data['rating'] = $rating;
+				// SMASH-2476: only 'positive'/'negative' map to stars; '' stays unrated instead of becoming 5.
+				if (is_array($json_data) && isset($json_data['rating']) && !is_numeric($json_data['rating'])) {
+					$json_data['rating'] = Util::facebook_collection_rating($json_data);
 				}
 
 				$s_post['json_data'] = wp_json_encode($json_data);
@@ -487,6 +660,9 @@ class PostAggregator {
 			)
 		);
 		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		// SMASH-1161: a source added again starts a new first import, so its gap is open again.
+		RemoteRequest::forget_google_gap($provider_id);
 	}
 
 	/**

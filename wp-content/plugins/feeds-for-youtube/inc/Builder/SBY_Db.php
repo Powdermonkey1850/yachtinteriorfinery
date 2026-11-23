@@ -1,4 +1,21 @@
 <?php
+
+// phpcs:disable PSR12.Classes.OpeningBraceSpace.Found
+// phpcs:disable PSR12.ControlStructures.ControlStructureSpacing.SpaceBeforeCloseBrace
+// phpcs:disable PSR12.ControlStructures.ControlStructureSpacing.SpacingAfterOpenBrace
+// phpcs:disable PSR1.Methods.CamelCapsMethodName.NotCamelCaps,PSR2.Classes.ClassDeclaration.OpenBraceNewLine
+// phpcs:disable PSR2.Methods.FunctionCallSignature.SpaceAfterOpenBracket
+// phpcs:disable PSR2.Methods.FunctionCallSignature.SpaceBeforeCloseBracket,Squiz.Classes.ValidClassName.NotCamelCaps
+// phpcs:disable Squiz.Commenting.FileComment.MissingPackageTag,Squiz.Commenting.FunctionComment.Missing
+// phpcs:disable Squiz.Commenting.FunctionComment.MissingParamComment,Squiz.Commenting.FunctionComment.MissingParamTag
+// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar,Squiz.Commenting.InlineComment.NoSpaceBefore
+// phpcs:disable Squiz.Functions.FunctionDeclarationArgumentSpacing.SpacingAfterOpen
+// phpcs:disable Squiz.Functions.FunctionDeclarationArgumentSpacing.SpacingBeforeClose
+// phpcs:disable Squiz.Functions.MultiLineFunctionDeclaration.BraceOnSameLine
+// phpcs:disable Squiz.WhiteSpace.ControlStructureSpacing.SpacingAfterOpen
+// phpcs:disable Squiz.WhiteSpace.ControlStructureSpacing.SpacingBeforeClose,WordPress.DB.PreparedSQL.NotPrepared
+// phpcs:disable WordPress.WP.AlternativeFunctions.json_encode_json_encode
+// phpcs:disable WordPress.WP.AlternativeFunctions.unlink_unlink
 /**
  * YouTube Feeds Database
  *
@@ -361,6 +378,22 @@ class SBY_Db {
 			}
 		}
 		return $feeds_elementor;
+	}
+
+	/**
+	 * Query feeds list for the modern Elementor widget.
+	 *
+	 * Returns feed objects with id and feed_name properties,
+	 * suitable for localized script data.
+	 *
+	 * @since 2.3.0
+	 *
+	 * @return array
+	 */
+	public static function elementor_feeds_list() {
+		global $wpdb;
+		$feeds_table_name = $wpdb->prefix . 'sby_feeds';
+		return $wpdb->get_results( "SELECT id, feed_name FROM $feeds_table_name" );
 	}
 
 

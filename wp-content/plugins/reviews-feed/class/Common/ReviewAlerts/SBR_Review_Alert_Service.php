@@ -22,7 +22,6 @@ if (! defined('ABSPATH')) {
 use Smashballoon\Stubs\Services\ServiceProvider;
 use SmashBalloon\Reviews\Common\Util;
 use SmashBalloon\Reviews\Common\Feed;
-use SmashBalloon\Reviews\Common\FeedCache;
 
 /**
  * Class SBR_Review_Alert_Service
@@ -204,6 +203,8 @@ class SBR_Review_Alert_Service extends ServiceProvider
 			'popup_type'  => 'aggregate', // 'aggregate' (summary view) or 'recent' (cycles through reviews)
 			'accent_color' => '#175CE3',
 			'accent_hue'  => '220', // Hue value (0-360) for HSL theming, corresponds to #175CE3
+			// 'hue': OKLCH palette from accent_hue (presets, slider). 'exact': accent_color as entered (SMASH-2220).
+			'accent_mode' => 'hue',
 			'position'    => 'bottom-right',
 			'timing'      => [
 				'mode'               => 'fixed',  // 'fixed' or 'random' - controls review cycling interval
@@ -310,6 +311,10 @@ class SBR_Review_Alert_Service extends ServiceProvider
 		$sanitized['accent_hue'] = isset($settings['accent_hue'])
 			? (string) min(360, max(0, absint($settings['accent_hue'])))
 			: $defaults['accent_hue'];
+
+		$sanitized['accent_mode'] = isset($settings['accent_mode']) && $settings['accent_mode'] === 'exact'
+			? 'exact'
+			: 'hue';
 
 		// Position - must be valid position
 		$valid_positions = ['bottom-left', 'bottom-right', 'top-left', 'top-right'];
@@ -607,6 +612,26 @@ class SBR_Review_Alert_Service extends ServiceProvider
 		}
 
 		return in_array($tier, $feature_tiers[$feature], true);
+	}
+
+	/**
+	 * Colours for an alert whose accent was typed as an exact hex (SMASH-2220), or null when the
+	 * alert uses the hue palette: a preset, the hue slider, an older alert with no accent_mode, or
+	 * an invalid hex. Not tier-gated, like the hue palette: 'custom_accent_color' is listed in
+	 * can_use_feature() but neither the customizer picker nor the popup enforces it, so gating only
+	 * this mode would make the preview and the live alert disagree.
+	 *
+	 * @since 2.15.1
+	 * @param array $settings Alert settings.
+	 * @return array{color: string, contrast: string, ink: string}|null
+	 */
+	public static function exact_accent(array $settings): ?array
+	{
+		if (($settings['accent_mode'] ?? 'hue') !== 'exact') {
+			return null;
+		}
+
+		return sbr_review_alert_accent_colors($settings['accent_color'] ?? null);
 	}
 
 	/**
@@ -1160,6 +1185,8 @@ class SBR_Review_Alert_Service extends ServiceProvider
 			'totalReviews'    => $result['totalReviews'],
 			'unfilteredTotal' => $result['unfilteredTotal'],
 			'averageRating'   => $result['averageRating'],
+			// SMASH-782: booking-only alerts show Booking's native 0-10 score + word.
+			'bookingHeader'   => $result['bookingHeader'] ?? null,
 		]);
 	}
 
@@ -1238,7 +1265,7 @@ class SBR_Review_Alert_Service extends ServiceProvider
 		]);
 
 		$unfiltered_cache_id = 'popup_preview_unfiltered_' . md5(wp_json_encode(['sources' => $source_db_ids]));
-		$unfiltered_feed = new $feed_class($unfiltered_settings, $unfiltered_cache_id, new FeedCache($unfiltered_cache_id, 300));
+		$unfiltered_feed = new $feed_class($unfiltered_settings, $unfiltered_cache_id, Util::feed_cache_for_site($unfiltered_cache_id, 300));
 		$unfiltered_feed->init();
 		$unfiltered_feed->get_set_cache();
 		$unfiltered_reviews = $unfiltered_feed->get_post_set_page();
@@ -1277,7 +1304,7 @@ class SBR_Review_Alert_Service extends ServiceProvider
 		]));
 		$cache_id = 'popup_preview_' . $cache_key;
 
-		$feed = new $feed_class($feed_settings, $cache_id, new FeedCache($cache_id, 300)); // 5 min cache for preview
+		$feed = new $feed_class($feed_settings, $cache_id, Util::feed_cache_for_site($cache_id, 300)); // 5 min cache for preview
 
 		$feed->init();
 		$feed->get_set_cache();
@@ -1339,35 +1366,72 @@ class SBR_Review_Alert_Service extends ServiceProvider
 			$total_matching++;
 			$total_rating += $rating;
 
-			// Add to preview array up to 150 reviews (matches frontend limit)
-			if (count($complete_reviews) < 150) {
+			// Add to preview array up to the shared frontend cap.
+			if (count($complete_reviews) < SBR_Review_Alert_Frontend::MAX_POPUP_REVIEWS) {
 				// Decode HTML entities for special characters (e.g., &amp; -> &, &#039; -> ')
 				$decoded_text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 				$decoded_name = html_entity_decode($reviewer_name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
 				$reviewer_avatar = is_array($reviewer) ? ($reviewer['avatar'] ?? '') : '';
+				// SMASH-782: the provider-specific payload (metadata/reply/response/
+				// reviewer_photos/source) comes from the SAME shared extractor the
+				// frontend formatter uses, so preview and frontend can't drift on which
+				// keys survive. The core shape below stays preview-specific (relativeDate
+				// + string provider) because the React preview consumes it differently
+				// than the JS cycler.
 				$complete_reviews[] = [
 					'id'           => $review['review_id'] ?? $review['id'] ?? uniqid(),
 					'reviewer'     => [
 						'name'   => $decoded_name,
 						'avatar' => $reviewer_avatar,
 					],
-					'rating'       => (int) $rating,
+					// Booking keeps its fractional rating, because the React preview derives
+					// the badge from THIS field rather than from a server-resolved score:
+					// ReviewAlertPreview.js:293 calls SbUtils.bookingReviewScore(review),
+					// and that helper reads `review.rating` and doubles it (SbUtils.js:1232).
+					// So a truncated 4.5 showed "8.0 Very good" in the popup editor while
+					// the live popup — which resolves from the raw row via
+					// sbr_booking_review_score() — showed "9.0 Superb". One band off, on the
+					// surface whose whole job is to match.
+					//
+					// NOT the same contract as the frontend cycler: that one reads the
+					// server-resolved bookingScore/bookingScoreWord, because its payload
+					// casts `rating` to int for the star renderer. The preview has no such
+					// cast to work around and no PHP round-trip, so it computes locally.
+					// Sending the pair here too would be dead weight until the customizer
+					// reads it — worth doing, but it needs its own PR and a re-pin.
+					//
+					// Safe to send a float: neither preview layout renders stars for a
+					// Booking card, the score badge takes that slot.
+					'rating'       => 'booking' === $review_provider
+						? (float) ($review['rating'] ?? 0)
+						: (int) $rating,
 					'text'         => $decoded_text,
+					'title'        => isset($review['title']) ? html_entity_decode((string) $review['title'], ENT_QUOTES | ENT_HTML5, 'UTF-8') : '',
 					'relativeDate' => self::get_relative_date($review['time'] ?? 0),
 					'provider'     => $review_provider ?: 'unknown',
-				];
+				] + SBR_Review_Alert_Frontend::extract_provider_payload($review);
 			}
 		}
 
-		// Calculate average rating from ALL matching reviews (same as frontend)
-		$average_rating = $total_matching > 0 ? round($total_rating / $total_matching, 1) : 5.0;
+		// Headline total + average from the feed-header metadata, via the shared
+		// helper the frontend render path uses too, so the two can't drift. SMASH-1616.
+		// Backfill from the FULL cached set (get_posts()), matching FeedDisplay and
+		// the frontend path — not the page slice — so the preview headline can't
+		// under-count providers with a zero API total.
+		[$total_reviews, $average_rating, $booking_header] = SBR_Review_Alert_Frontend::resolve_header_totals(
+			$feed,
+			$feed->get_posts(),
+			$total_matching,
+			$total_rating
+		);
 
 		return [
 			'reviews'         => $complete_reviews,
-			'totalReviews'    => $total_matching,
+			'totalReviews'    => $total_reviews,
 			'unfilteredTotal' => $unfiltered_total,
 			'averageRating'   => $average_rating,
+			'bookingHeader'   => $booking_header,
 		];
 	}
 

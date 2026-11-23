@@ -85,6 +85,11 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 				'text'  => esc_html__( 'Upgrade to PRO today and start keeping logs for all visitors that give consent. 100% self-hosted on your WordPress site.', 'wpconsent-cookies-banner-privacy-suite' ),
 				'url'   => wpconsent_utm_url( 'https://wpconsent.com/lite', 'settings', 'consent-logs' ),
 		);
+		$data['consent_logs_auto_cleanup'] = array(
+				'title' => esc_html__( 'Automatic Consent Logs Cleanup is a PRO feature', 'wpconsent-cookies-banner-privacy-suite' ),
+				'text'  => esc_html__( 'Upgrade to PRO today and automatically manage data retention for your consent logs to keep your database lean.', 'wpconsent-cookies-banner-privacy-suite' ),
+				'url'   => wpconsent_utm_url( 'https://wpconsent.com/lite', 'settings', 'consent-logs-auto-cleanup' ),
+		);
 		$data['scanner']             = array(
 				'title' => esc_html__( 'Automatic Scanning is a PRO feature', 'wpconsent-cookies-banner-privacy-suite' ),
 				'text'  => esc_html__( 'Upgrade to PRO today and schedule automatic website scanning to stay up to date with your website\'s consent needs.', 'wpconsent-cookies-banner-privacy-suite' ),
@@ -92,37 +97,6 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 		);
 
 		return $data;
-	}
-
-	/**
-	 * The page output based on the view.
-	 *
-	 * @return void
-	 */
-	public function output_content() {
-		if ( method_exists( $this, 'output_view_' . $this->view ) ) {
-			call_user_func( array( $this, 'output_view_' . $this->view ) );
-		}
-	}
-
-	/**
-	 * For this page we output a menu.
-	 *
-	 * @return void
-	 */
-	public function output_header_bottom() {
-		?>
-		<ul class="wpconsent-admin-tabs">
-			<?php
-			foreach ( $this->views as $slug => $label ) {
-				$class = $this->view === $slug ? 'active' : '';
-				?>
-				<li>
-					<a href="<?php echo esc_url( $this->get_view_link( $slug ) ); ?>" class="<?php echo esc_attr( $class ); ?>"><?php echo esc_html( $label ); ?></a>
-				</li>
-			<?php } ?>
-		</ul>
-		<?php
 	}
 
 	/**
@@ -140,29 +114,7 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 		if ( 'advanced' === $this->view ) {
 			$enable_shared_consent = isset( $_POST['enable_shared_consent'] ) ? 1 : 0;
 
-			// Calculate cookie domain if shared consent is enabled.
-			$cookie_domain = '';
-			$hostname      = '';
-			if ( $enable_shared_consent ) {
-				$hostname = wp_parse_url( home_url(), PHP_URL_HOST );
-				if ( $hostname ) {
-					$cookie_domain = wpconsent_get_registrable_domain( $hostname );
-				}
-			}
-
-			/**
-			 * Filter the calculated cookie domain before saving.
-			 *
-			 * Allows developers to modify the cookie domain for edge cases or custom requirements.
-			 *
-			 * @param string $cookie_domain The calculated registrable domain (e.g., 'example.com').
-			 * @param string $hostname The original hostname from home_url().
-			 * @param int    $enable_shared_consent Whether shared consent is enabled (1 or 0).
-			 *
-			 * @since 1.1.0
-			 *
-			 */
-			$cookie_domain = apply_filters( 'wpconsent_cookie_domain', $cookie_domain, $hostname, $enable_shared_consent );
+			$cookie_domain = wpconsent_get_shared_cookie_domain( $enable_shared_consent );
 
 			$settings = array(
 					'clarity_consent_mode'  => isset( $_POST['clarity_consent_mode'] ) ? 1 : 0,
@@ -191,7 +143,11 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 			);
 		}
 
+		$previous_duration = absint( wpconsent()->settings->get_option( 'consent_duration', 30 ) );
+
 		wpconsent()->settings->bulk_update_options( $settings );
+
+		wpconsent_after_settings_saved( $settings, $previous_duration );
 
 		wp_safe_redirect( $this->get_page_action_url() );
 		exit;
@@ -503,6 +459,8 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 				$this->is_tcf_field_locked( 'google_consent_mode' )
 		);
 
+		$this->google_consent_mode_banner_notice();
+
 		$this->metabox_row(
 				esc_html__( 'URL Passthrough', 'wpconsent-cookies-banner-privacy-suite' ),
 				$this->get_checkbox_toggle(
@@ -525,6 +483,34 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 	}
 
 	/**
+	 * Output the Google Consent Mode banner wording recommendation.
+	 *
+	 * Rendered when IAB TCF is off and the banner does not use the recommended message yet,
+	 * then shown or hidden live as the Google Consent Mode toggle changes.
+	 *
+	 * @return void
+	 */
+	public function google_consent_mode_banner_notice() {
+		if ( $this->is_iab_tcf_enabled() || wpconsent()->banner->has_google_consent_mode_message() ) {
+			return;
+		}
+
+		$notice = $this->get_tcf_notice(
+			esc_html__( 'Google recommends that your banner message mention analytics and personalized advertising, and that Google\'s privacy information is reachable from the banner. The preferences panel links to it for each Google service. Review the suggested wording in Banner Content.', 'wpconsent-cookies-banner-privacy-suite' ) . $this->get_google_consent_mode_notice_actions(
+				$this->get_page_url( 'wpconsent-banner', 'content' ),
+				esc_html__( 'Edit banner message', 'wpconsent-cookies-banner-privacy-suite' )
+			)
+		);
+		// Start hidden when Consent Mode is saved off so the notice does not flash before the toggle script runs.
+		$style = wpconsent()->settings->get_option( 'google_consent_mode', true ) ? '' : 'display: none;';
+		?>
+		<div class="wpconsent-google-banner-notice" data-show-if-id="#google_consent_mode" data-show-if-value="1" style="<?php echo esc_attr( $style ); ?>">
+			<?php echo $notice; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Get the input for enabling records of consent.
 	 *
 	 * @return void
@@ -538,6 +524,19 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 						esc_html__( 'Enable keeping records of consent for all visitors that give consent.', 'wpconsent-cookies-banner-privacy-suite' )
 				),
 				'wpconsent-records-of-consent-lite',
+				'',
+				'',
+				'',
+				true
+		);
+		$this->metabox_row(
+				esc_html__( 'Automatic Cleanup', 'wpconsent-cookies-banner-privacy-suite' ),
+				$this->get_checkbox_toggle(
+						false,
+						'wpconsent-consent-logs-auto-delete-lite',
+						esc_html__( 'Automatically delete consent logs older than a retention period you choose, on a weekly schedule.', 'wpconsent-cookies-banner-privacy-suite' )
+				),
+				'wpconsent-consent-logs-auto-delete-lite',
 				'',
 				'',
 				'',
@@ -1037,7 +1036,7 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 				'order'   => 'ASC',
 		);
 		if ( ! empty( $selected_page_id ) ) {
-			$pages_args['exclude'] = array( $selected_page_id );
+			$pages_args['exclude'] = array( $selected_page_id ); // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_exclude -- Excludes the single selected page from a 20-item admin dropdown.
 		}
 		// Let's pre-load 20 pages.
 		$pages = get_pages( $pages_args );
@@ -1070,12 +1069,21 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 			<?php endif; ?>
 		</div>
 		<div data-show-if-id="#cookie-policy-page" data-show-if-value="0" class="wpconsent-input-area-description">
-			<button class="wpconsent-button wpconsent-button-secondary wpconsent-button-icon" id="wpconsent-create-cookie-policy-page" type="button">
-				<?php
-				wpconsent_icon( 'generate' );
-				esc_html_e( 'Generate Cookie Policy Page', 'wpconsent-cookies-banner-privacy-suite' );
-				?>
-			</button>
+			<?php if ( class_exists( 'WPConsent_Legal_Documents_Entitlement' ) && WPConsent_Legal_Documents_Entitlement::allowed() ) : ?>
+				<a class="wpconsent-button wpconsent-button-secondary wpconsent-button-icon" href="<?php echo esc_url( admin_url( 'admin.php?page=wpconsent-legal-documents' ) ); ?>">
+					<?php
+					wpconsent_icon( 'generate' );
+					esc_html_e( 'Generate under Legal Documents', 'wpconsent-cookies-banner-privacy-suite' );
+					?>
+				</a>
+			<?php else : ?>
+				<button class="wpconsent-button wpconsent-button-secondary wpconsent-button-icon wpconsent-generate-cookie-policy-page" id="wpconsent-create-cookie-policy-page" type="button" data-source="cookies">
+					<?php
+					wpconsent_icon( 'generate' );
+					esc_html_e( 'Generate Cookie Policy Page', 'wpconsent-cookies-banner-privacy-suite' );
+					?>
+				</button>
+			<?php endif; ?>
 		</div>
 		<div class="wpconsent-input-area-description">
 			<?php
@@ -1086,6 +1094,19 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 			);
 			?>
 		</div>
+		<?php // Entitled sites do not see the Legal Documents page until the engine ships. ?>
+		<?php if ( ! WPConsent_Legal_Documents_Entitlement::allowed() ) : ?>
+			<div class="wpconsent-input-area-description">
+				<?php
+				printf(
+					// Translators: %1$s is the opening link tag to the Legal Documents page, %2$s is the closing tag.
+					esc_html__( 'Your Cookie Policy is also listed under %1$sLegal Documents%2$s.', 'wpconsent-cookies-banner-privacy-suite' ),
+					'<a href="' . esc_url( $this->get_page_url( 'wpconsent-legal-documents' ) ) . '">',
+					'</a>'
+				);
+				?>
+			</div>
+		<?php endif; ?>
 		<?php
 		return ob_get_clean();
 	}
@@ -1715,7 +1736,7 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 			<?php
 			echo WPConsent_Admin_Page::get_upsell_box( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					esc_html__( 'IAB TCF is a PRO feature', 'wpconsent-cookies-banner-privacy-suite' ),
-					'<p>' . esc_html__( 'Upgrade to WPConsent PRO today to enable IAB Transparency & Consent Framework v2.2 support. Manage vendor consents, publisher restrictions, and ensure compliance with the TCF specification.', 'wpconsent-cookies-banner-privacy-suite' ) . '</p>',
+					'<p>' . esc_html__( 'Upgrade to WPConsent PRO today to enable IAB Transparency & Consent Framework v2.3 support. Manage vendor consents, publisher restrictions, and ensure compliance with the TCF specification.', 'wpconsent-cookies-banner-privacy-suite' ) . '</p>',
 					array(
 							'text' => esc_html__( 'Upgrade to PRO and Unlock IAB TCF', 'wpconsent-cookies-banner-privacy-suite' ),
 							'url'  => esc_url( wpconsent_utm_url( 'https://wpconsent.com/lite/', 'iab-tcf-page', 'main' ) ),
@@ -1937,7 +1958,7 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 					<span class="wpconsent-section-count">
 						<?php
 						printf(
-							// Translators: 1: number of selected purposes, 2: total number of available purposes.
+							/* translators: 1: number of selected purposes, 2: total number of available purposes. */
 							esc_html__( '(%1$d/%2$d selected)', 'wpconsent-cookies-banner-privacy-suite' ),
 							count( $purposes_li ),
 							absint( $li_total )
@@ -2197,7 +2218,7 @@ class WPConsent_Admin_Page_Cookies extends WPConsent_Admin_Page {
 					<span class="wpconsent-section-count">
 						<?php
 						printf(
-							/* translators: 1: number of selected purposes, 2: total number of available purposes */
+							/* translators: 1: number of selected purposes, 2: total number of available purposes. */
 							esc_html__( '(%1$d/%2$d selected)', 'wpconsent-cookies-banner-privacy-suite' ),
 							count( $purposes_li ),
 							absint( $li_total )

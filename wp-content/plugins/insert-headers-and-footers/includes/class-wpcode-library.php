@@ -380,11 +380,49 @@ class WPCode_Library {
 			return false;
 		}
 
+		return $this->create_snippet_from_data( $this->slash_api_code( $snippet_data ) );
+	}
+
+	/**
+	 * Slash the code of a snippet from the API for WPCode_Snippet::save(), which unslashes it.
+	 * The public library serves the code unslashed.
+	 *
+	 * @param array $snippet_data Snippet payload from the library API.
+	 *
+	 * @return array
+	 */
+	protected function slash_api_code( $snippet_data ) {
+		if ( isset( $snippet_data['code'] ) ) {
+			$snippet_data['code'] = wp_slash( $snippet_data['code'] );
+		}
+
+		return $snippet_data;
+	}
+
+	/**
+	 * Create a local snippet from an already-fetched library snippet payload.
+	 * Shared by create_new_snippet() (single fetch) and create_new_snippets_batch()
+	 * (one fetch for many) so the save/meta logic lives in one place.
+	 *
+	 * @param array $snippet_data Snippet payload from the library API.
+	 *
+	 * @return false|WPCode_Snippet
+	 */
+	public function create_snippet_from_data( $snippet_data ) {
+
+		if ( empty( $snippet_data ) || ! is_array( $snippet_data ) ) {
+			return false;
+		}
+
 		$snippet_data = apply_filters( 'wpcode_library_import_snippet_data', $snippet_data );
 
 		$snippet = wpcode_get_snippet( $snippet_data );
 
 		$snippet_id = $snippet->save();
+		if ( ! $snippet_id ) {
+			// A refused save (permissions, or a site that manages this type from files) creates nothing.
+			return false;
+		}
 
 		// Save the version information if available in the API response.
 		if ( ! empty( $snippet_data['version'] ) ) {
@@ -399,6 +437,44 @@ class WPCode_Library {
 		delete_transient( $this->used_snippets_transient_key );
 
 		return $snippet;
+	}
+
+	/**
+	 * Create several library snippets at once, fetching all their payloads with
+	 * a single request to the library `get-batch` endpoint. Used by the Packs
+	 * feature so installing a pack doesn't make one remote call per snippet.
+	 *
+	 * @param int[] $library_ids Library snippet IDs to fetch and create.
+	 *
+	 * @return WPCode_Snippet[] Map of library_id => created snippet (only the ones that succeeded).
+	 */
+	public function create_new_snippets_batch( $library_ids ) {
+
+		$library_ids = array_filter( array_map( 'absint', (array) $library_ids ) );
+		$library_ids = array_values( array_unique( $library_ids ) );
+
+		if ( empty( $library_ids ) ) {
+			return array();
+		}
+
+		$response = $this->process_response( $this->make_request( 'get-batch?ids=' . implode( ',', $library_ids ) ) );
+
+		if ( empty( $response['snippets'] ) || ! is_array( $response['snippets'] ) ) {
+			return array();
+		}
+
+		$created = array();
+		foreach ( $response['snippets'] as $snippet_data ) {
+			if ( empty( $snippet_data['library_id'] ) ) {
+				continue;
+			}
+			$snippet = $this->create_snippet_from_data( $this->slash_api_code( $snippet_data ) );
+			if ( $snippet ) {
+				$created[ (int) $snippet_data['library_id'] ] = $snippet;
+			}
+		}
+
+		return $created;
 	}
 
 	/**
@@ -913,7 +989,7 @@ class WPCode_Library {
 
 		// Update snippet.
 		$library_snippet['id'] = $snippet_id;
-		$snippet               = wpcode_get_snippet( $library_snippet );
+		$snippet               = wpcode_get_snippet( $this->slash_api_code( $library_snippet ) );
 		$result                = $snippet->save();
 
 		if ( ! $result ) {

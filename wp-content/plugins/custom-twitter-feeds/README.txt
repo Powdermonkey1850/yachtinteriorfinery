@@ -1,11 +1,11 @@
 === Custom Twitter Feeds - A Tweets Widget or X Feed Widget ===
 Author: Smash Balloon
 Contributors: smashballoon, craig-at-smash-balloon, am, smub
-Support Website: https://smashballoon/custom-twitter-feeds/
+Support Website: https://smashballoon.com/custom-twitter-feeds/
 Tags: Twitter, Twitter feed, X feed, Twitter widget, Custom Twitter Feed
 Requires at least: 5.3
-Tested up to: 7.0
-Stable tag: 2.6.0
+Tested up to: 7.1
+Stable tag: 2.12.0
 Requires PHP: 7.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -232,7 +232,57 @@ If you're still having trouble displaying your Tweets after trying the common is
 6. Use handy shortcode options to customize individual Twitter feed
 7. To display the Twitter feed just copy and paste the shortcode into a WordPress widget or page
 
+== Privacy Policy ==
+
+= Optional Data Sharing and In-Plugin Notifications =
+
+Sharing anonymous usage data with Smash Balloon and receiving in-plugin notifications are both off until you opt in, either in the one-time data sharing prompt or under Twitter Feeds > Settings > Data Sharing. You can turn them off again at any time on that tab. When off, no usage data is sent, and in-plugin notifications and About Us page content are not loaded from Smash Balloon. See what is shared: https://smashballoon.com/data-sharing-permissions/
+
 == Changelog ==
+= 2.12.0 =
+* New: The Embed Feed popup now uses the shared Embed Feed modal, which can also search your posts, and Add to Page opens the page editor with your X Feed block already inserted. On WordPress versions before 5.8, the Embed button shows your feed shortcode to copy instead.
+* Tweak: If you had opted in to usage tracking before, Data Sharing now stays on after the update.
+* Fix: The "Add a Block" tooltip after Add to Page now appears on WordPress 6.9 and later.
+* Fix: Saving a feed twice in quick succession no longer shows "Error saving Feed".
+* Fix: X Feed no longer breaks Instagram Feed's Add to Page flow when both plugins are active.
+* Fix: Fixed a PHP fatal error in admin license notices on some sites.
+* Fix: Plugin security hardening.
+
+= 2.11.1 =
+* Fix: The data-sharing popup no longer locks you out of your WordPress admin when your choice can't be saved. You can always close it and keep working.
+* Fix: Plugin security hardening.
+
+= 2.11.0 =
+* New: Ask AI assistants to check your feed settings and, once you turn on MCP Write Access under Settings > General, change them for you, through the WordPress Abilities API (WordPress 6.9 or later). [See what X (Twitter) Feed Pro adds](https://smashballoon.com/custom-twitter-feeds/twitter-lite-upgrade/?utm_source=changelog&utm_medium=aiagents&utm_campaign=twitter-free-readme)
+* New: Added an AI Agents card to the Settings page.
+
+= 2.10.0 =
+* New: Added a Data Sharing settings tab where you can control anonymous data sharing and in-plugin notifications. Usage data is only sent once you opt in.
+* Tweak: Admin icons are now bundled with the plugin instead of loaded from a third-party CDN.
+* Tweak: Refreshed the About Us page.
+* Fix: The deactivation feedback survey now submits correctly when other Smash Balloon plugins are active on the same site.
+* Fix: Dismissed in-plugin notifications no longer reappear.
+* Fix: Plugin security hardening.
+
+= 2.9.0 =
+* Tweak: Tested and supported on WordPress 7.1.
+* Fix: Plugin security hardening.
+
+= 2.8.0 =
+* Tweak: The plugin is now named "Smash Balloon X (Twitter) Feed" on the Plugins screen so all Smash Balloon plugins are listed together.
+* Tweak: Improved accessibility across the feed builder and feed output, including keyboard navigation, screen reader support and focus handling.
+* Fix: Plugin security hardening.
+
+= 2.7.0 =
+* Tweak: Staggered feed update cron jobs to help balance server load.
+* Fix: Plugin hardening.
+
+= 2.6.1 =
+* New: Added a Help widget to the feed builder for in-app access to documentation and support.
+* Tweak: Corrected typos and grammar in several admin UI strings.
+* Fix: Block editor preview interactions and block conflicts with other Smash Balloon plugins are now resolved.
+* Fix: The Elementor widget title is now translatable.
+
 = 2.6.0 =
 * New: Added a modern Gutenberg block and Elementor widget for the Twitter feed. Existing feeds using the legacy block continue to render without reconfiguration.
 * Tweak: Compatibility with WP 7.

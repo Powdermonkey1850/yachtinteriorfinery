@@ -6,8 +6,11 @@
  * Author: WP connect
  * Author URI: https://wpconnect.co/
  * Text Domain: addon-gravityforms-sendinblue-free
- * Domain Path: /languages/
- * Version: 2.6.0
+ * Version: 2.6.2
+ * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Requires at least: 6.0
+ * Requires PHP: 7.4
  */
 
 namespace DK_GF_SIB_FREE;
@@ -19,7 +22,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Define plugin constants
  */
-define( 'DKGFSIB_FREE_VERSION', '2.6.0' );
+define( 'DKGFSIB_FREE_VERSION', '2.6.2' );
 define( 'DKGFSIB_FREE_URL', plugin_dir_url( __FILE__ ) );
 define( 'DKGFSIB_FREE_DIR', plugin_dir_path( __FILE__ ) );
 define( 'DKGFSIB_FREE_PLUGIN_DIRNAME', basename( rtrim( dirname( __FILE__ ), '/' ) ) );
@@ -63,7 +66,7 @@ function meets_requirements() {
 	global $wp_version;
 
 	return (
-		version_compare( PHP_VERSION, '7.0', '>=' ) &&
+		version_compare( PHP_VERSION, '7.4', '>=' ) &&
 		version_compare( $wp_version, '5.5', '>=' ) &&
 		class_exists( 'GFForms' )
 	);
@@ -132,16 +135,6 @@ function register_addon() {
 	GFAddOn::register( 'DK_GF_SIB_FREE\GF_Addon' );
 }
 add_action( 'gform_loaded', __NAMESPACE__ . '\\register_addon', 5 );
-
-/**
- * Translations.
- *
- * @return void
- */
-function load_translations() {
-	load_plugin_textdomain( 'addon-gravityforms-sendinblue-free', false, DKGFSIB_FREE_PLUGIN_DIRNAME . '/languages/' );
-}
-add_action( 'init', __NAMESPACE__ . '\\load_translations' );
 
 /**
  * Settings Link.

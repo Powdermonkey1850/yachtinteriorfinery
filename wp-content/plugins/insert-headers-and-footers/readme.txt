@@ -2,9 +2,9 @@
 Contributors: WPbeginner, smub, gripgrip, wpcodeteam
 Tags: code, css, php, header, code snippets
 Requires at least: 5.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 7.0
-Stable tag: 2.3.6
+Stable tag: 2.4.2
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
@@ -231,6 +231,35 @@ WPCode comes with a ready-made code snippets library that allows you to replace 
 ... and basically any plugin that adds a functionality which can be added via custom code snippets.
 
 == Changelog ==
+
+= 2.4.2 =
+* Tweak: Removed the restricted code check, so snippets using functions like eval() are no longer blocked, and active snippets it skipped run again.
+* Tweak: The AI & Automation Access setting now says read-only access stays on when it is off.
+* Tweak: Abilities API from WPCode are now available to MCP plugins directly.
+* Fix: The snippets list lost the selected view, tag and sort order when paging.
+* Fix: Wrong item count and pages in the snippets list for searches and the Has Error view.
+* Fix: Searching the snippets list did not match snippet notes.
+* Fix: Backslashes removed when installing library snippets, saving generators, and saving snippet titles, notes and rules.
+* Fix: "Remove all data" on uninstall left WPCode settings behind on some MySQL configurations.
+
+= 2.4.1 =
+* New: Opt-in write access for the WordPress Abilities API, so AI tools can manage snippets.
+
+= 2.4.0 =
+* Fix: Improved safe mode security so only users who can manage snippets can load the site with snippets disabled.
+
+= 2.3.9 =
+* Fix: PHP fatal error when a snippet error was logged on a frontend or REST request while the logs folder was missing.
+* Fix: Snippets no longer get overwritten with visual editor content when other plugins trigger editor events in the admin.
+* Fix: Library snippet previews now always start at the top of the code.
+* Fix: PHP fatal error on some admin AJAX requests from the library connect notice.
+
+= 2.3.8 =
+* Tweak: You can now resize the code editor on the Live CSS Preview screen by dragging the divider between it and the preview, and it remembers the size you set.
+* Tweak: Editing an active snippet now requires permission to activate snippets; without it the editor is read-only.
+
+= 2.3.7 =
+* New: Set up a whole group of related snippets at once with Snippet Packs — pick a pack and install every snippet in it with a single click, then manage or remove a pack anytime while keeping any snippets you use across other packs.
 
 = 2.3.6 =
 * New: You can now easily tell where each library snippet came from — imported snippets show a small cloud badge and the originating library author (WPCode, WPForms, AIOSEO, and more).

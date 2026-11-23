@@ -3,8 +3,8 @@ Contributors: smashballoon, craig-at-smash-balloon, am, smub
 Tags: Facebook, Facebook feed, Facebook posts, Facebook account, Facebook page
 Requires at least: 4.1
 Requires PHP: 7.4
-Tested up to: 6.9
-Stable tag: 4.7.7
+Tested up to: 7.1
+Stable tag: 4.16.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -13,6 +13,8 @@ Formerly "Custom Facebook Feed". Display completely customizable Facebook feeds 
 == Description ==
 
 Display Facebook posts on your WordPress site in an attractive feed. **Completely customizable**, **responsive**, **search engine crawlable**, and **GDPR compliant** feeds. Automatically powers any Facebook oEmbeds on your site.
+
+https://vimeo.com/1220793252
 
 *"The perfect Facebook plugin with amazing support! What else do you want? Get it!"* - [JoeJeffries](http://wordpress.org/support/topic/you-dont-already-have-this?facebook)
 
@@ -203,6 +205,60 @@ The most common reason for this is that an add-on or extension you have installe
 9. It's super easy to display your Facebook feed in any page or post
 
 == Changelog ==
+= 4.16.0 =
+* New: The Embed button in the feed builder now opens a new Embed Feed window, and "Add to a Page" opens the editor with your Facebook Feed block already added. This needs WordPress 5.8 or later; on older versions the Embed button shows your feed shortcode instead.
+* Tweak: If you had turned on usage tracking, that choice now carries over to the Data Sharing setting when you update. If you never turned it on, or turned Data Sharing off, it stays off.
+* Fix: The feed builder preview no longer hides every post when no post types are selected.
+* Fix: Saving a feed twice in quick succession (for example Save, then Embed) no longer shows "Error saving Feed".
+* Fix: When several Smash Balloon plugins show a notice on the front of your site, the notices now stack instead of covering each other.
+* Fix: Plugin security hardening.
+
+= 4.15.1 =
+* Fix: The data-sharing popup no longer locks you out of your WordPress admin when your choice can't be saved. You can always close it and keep working.
+* Fix: Plugin security hardening.
+
+= 4.15.0 =
+* New: Ask AI assistants like Claude, ChatGPT and Cursor to check and update your Facebook Feed settings for you, through the WordPress Abilities API (requires WordPress 6.9 or later and the free WPVibe plugin). A new AI Agents card in Settings → General lets you install or open WPVibe. Assistants can read your settings right away, and the plugin keeps its own AI changes off until you turn on MCP Write Access under Settings > General. Write access is off by default, and your license key and access tokens are never shared. [See what Facebook Feed Pro adds](https://smashballoon.com/custom-facebook-feed/facebook-lite-upgrade/?utm_source=changelog&utm_medium=aiagents&utm_campaign=facebook-free-readme)
+
+= 4.14.0 =
+* New: An admin notice now warns you when a feed has been showing an old saved copy of your Facebook posts for several days because it can't fetch fresh content, and the weekly Feed Issue Email Report now covers this case too.
+* New: Added a Debug tab in the plugin settings where you can control anonymous data sharing and in-plugin notifications. Usage data is only sent when you opt in, and onboarding now includes a consent checkbox.
+* Tweak: Refreshed the About Us page.
+* Fix: Facebook source errors are now reported more accurately. Rate limits no longer show a false "Source Invalid" or reconnect prompt, a problem on one source is still reported when another is only being rate-limited, and feeds from a Facebook Page you don't manage are flagged as invalid again in the feed builder. Facebook API errors also come with clearer guidance on what to do.
+* Fix: A Facebook source that starts working again now clears its own error, so the critical-issue notice, admin menu badge, Site Health warning and weekly issue email no longer stay on for a problem that has been resolved. When the plugin does report a critical issue, the settings page now explains it.
+* Fix: The "Action Required Within 7 Days" data-deletion warning now only appears while that deletion is actually scheduled.
+* Fix: The feed builder and customizer no longer show a blank screen on PHP 8 when a connected Facebook account's data can't be read.
+* Fix: Turning off Feed Issue Email Reports now actually stops the weekly report emails.
+* Fix: The Smash Balloon logo is back on the left of the admin header, and the label beside it now names the current page.
+* Fix: Dismissed in-plugin notifications no longer reappear after a page reload.
+* Fix: The deactivation feedback survey no longer conflicts with other Smash Balloon plugins active on the same site.
+* Fix: Plugin security hardening.
+
+= 4.13.0 =
+* Fix: Feeds now honor the "Check for new posts every..." caching setting instead of only checking once every 7 days.
+
+= 4.12.0 =
+* Tweak: Confirmed compatibility with WordPress 7.1.
+* Tweak: The feed builder and the Facebook feed are now far more accessible to keyboard and screen reader users, meeting WCAG 2.1 AA. Controls throughout the builder, onboarding and settings screens can be reached and operated by keyboard and announce their purpose; the feed and its posts describe their structure to screen readers; dialogs keep focus where it belongs and close with Escape; notices are announced as they appear; links that open a new tab say so; and decorative icons and images are hidden from screen readers.
+
+= 4.10.0 =
+* Tweak: Renamed the plugin on the WordPress Plugins screen to "Smash Balloon Facebook Feed" to match the product name used elsewhere.
+* Fix: Corrected the post author date styling inside the lightbox so it matches the feed.
+* Fix: Plugin security hardening.
+
+= 4.9.0 =
+* Fix: Prevented block editor typography from reverting to serif fonts when the Facebook feed block is active.
+* Fix: Plugin security hardening.
+
+= 4.8.1 =
+* New: Added a modern Gutenberg block and Elementor widget for the Facebook feed. Existing feeds using the legacy block continue to render without reconfiguration.
+* New: Added a Help widget to the feed builder for in-app access to documentation and support.
+* Tweak: Compatibility with WP 7.
+* Tweak: Corrected typos and grammar in plugin UI strings, admin notices, and tooltips.
+* Fix: Feed blocks now render a live preview correctly inside the WP 7.0+ iframed block editor.
+* Fix: Corrupted onboarding data no longer causes a fatal error.
+* Fix: The legacy Elementor widget is hidden from the element search, and the widget title is now translatable.
+
 = 4.7.7 =
 * Fix: Additional plugin hardening.
 

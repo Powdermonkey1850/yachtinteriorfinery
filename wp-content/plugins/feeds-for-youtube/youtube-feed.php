@@ -1,13 +1,15 @@
 <?php
 /*
-Plugin Name: Feeds for YouTube
+Plugin Name: Smash Balloon YouTube Feed
 Plugin URI: https://smashballoon.com/youtube-feed
 Description: The Feeds for YouTube plugin allows you to display customizable YouTube feeds from any YouTube channel.
-Version: 2.6.6
+Version: 2.12.0
 Requires PHP: 7.4
 Author: Smash Balloon YouTube Team
 Author URI: https://smashballoon.com/
 Text Domain: feeds-for-youtube
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 */
 
 /*
@@ -29,7 +31,6 @@ use Smashballoon\Customizer\Container;
 use Smashballoon\Customizer\PreviewProvider;
 use SmashBalloon\YouTubeFeed\Admin\SBY_Notifications;
 use SmashBalloon\YouTubeFeed\Admin\SBY_New_User;
-use SmashBalloon\YouTubeFeed\Admin\SBY_Tracking;
 use SmashBalloon\YouTubeFeed\Blocks\SBY_Blocks;
 use SmashBalloon\YouTubeFeed\Customizer\ShortcodePreviewProvider;
 use SmashBalloon\YouTubeFeed\Feed_Locator;
@@ -37,6 +38,13 @@ use SmashBalloon\YouTubeFeed\SBY_Cron_Updater;
 use SmashBalloon\YouTubeFeed\SBY_Posts_Manager;
 use SmashBalloon\YouTubeFeed\Services\ActivationService;
 use SmashBalloon\YouTubeFeed\Services\Admin\AdminServiceContainer;
+
+// Stop loading, instead of a fatal on every request, when a host scanner has
+// quarantined plugin files (SMASH-2242).
+require_once __DIR__ . '/inc/sby-integrity-guard.php';
+if (sby_integrity_check()) {
+	return;
+}
 
 require_once trailingslashit(plugin_dir_path(__FILE__)) . 'activation.php';
 require_once trailingslashit(plugin_dir_path(__FILE__)) . 'bootstrap.php';
@@ -54,7 +62,7 @@ if ( ! defined( 'SBY_PLUGIN_EDD_NAME' ) ) {
     define( 'SBY_PLUGIN_EDD_NAME', 'YouTube Feed Pro Personal' );
 }
 if ( ! defined( 'SBYVER' ) ) {
-    define( 'SBYVER', '2.6.6' );
+    define( 'SBYVER', '2.12.0' );
 }
 if ( ! defined( 'SBY_DBVERSION' ) ) {
     define( 'SBY_DBVERSION', '2.3' );
@@ -68,6 +76,9 @@ if ( ! defined( 'SBY_BUILDER_URL' ) ) {
 }
 if ( ! defined( 'SBY_API_URL' ) ) {
 	define( 'SBY_API_URL', 'https://reviews.smashballoon.com/api/v1.0/' );
+}
+if ( ! defined( 'SBY_SMASH_USAGE_TRACKING_API_URL' ) ) {
+	define( 'SBY_SMASH_USAGE_TRACKING_API_URL', 'https://usage.smashballoon.com/api' );
 }
 
 // Setup customizer
@@ -188,6 +199,17 @@ if ( ! function_exists( 'sby_init' ) ) {
      * @return void
      */
     function sby_init_components() {
+		sby_integrity_run('sby_init_components_inner');
+	}
+
+	/**
+	 * Component initialization. Called through sby_init_components() so a
+	 * missing class file degrades to an admin notice instead of a fatal.
+	 *
+	 * @return void
+	 */
+	function sby_init_components_inner()
+	{
         $container = new \SmashBalloon\YouTubeFeed\Services\ServiceContainer();
         $container->register();
 
@@ -214,9 +236,13 @@ if ( ! function_exists( 'sby_init' ) ) {
             }
         }
 
-        \SmashBalloon\YouTubeFeed\Container::getInstance()->get( SBY_Tracking::class );
         \Smashballoon\Customizer\Feed_Builder::instance();
         sby_builder_pro();
+
+        // WordPress Abilities API (SBR-578). The class guards against a second
+        // instantiation itself, so this and the Pro bootstrap's copy can never
+        // double-register even if both files are ever loaded.
+        $sby_abilities = new \SmashBalloon\YouTubeFeed\Abilities\SBY_Abilities();
 
         // Include upgrader hooks
         $sby_upgrader = new \SmashBalloon\YouTubeFeed\Admin\SBY_Upgrader();
@@ -257,8 +283,13 @@ if ( ! function_exists( 'sby_init' ) ) {
     // Initialize the plugin on plugins_loaded to ensure WordPress is ready
     // Priority 10 ensures WordPress core and other plugins are initialized
     add_action( 'plugins_loaded', function() {
-        sby_init();
-        sby_run();
+		sby_integrity_run(function () {
+			sby_init();
+			sby_run();
+
+			// Initialize the shared Consent (data-sharing / notifications) manager.
+			sby_init_consent_manager();
+		});
     }, 10 );
 
     /**
@@ -273,16 +304,17 @@ if ( ! function_exists( 'sby_init' ) ) {
     function sby_cron_custom_interval( $schedules ) {
         $schedules['sby30mins'] = array(
             'interval' => 30 * 60,
-            'display'  => __( 'Every 30 minutes', 'feeds-for-youtube' )
+            'display'  => 'Every 30 minutes'
         );
         $schedules['sbyweekly'] = array(
             'interval' => 3600 * 24 * 7,
-            'display'  => __( 'Weekly', 'feeds-for-youtube' )
+            'display'  => 'Weekly'
         );
 
         return $schedules;
     }
 
+    // Register cron schedules at file level so they're available during plugin activation
     add_filter( 'cron_schedules', 'sby_cron_custom_interval' );
 
     /**
@@ -309,7 +341,7 @@ if ( ! function_exists( 'sby_init' ) ) {
             $timestamp    = $timestamp + ( 3600 * 24 * 7 );
             $six_am_local = $timestamp + sby_get_utc_offset() + ( 6 * 60 * 60 );
 
-            wp_schedule_event( $six_am_local, 'sbyweekly', 'sby_notification_update' );
+            // SMASH-1245: legacy notification cron removed (notifications refresh on the render path, consent-gated).
         }
         $sby_settings = get_option( 'sby_settings', array() );
         if ( isset( $sby_settings['caching_type'] ) && $sby_settings['caching_type'] === 'background' ) {
@@ -420,6 +452,7 @@ if ( ! function_exists( 'sby_init' ) ) {
         wp_clear_scheduled_hook( 'sby_notification_update' );
         wp_clear_scheduled_hook( 'sby_feed_update' );
         wp_clear_scheduled_hook( 'sby_usage_tracking_cron' );
+        wp_clear_scheduled_hook( 'sby_smash_usage_tracking_cron' );
     }
 
     register_deactivation_hook( __FILE__, 'sby_deactivate' );
@@ -447,7 +480,7 @@ if ( ! function_exists( 'sby_init' ) ) {
                 $timestamp    = $timestamp + ( 3600 * 24 * 7 );
                 $six_am_local = $timestamp + sby_get_utc_offset() + ( 6 * 60 * 60 );
 
-                wp_schedule_event( $six_am_local, 'sbyweekly', 'sby_notification_update' );
+                // SMASH-1245: legacy notification cron removed (notifications refresh on the render path, consent-gated).
             }
         }
 
@@ -564,6 +597,9 @@ if ( ! function_exists( 'sby_init' ) ) {
             'gdpr'                     => 'auto',
             'disablecdn'               => false,
             'allowcookies'             => false,
+            // Abilities API write gate (AgDR-0503) — off by default; deliberately
+            // fails CLOSED, a stale settings model without this key keeps AI writes off.
+            'sby_ai_write_enabled'     => false,
 
             // pro only
             'usecustomsearch'          => false,

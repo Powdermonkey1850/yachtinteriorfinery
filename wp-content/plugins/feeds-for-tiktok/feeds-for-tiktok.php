@@ -1,10 +1,10 @@
 <?php
 
 /**
- * Plugin Name: Feeds for TikTok (TikTok feed, video, and gallery plugin)
+ * Plugin Name: Smash Balloon TikTok Feed
  * Plugin URI: https://smashballoon.com/tiktok-feeds/
  * Description: Add TikTok feeds to your website.
- * Version: 1.5.2
+ * Version: 1.10.0
  * Author: Smash Balloon
  * Author URI: https://smashballoon.com/
  * License: GPLv2 or later
@@ -33,7 +33,7 @@ if (! defined('SBTT_PLUGIN_NAME')) {
 }
 
 if (! defined('SBTTVER')) {
-	define('SBTTVER', '1.5.2');
+	define('SBTTVER', '1.10.0');
 }
 
 if (! defined('SBTT_PLUGIN_FILE')) {
@@ -50,6 +50,10 @@ if (! defined('SBTT_LITE')) {
 
 if (! defined('SBTT_PLUGIN_BASENAME')) {
 	define('SBTT_PLUGIN_BASENAME', plugin_basename(__FILE__));
+}
+
+if ( ! defined( 'SBTT_SMASH_USAGE_TRACKING_API_URL' ) ) {
+	define( 'SBTT_SMASH_USAGE_TRACKING_API_URL', 'https://usage.smashballoon.com/api' );
 }
 
 require_once trailingslashit(SBTT_PLUGIN_DIR) . 'bootstrap.php';

@@ -29,6 +29,19 @@ if (!function_exists('humbug_phpscoper_expose_class')) {
         }
     }
 }
-humbug_phpscoper_expose_class('ComposerAutoloaderInit053be8708e57641def40bd994b33aefd', 'SmashBalloon\YoutubeFeed\Vendor\ComposerAutoloaderInit053be8708e57641def40bd994b33aefd');
+humbug_phpscoper_expose_class('ComposerAutoloaderInitf00edec88438d944de5beba029babeb1', 'SmashBalloon\YoutubeFeed\Vendor\ComposerAutoloaderInitf00edec88438d944de5beba029babeb1');
+
+// Function aliases. For more information see:
+// https://github.com/humbug/php-scoper/blob/master/docs/further-reading.md#function-aliases
+if (!function_exists('__')) { function __() { return \SmashBalloon\YoutubeFeed\Vendor\__(...func_get_args()); } }
+if (!function_exists('apply_filters')) { function apply_filters() { return \SmashBalloon\YoutubeFeed\Vendor\apply_filters(...func_get_args()); } }
+if (!function_exists('current_user_can')) { function current_user_can() { return \SmashBalloon\YoutubeFeed\Vendor\current_user_can(...func_get_args()); } }
+if (!function_exists('esc_sql')) { function esc_sql() { return \SmashBalloon\YoutubeFeed\Vendor\esc_sql(...func_get_args()); } }
+if (!function_exists('get_permalink')) { function get_permalink() { return \SmashBalloon\YoutubeFeed\Vendor\get_permalink(...func_get_args()); } }
+if (!function_exists('get_post_types')) { function get_post_types() { return \SmashBalloon\YoutubeFeed\Vendor\get_post_types(...func_get_args()); } }
+if (!function_exists('get_posts')) { function get_posts() { return \SmashBalloon\YoutubeFeed\Vendor\get_posts(...func_get_args()); } }
+if (!function_exists('sbc_about_us_icon')) { function sbc_about_us_icon() { return \SmashBalloon\YoutubeFeed\Vendor\sbc_about_us_icon(...func_get_args()); } }
+if (!function_exists('sbc_about_us_kses')) { function sbc_about_us_kses() { return \SmashBalloon\YoutubeFeed\Vendor\sbc_about_us_kses(...func_get_args()); } }
+if (!function_exists('wp_strip_all_tags')) { function wp_strip_all_tags() { return \SmashBalloon\YoutubeFeed\Vendor\wp_strip_all_tags(...func_get_args()); } }
 
 return $loader;

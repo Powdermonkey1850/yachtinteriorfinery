@@ -225,12 +225,12 @@
             "source": {
                 "type": "git",
                 "url": "git@github.com:awesomemotive\/sb-customizer.git",
-                "reference": "a04c2aeb6963265b2327abffcd21871cd27c6200"
+                "reference": "f436d92296811d422980732ce13664003032aeab"
             },
             "require": {
                 "smashballoon\/stubs": "dev-master"
             },
-            "time": "2026-03-25T16:40:59+00:00",
+            "time": "2026-11-06T14:21:07+00:00",
             "type": "library",
             "installation-source": "source",
             "autoload": {
@@ -253,12 +253,12 @@
             "source": {
                 "type": "git",
                 "url": "git@github.com:awesomemotive\/sb-common.git",
-                "reference": "fcf3511827434c056c90f80a7ff9935f4fbe99df"
+                "reference": "e295f26a9a18f268b5842093e4d2dd5814db4430"
             },
             "dist": {
                 "type": "zip",
-                "url": "https:\/\/api.github.com\/repos\/awesomemotive\/sb-common\/zipball\/fcf3511827434c056c90f80a7ff9935f4fbe99df",
-                "reference": "fcf3511827434c056c90f80a7ff9935f4fbe99df",
+                "url": "https:\/\/api.github.com\/repos\/awesomemotive\/sb-common\/zipball\/e295f26a9a18f268b5842093e4d2dd5814db4430",
+                "reference": "e295f26a9a18f268b5842093e4d2dd5814db4430",
                 "shasum": ""
             },
             "require": {
@@ -275,10 +275,10 @@
                 "phpcompatibility\/php-compatibility": "^9.3",
                 "squizlabs\/php_codesniffer": "^3.7"
             },
-            "time": "2026-02-20T20:49:19+00:00",
+            "time": "2026-11-10T13:19:17+00:00",
             "default-branch": true,
             "type": "library",
-            "installation-source": "source",
+            "installation-source": "dist",
             "autoload": {
                 "psr-4": {
                     "TikTokFeeds\\Vendor\\Smashballoon\\Framework\\": "",
@@ -304,10 +304,6 @@
                 }
             ],
             "description": "WordPress plugin framework. Developed by SmashBalloon Team.",
-            "support": {
-                "source": "https:\/\/github.com\/awesomemotive\/sb-common\/tree\/master",
-                "issues": "https:\/\/github.com\/awesomemotive\/sb-common\/issues"
-            },
             "install-path": "..\/smashballoon\/framework"
         },
         {
@@ -341,10 +337,6 @@
                 }
             ],
             "description": "Shared common stubs.",
-            "support": {
-                "source": "https:\/\/github.com\/awesomemotive\/sb-stubs\/tree\/1.0.0",
-                "issues": "https:\/\/github.com\/awesomemotive\/sb-stubs\/issues"
-            },
             "install-path": "..\/smashballoon\/stubs"
         }
     ],

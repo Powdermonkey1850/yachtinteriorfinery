@@ -519,3 +519,58 @@ padding-top:150px;
     padding: 5px 8px;
   }
 }
+
+
+
+
+/* fix overlay issues of fly out menu over footer links */
+
+@media (max-width: 2500px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 25%;
+  }
+}
+
+@media (max-width: 1919px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 25%;
+  }
+}
+
+@media (max-width: 1599px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 25%;
+  }
+}
+
+@media (max-width: 1399px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 25%;
+  }
+}
+
+@media (max-width: 1199px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 25%;
+  }
+}
+
+@media (max-width: 991px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 100%;
+  }
+}
+
+@media (max-width: 575px) {
+  .yif-menu-sec.et_pb_section_0_tb_header {
+    width: 100%;
+  }
+}
+
+

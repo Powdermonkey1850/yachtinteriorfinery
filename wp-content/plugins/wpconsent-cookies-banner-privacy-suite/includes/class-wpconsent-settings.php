@@ -35,15 +35,26 @@ class WPConsent_Settings {
 	 * @see get_option
 	 */
 	public function get_option( $option_name, $default = false ) {
-		$options = $this->get_options();
-		$value   = $default;
-		if ( isset( $options[ $option_name ] ) ) {
-			$value = $options[ $option_name ];
-		}
-
-		$value = apply_filters( 'wpconsent_get_option', $value, $option_name, $options );
+		$value = $this->get_base_option( $option_name, $default );
 
 		return apply_filters( "wpconsent_get_option_{$option_name}", $value, $option_name );
+	}
+
+	/**
+	 * Get an option with only the generic wpconsent_get_option filter applied, skipping the
+	 * option-specific filter. Use this for the base value of a setting that a feature such as
+	 * geolocation overrides through its option-specific filter.
+	 *
+	 * @param string $option_name The option name.
+	 * @param mixed  $default The default value (optional).
+	 *
+	 * @return mixed
+	 */
+	public function get_base_option( $option_name, $default = false ) {
+		$options = $this->get_options();
+		$value   = isset( $options[ $option_name ] ) ? $options[ $option_name ] : $default;
+
+		return apply_filters( 'wpconsent_get_option', $value, $option_name, $options );
 	}
 
 	/**
@@ -55,6 +66,21 @@ class WPConsent_Settings {
 		if ( ! isset( $this->options ) ) {
 			$this->options = $this->load_options();
 		}
+
+		return $this->options;
+	}
+
+	/**
+	 * Forget the options loaded by this request and read them again from the database. A long request
+	 * (a publish, a translation batch, the daily check) that writes after another request saved
+	 * settings would otherwise write the copy it loaded minutes ago over them.
+	 *
+	 * @return array
+	 */
+	public function refresh() {
+		wp_cache_delete( $this->settings_key, 'options' );
+		wp_cache_delete( 'alloptions', 'options' );
+		$this->options = $this->load_options();
 
 		return $this->options;
 	}
@@ -103,6 +129,12 @@ class WPConsent_Settings {
 				'scanner_email_notifications'     => 0,
 				'scanner_email_addresses'         => '',
 				'scanner_history_retention'       => 90,
+				'consent_logs_auto_delete'        => 0,
+				'consent_logs_retention_period'   => '1_year',
+				// Banner analytics settings.
+				'analytics_enabled'               => 1,
+				'analytics_retention'             => 90,
+				'analytics_excluded_roles'        => array( 'administrator', 'editor' ),
 				'gcm_url_passthrough'             => 0,
 				'gcm_ads_data_redaction'          => 0,
 			),
@@ -159,6 +191,37 @@ class WPConsent_Settings {
 		$options = apply_filters( 'wpconsent_save_options', $this->options, $this->load_options() );
 
 		update_option( $this->settings_key, (array) $options );
+	}
+
+	/**
+	 * Check whether any of the given keys differ between two options arrays.
+	 *
+	 * Used by 'wpconsent_save_options' listeners that only need to react when
+	 * specific settings actually change, rather than on every save.
+	 *
+	 * @param array $new_options Options array about to be saved.
+	 * @param array $old_options Options array currently stored.
+	 * @param array $keys        The keys to compare.
+	 *
+	 * @return bool
+	 */
+	public static function keys_changed( $new_options, $old_options, $keys ) {
+		if ( ! is_array( $new_options ) ) {
+			return false;
+		}
+		if ( ! is_array( $old_options ) ) {
+			$old_options = array();
+		}
+
+		foreach ( $keys as $key ) {
+			$old_value = isset( $old_options[ $key ] ) ? $old_options[ $key ] : null;
+			$new_value = isset( $new_options[ $key ] ) ? $new_options[ $key ] : null;
+			if ( $old_value !== $new_value ) {
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/**

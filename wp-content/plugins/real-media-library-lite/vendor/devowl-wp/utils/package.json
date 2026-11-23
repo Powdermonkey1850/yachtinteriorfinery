@@ -1,6 +1,6 @@
 {
     "name": "@devowl-wp/utils",
-    "version": "1.20.23",
+    "version": "1.20.41",
     "private": true,
     "description": "Utility functionality for all your WordPress plugins.",
     "homepage": "https://devowl.io",
@@ -8,7 +8,7 @@
     "author": "devowl",
     "sideEffects": [
         "**/*.{css,scss,less}",
-        "./src/public/ts/*.tsx"
+        "./lib/*.tsx"
     ],
     "type": "module",
     "exports": {
@@ -58,11 +58,10 @@
         "@devowl-wp/api": "workspace:*",
         "@wordpress/i18n": "catalog:wordpress",
         "deepmerge": "catalog:isomorphic",
-        "immer": "catalog:isomorphic",
         "jquery": "catalog:frontend",
         "js-cookie": "catalog:frontend",
         "json-form-data": "catalog:isomorphic",
-        "mobx": "catalog:legacy",
+        "mobx": "catalog:frontend",
         "react": "catalog:frontend",
         "react-dom": "catalog:frontend"
     },
@@ -104,7 +103,7 @@
             "de_DE_formal": "de@formal",
             "de_CH": false,
             "de_CH_informal": false,
-            "nb_NO": "nb_NO",
+            "nb_NO": "nb",
             "ru_RU": "ru@formal",
             "uk": "uk",
             "fr_FR": "fr@formal",
@@ -152,7 +151,7 @@
             "es@formal": 100,
             "da": 100,
             "sv": 100,
-            "nb_NO": 100,
+            "nb": 100,
             "cs": 100,
             "pt@formal": 100,
             "hu": 100,
@@ -188,7 +187,7 @@
             "sv": [
                 "deepl"
             ],
-            "nb_NO": [
+            "nb": [
                 "deepl"
             ],
             "cs": [
@@ -304,7 +303,6 @@
     },
     "swc": {
         "jsc": {
-            "loose": true,
             "parser": {
                 "syntax": "typescript",
                 "tsx": true,

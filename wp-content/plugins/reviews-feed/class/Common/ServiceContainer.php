@@ -3,6 +3,8 @@
 namespace SmashBalloon\Reviews\Common;
 
 use SmashBalloon\Reviews\Common\Admin\Blocks\SB_Recommended_Blocks;
+use SmashBalloon\Reviews\Common\Badges\SBR_Badge_Service;
+use SmashBalloon\Reviews\Common\Badges\SBR_Trust_Badge_Builder;
 use SmashBalloon\Reviews\Common\Admin\MenuService;
 use SmashBalloon\Reviews\Common\Admin\SBR_Admin_Notice;
 use SmashBalloon\Reviews\Common\Admin\SBR_Collections_Builder;
@@ -12,6 +14,7 @@ use SmashBalloon\Reviews\Common\Admin\SBR_Plugin_Insltaller;
 use SmashBalloon\Reviews\Common\Admin\SBR_Support_Tool;
 use SmashBalloon\Reviews\Common\Builder\SBR_Feed_Builder;
 use SmashBalloon\Reviews\Common\Builder\SBR_New_Providers_Manager;
+use SmashBalloon\Reviews\Common\Integrations\Analytics\SB_Analytics;
 use SmashBalloon\Reviews\Common\Integrations\Providers\Google;
 use SmashBalloon\Reviews\Common\Integrations\Providers\Yelp;
 use SmashBalloon\Reviews\Common\Services\CLIService;
@@ -20,20 +23,25 @@ use SmashBalloon\Reviews\Common\Services\SBR_Upgrader;
 use SmashBalloon\Reviews\Common\Services\SettingsManagerService;
 use SmashBalloon\Reviews\Common\Services\ShortcodeService;
 use SmashBalloon\Reviews\Common\Services\MigrationReactivationNotice;
+use SmashBalloon\Reviews\Common\Services\VariantMismatchNotice;
 use SmashBalloon\Reviews\Common\Services\SiteUrlWatcher;
+use SmashBalloon\Reviews\Common\Services\DatabaseHealthService;
 use SmashBalloon\Reviews\Common\Utils\EmailVerification;
 use Smashballoon\Stubs\Services\ServiceProvider;
 use SmashBalloon\Reviews\Common\Services\Upgrade\RoutineManagerService;
 use SmashBalloon\Reviews\Common\Builder\SBR_Feed_Saver_Manager;
 use SmashBalloon\Reviews\Common\Migrations\Reviews_Post;
 use SmashBalloon\Reviews\Common\Settings\SBR_Settings_Builder;
-use SmashBalloon\Reviews\Common\Admin\SBR_About_Builder;
+// use SmashBalloon\Reviews\Common\Admin\SBR_About_Builder;
 use SmashBalloon\Reviews\Common\Admin\SBR_Support_Builder;
 use SmashBalloon\Reviews\Common\Tooltip_Wizard;
 use SmashBalloon\Reviews\Common\Admin\Blocks\SB_Reviews_Blocks;
+use SmashBalloon\Reviews\Common\Integrations\Elementor\SBR_Elementor_Base;
 use SmashBalloon\Reviews\Common\ReviewAlerts\SBR_Review_Alert_Service;
+use SmashBalloon\Reviews\Common\Abilities\SBR_Abilities;
 use SmashBalloon\Reviews\Common\ReviewAlerts\SBR_Review_Alert_Frontend;
 use SmashBalloon\Reviews\Common\ReviewAlerts\SBR_ReviewAlert_Builder;
+use SmashBalloon\Reviews\Common\UsageTracking\SmashUsageTracking;
 
 class ServiceContainer extends ServiceProvider
 {
@@ -41,6 +49,8 @@ class ServiceContainer extends ServiceProvider
 		Reviews_Post::class,
 		MenuService::class,
 		RoutineManagerService::class,
+		// SMASH-1606: after the upgrade routines, so a fresh install's V1Routine has created the tables first.
+		DatabaseHealthService::class,
 		//Customizer Services
 		\Smashballoon\Customizer\V2\ServiceContainer::class,
 		FeedCacheUpdateService::class,
@@ -54,15 +64,20 @@ class ServiceContainer extends ServiceProvider
 		// SMASH-1281 — renders the dismissible admin notice after a
 		// successful silent license re-activation on a migrated site.
 		MigrationReactivationNotice::class,
+		// SMASH-1402 — renders the dismissible warning when the running
+		// SBR_PRODUCT_ID differs from the licence item_id stored at activation
+		// (manual or silent); cleared by a matching activation or deactivation.
+		VariantMismatchNotice::class,
 		Google::class,
 		Yelp::class,
+		SB_Analytics::class,
 		CLIService::class,
 		SBR_Feed_Saver_Manager::class,
 		SBR_New_Providers_Manager::class,
 		SBR_Feed_Builder::class,
 		Clear_Cache::class,
 		SBR_Settings_Builder::class,
-		SBR_About_Builder::class,
+		// SBR_About_Builder::class,
 		SBR_Support_Builder::class,
 		SBR_Admin_Notice::class,
 		SBR_Plugin_Insltaller::class,
@@ -74,11 +89,22 @@ class ServiceContainer extends ServiceProvider
 		SBR_Upgrader::class,
 		SBR_Collections_Builder::class,
 		SBR_Support_Tool::class,
+		SBR_Elementor_Base::class,
 		Error_Reporter::class,
 		// Review Alert Services
 		SBR_Review_Alert_Service::class,
 		SBR_Review_Alert_Frontend::class,
 		SBR_ReviewAlert_Builder::class,
+		// SMASH-1756 — schema.org rich-snippet output (AIOSEO handshake + JSON-LD fallback)
+		SBR_Schema_Service::class,
+		SmashUsageTracking::class,
+		// SBR-163 — Widgets & Badges: [reviews-badge] shortcode, sbr/trust-badge block
+		// and the first native WP_Widget. Purely additive; registers new rails only.
+		SBR_Badge_Service::class,
+		SBR_Trust_Badge_Builder::class,
+		// SBR-577 — WordPress Abilities API integration (AgDR-0503, AgDR-9005).
+		// Edition-filtered: the free build exposes the free subset only.
+		SBR_Abilities::class,
 	];
 
 	public function register(): void

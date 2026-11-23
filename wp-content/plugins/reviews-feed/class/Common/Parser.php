@@ -21,8 +21,52 @@ class Parser {
 	public function get_text($post)
 	{
 		if (! empty($post['text'])) {
-			// Decode HTML entities (fixes Danish characters like æ, ø, å and other special chars)
-			return html_entity_decode((string) $post['text'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			// No decode here. Doing it a second time re-armed a stored
+			// &lt;img class=emoji alt=…&gt; into live markup after a write filter had already
+			// accepted it as inert text — the extra encoding layer every writer could hide
+			// behind (SMASH-1795).
+			//
+			// Do NOT "restore this for consistency with ingest": the write side does not
+			// decode everywhere, and that asymmetry is deliberate rather than an oversight
+			// to tidy up. ONE writer decodes: the bulk/builder path
+			// (SBR_Feed_Saver_Manager::cache_single_review). The on-demand frontend path —
+			// Feed::cache_single_posts_from_set (Feed.php:677, note the same method name on
+			// a different class) — writes straight through SinglePostCache, as do the
+			// Woo/EDD cache handlers, the bulk updaters and the review form
+			// (SubmissionsManager::get_db_store_data, which stores entities as-is on
+			// purpose: decoding there shifts a byte length two rule evaluators depend on).
+			//
+			// Util::normalize_review_shape() is not a fix location either: PostAggregator
+			// calls it on READ (:114, :186, :245), so decoding there would reintroduce
+			// exactly this bug.
+			//
+			// Consequence, accepted: a body stored DOUBLE-encoded by one of the
+			// non-decoding writers renders its entities literally. Single-encoded text is
+			// unaffected — wp_kses() leaves a valid entity alone and esc_html() passes it
+			// through ($double_encode = false), so the browser still resolves it. Verified
+			// against WordPress: wp_kses('Caf&eacute;', [...]) returns it unchanged, and
+			// esc_html('S&oslash;ren') returns 'S&oslash;ren', not '&amp;oslash;'.
+			//
+			// This is the FEED contract only. Two other surfaces read the same value and
+			// both decode it, each for its own reason. Do not "unify" any of the three in
+			// either direction without re-reading all the sink sets.
+			//
+			//   Review Alerts — SBR_Review_Alert_Frontend:941, SBR_Review_Alert_Service:1347.
+			//   Their sinks are textContent and escapeHTML(), neither of which resolves an
+			//   entity, so an accented body would display "sm&oslash;rrebr&oslash;d"
+			//   literally without the decode. Safe because both insert as TEXT.
+			//
+			//   JSON-LD — SBR_Schema_Service::map_reviews() and ::entity_identity()
+			//   (SMASH-1756). Same problem, worse: inside
+			//   <script type="application/ld+json"> the HTML parser treats the block as raw
+			//   text, so nothing ever resolves the entity. That surface decodes at its own
+			//   boundary and does NOT strip markup — stripping would truncate a legitimate
+			//   "cheaper than < $10" at the unclosed bracket, which
+			//   test_map_preserves_review_text_without_truncation pins. What keeps a decoded
+			//   tag inert there is per-sink escaping, JSON_HEX_TAG on the own-block path and
+			//   escape_markup_for_aioseo() on the AIOSEO path — do not remove either on the
+			//   assumption that the text was sanitised upstream.
+			return (string) $post['text'];
 		}
 		return '';
 	}
@@ -42,19 +86,57 @@ class Parser {
 		return 1;
 	}
 
+	/**
+	 * Whether the author actually gave a rating. get_rating() floors a missing one to 1,
+	 * and WooCommerce/EDD/collections store 0 for a review left without stars.
+	 *
+	 * @since 2.16.0
+	 *
+	 * @param  array $post
+	 * @return bool  true for a positive number or Facebook's 'positive'/'negative'
+	 */
+	public function has_author_rating($post)
+	{
+		$raw = is_array($post) ? ($post['rating'] ?? null) : null;
+		// trim(): PHP 7.4's is_numeric() rejects trailing whitespace ('5 '), PHP 8 accepts it.
+		$raw = is_string($raw) ? trim($raw) : $raw;
+		if ($raw === 'positive' || $raw === 'negative') {
+			return true;
+		}
+
+		return is_numeric($raw) && (float) $raw > 0;
+	}
+
 	public function get_time($post)
 	{
-		if (! empty($post['time'])) {
-			return $post['time'];
+		if (empty($post['time'])) {
+			return 0;
 		}
-		return 0;
+
+		// Callers do arithmetic on this value (FeedDisplay::date() computes
+		// `time() - $timestamp` for the "x ago" label), so it has to come back
+		// as a unix timestamp. Providers and imports don't agree on the format:
+		// some store an integer, others a datetime string like
+		// "2026-07-08 16:57:48". Returning the string raw raised
+		// "A non-numeric value encountered" and coerced the timestamp to 0,
+		// rendering dates such as "-1785840455 seconds ago".
+		if (is_numeric($post['time'])) {
+			return (int) $post['time'];
+		}
+
+		$parsed = strtotime((string) $post['time']);
+
+		return false === $parsed ? 0 : $parsed;
 	}
 
 	public function get_reviewer_name($post)
 	{
 		if (! empty($post['reviewer']['name'])) {
-			// Decode HTML entities (fixes Danish characters like æ, ø, å and other special chars)
-			return html_entity_decode($post['reviewer']['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+			// No decode, same as the review body above (SMASH-1795). Accented names are
+			// unaffected: every consumer runs esc_html(), which is _wp_specialchars() with
+			// $double_encode = false, so a stored `S&oslash;ren` reaches the browser
+			// untouched and renders as Søren. Verified against WordPress.
+			return (string) $post['reviewer']['name'];
 		}
 		return '';
 	}
@@ -89,34 +171,204 @@ class Parser {
 		return '';
 	}
 
+	/**
+	 * The count get_average_rating() weights by: the feed aggregate's rated count when stamped, else the
+	 * sum of each rated source's rated_count (falling back to its review count), else — no counts at all,
+	 * where it takes the plain mean — the number of rated sources. SMASH-2477.
+	 *
+	 * @since 2.16.0
+	 *
+	 * @param  array $businesses
+	 * @return int
+	 */
+	public function get_rating_weight($businesses)
+	{
+		if (! is_array($businesses)) {
+			return 0;
+		}
+		foreach ($businesses as $business) {
+			if (! empty($business['info']['feed_aggregated'])) {
+				return intval($business['info']['feed_rated_count'] ?? $business['info']['feed_total_review_count'] ?? 0);
+			}
+		}
+		$weights = array_map([$this, 'source_rating_weight'], $businesses);
+		$sum     = (int) array_sum($weights);
+		// No counts at all: get_average_rating() takes the plain mean of the rated sources, so one each.
+		return $sum > 0 ? $sum : count(array_filter($businesses, [$this, 'is_rated_source']));
+	}
+
+	/**
+	 * Whether a source carries a rating (the ones get_average_rating() averages).
+	 *
+	 * @param  mixed $business
+	 * @return bool
+	 */
+	private function is_rated_source($business)
+	{
+		$info = is_array($business) && is_array($business['info'] ?? null) ? $business['info'] : [];
+		return ! empty($info['rating'] ?? $info['average_rating'] ?? 0);
+	}
+
+	/**
+	 * One source's share of get_rating_weight(): 0 when it carries no rating.
+	 *
+	 * @param  mixed $business
+	 * @return int
+	 */
+	private function source_rating_weight($business)
+	{
+		if (! $this->is_rated_source($business)) {
+			return 0;
+		}
+		$info  = is_array($business) && is_array($business['info'] ?? null) ? $business['info'] : [];
+		$count = $info['rated_count'] ?? $info['total_rating'] ?? $info['review_count'] ?? 0;
+		return is_numeric($count) ? (int) $count : 0;
+	}
+
 	public function get_average_rating($businesses)
 	{
 		if (is_array($businesses)) {
 			// SMASH-1412: prefer the plugin-computed dedup'd aggregate when
 			// present. EDD / WooCommerce multi-source feeds stamp this on every
 			// source.info so the first one wins. Older feeds without the field
-			// fall through to the per-source mean below — correct for
-			// independent businesses (Yelp / Google / Trustpilot / WP.org).
+			// fall through to the per-source weighted mean below.
 			foreach ($businesses as $business) {
 				if (! empty($business['info']['feed_aggregated'])) {
 					return round(floatval($business['info']['feed_average_rating'] ?? 0), 1);
 				}
 			}
 
-			$average_rating = 0;
-			$number = 0;
+			// SMASH-1583: weight each source's rating by its review count so a
+			// 3-review source can't swing the headline average as hard as a
+			// 219-review one. A multi-source feed (e.g. Google 219@4.7 +
+			// Facebook 3@5.0) must report sum(rating*count)/sum(count) = 4.7,
+			// not the unweighted mean round((4.7+5.0)/2, 1) = 4.9.
+			//
+			// Falls back to the legacy unweighted mean when no source reports a
+			// usable count (manual feeds, providers without a count) — this
+			// preserves the pre-1583 number and avoids a divide-by-zero / 0.0
+			// regression on feeds whose counts are all empty.
+			$weighted_sum = 0.0;
+			$weighted_n   = 0;
+			$simple_sum   = 0.0;
+			$simple_n     = 0;
 			foreach ($businesses as $business) {
 				// Check for rating first, then fall back to average_rating for WooCommerce multi-product sources
 				$rating = $business['info']['rating'] ?? $business['info']['average_rating'] ?? 0;
-				if (! empty($rating)) {
-					$average_rating += floatval($rating);
-					$number += 1;
+				if (empty($rating)) {
+					continue;
 				}
+				// SMASH-2477: weight by the reviews the average covers (rated_count) when the source says so.
+				$count         = intval($business['info']['rated_count'] ?? $business['info']['total_rating'] ?? $business['info']['review_count'] ?? 0);
+				$weighted_sum += floatval($rating) * $count;
+				$weighted_n   += $count;
+				$simple_sum   += floatval($rating);
+				$simple_n     += 1;
 			}
-			$number = $number === 0 ? 1 : $number;
-			return round($average_rating / $number, 1);
+
+			if ($weighted_n > 0) {
+				return round($weighted_sum / $weighted_n, 1);
+			}
+
+			$simple_n = $simple_n === 0 ? 1 : $simple_n;
+			return round($simple_sum / $simple_n, 1);
 		}
 		return '';
+	}
+
+	/**
+	 * Backfill missing per-source review counts from the actual cached reviews.
+	 *
+	 * Some providers don't expose a reliable count in the source header. Facebook
+	 * is the canonical case (SMASH-1583): modern Pages use recommendations, so
+	 * FB Graph's legacy `rating_count` comes back 0, omitted, OR a stale low
+	 * value (e.g. 1 while 2 recommendations are actually cached and displayed).
+	 * The header then under-reports the combined count and the count-weighted
+	 * average mistreats the Facebook source.
+	 *
+	 * For each header source we set the count to max(reported, cached-reviews),
+	 * keyed by each post's `source.id`. Sources that report a true total (Google,
+	 * Yelp, Trustpilot, …) always report >= what's cached, so they're left
+	 * untouched — counting cached posts would UNDER-report them. Only a stale or
+	 * empty reported count (Facebook) gets corrected up to the real cached number.
+	 *
+	 * @param array $businesses Header data (one entry per source, each with info.id).
+	 * @param array $posts      Full normalized cached reviews (each with source.id).
+	 * @return array Header data with info.total_rating corrected where the cached count is higher.
+	 */
+	public function backfill_review_counts($businesses, $posts)
+	{
+		if (! is_array($businesses)) {
+			return [];
+		}
+		if (empty($businesses)) {
+			return $businesses; // Nothing to backfill (e.g. single-manual-review header).
+		}
+		if (empty($posts) || ! is_array($posts)) {
+			return $businesses;
+		}
+
+		$counts_by_source = $this->tally_reviews_by_source($posts);
+		if (empty($counts_by_source)) {
+			return $businesses;
+		}
+
+		foreach ($businesses as $key => $business) {
+			$info = $business['info'] ?? null;
+			if (! is_array($info)) {
+				continue;
+			}
+			$id = isset($info['id']) ? (string) $info['id'] : '';
+			if ($id === '' || empty($counts_by_source[$id])) {
+				continue;
+			}
+			// Use the LARGER of the provider-reported count and the actual cached
+			// reviews. Providers that report a true total (Google / Yelp /
+			// Trustpilot / TripAdvisor / WP.org) always report >= what's cached,
+			// so they're left untouched — their real totals routinely exceed the
+			// cached page and must never be down-counted. Facebook is the problem
+			// case: its deprecated rating_count persists 0 OR a stale low value
+			// (e.g. 1 while 2 recommendations are cached and displayed), so the
+			// cached count is the honest floor and wins.
+			$reported = (int) ($info['total_rating'] ?? $info['review_count'] ?? 0);
+			$cached   = (int) $counts_by_source[$id];
+			if ($cached > $reported) {
+				$businesses[$key]['info']['total_rating'] = $cached;
+			}
+		}
+		return $businesses;
+	}
+
+	/**
+	 * Tally cached reviews per source id (keyed by each post's source.id).
+	 *
+	 * Shared by backfill_review_counts() and the customizer-preview enrichment
+	 * so the count rule lives in exactly one place.
+	 *
+	 * @param array $posts Normalized cached reviews.
+	 * @return array<string,int> source id => review count
+	 */
+	public function tally_reviews_by_source($posts)
+	{
+		$counts_by_source = [];
+		if (! is_array($posts)) {
+			return $counts_by_source;
+		}
+		foreach ($posts as $post) {
+			if (! is_array($post)) {
+				continue;
+			}
+			$source = $post['source'] ?? null;
+			if (! is_array($source)) {
+				continue;
+			}
+			$source_id = (string) ($source['id'] ?? '');
+			if ($source_id === '') {
+				continue;
+			}
+			$counts_by_source[$source_id] = ($counts_by_source[$source_id] ?? 0) + 1;
+		}
+		return $counts_by_source;
 	}
 
 	public function get_num_ratings($businesses)

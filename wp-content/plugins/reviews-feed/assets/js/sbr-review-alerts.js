@@ -47,6 +47,7 @@
 			this.isAnimating = false;
 			this.isDismissed = this.checkDismissed();
 			this.collapsedContent = null; // Store collapsed content for restoration
+			this.closePressStarted = false; // Press began on the close control (see handlePopupClick)
 			this.animationTimeouts = []; // Track animation timeouts for cleanup
 			this.cycleTimeouts = []; // Track cycling timeouts for cleanup
 			this.initialDelayTimeout = null; // Track initial delay timeout for cleanup
@@ -63,6 +64,8 @@
 			this.handleKeydown = this.handleKeydown.bind(this);
 			this.cycleReview = this.cycleReview.bind(this);
 			this.handlePopupClick = this.handlePopupClick.bind(this);
+			this.handlePopupPointerDown = this.handlePopupPointerDown.bind(this);
+			this.handlePopupPointerCancel = this.handlePopupPointerCancel.bind(this);
 			this.handleExpandKeydown = this.handleExpandKeydown.bind(this);
 			this.handleCloseExpanded = this.handleCloseExpanded.bind(this);
 			this.handleScroll = this.handleScroll.bind(this);
@@ -167,6 +170,23 @@
 			const min = cycleIntervalMin || 3000;
 			const max = cycleIntervalMax || 8000;
 			return Math.floor(Math.random() * (max - min + 1)) + min;
+		}
+
+		/**
+		 * A review count with the site locale's thousands separator (SMASH-2220), matching
+		 * number_format_i18n() in templates/review-alerts/popup.php.
+		 *
+		 * @param {number} count
+		 * @returns {string}
+		 */
+		formatCount(count) {
+			const number = Number(count) || 0;
+			try {
+				return number.toLocaleString(document.documentElement.lang || undefined);
+			} catch (e) {
+				// An invalid lang tag throws a RangeError.
+				return number.toLocaleString();
+			}
 		}
 
 		/**
@@ -282,6 +302,8 @@
 			const inner = this.popup.querySelector('.sbr-review-alert__inner');
 			if (inner) {
 				inner.addEventListener('click', this.handlePopupClick);
+				inner.addEventListener('pointerdown', this.handlePopupPointerDown);
+				inner.addEventListener('pointercancel', this.handlePopupPointerCancel);
 			}
 
 			// Keyboard expand (Enter/Space when focused)
@@ -313,6 +335,8 @@
 			const inner = this.popup.querySelector('.sbr-review-alert__inner');
 			if (inner) {
 				inner.removeEventListener('click', this.handlePopupClick);
+				inner.removeEventListener('pointerdown', this.handlePopupPointerDown);
+				inner.removeEventListener('pointercancel', this.handlePopupPointerCancel);
 			}
 			this.popup.removeEventListener('keydown', this.handleExpandKeydown);
 
@@ -339,6 +363,10 @@
 		 */
 		handleClose(event) {
 			event.preventDefault();
+			// The expand handler is bound to the ancestor .__inner; without this it
+			// also runs and re-opens the review we were asked to dismiss.
+			event.stopPropagation();
+			this.closePressStarted = false;
 			this.dismiss();
 		}
 
@@ -360,11 +388,43 @@
 		}
 
 		/**
+		 * Record whether a press began on the close control.
+		 *
+		 * @param {PointerEvent} event Pointer event
+		 */
+		handlePopupPointerDown(event) {
+			this.closePressStarted = !!event.target.closest('.sbr-review-alert__close');
+		}
+
+		/**
+		 * Clear the press origin when a gesture is cancelled and no click follows.
+		 */
+		handlePopupPointerCancel() {
+			this.closePressStarted = false;
+		}
+
+		/**
 		 * Handle click on popup to expand
 		 *
 		 * @param {Event} event Click event
 		 */
 		handlePopupClick(event) {
+			// Read and clear, so a press origin can never outlive the click it
+			// belongs to — a keyboard-activated link inside .__inner fires a click
+			// with no pointerdown ahead of it to reset the flag.
+			const pressBeganOnClose = this.closePressStarted;
+			this.closePressStarted = false;
+
+			// A press that began on the close control dismisses: when press and
+			// release land on different elements the click targets .__inner, not
+			// the button, which used to expand the review. SMASH-1820.
+			if (pressBeganOnClose || event.target.closest('.sbr-review-alert__close')) {
+				event.preventDefault();
+				event.stopPropagation();
+				this.dismiss();
+				return;
+			}
+
 			// Don't expand if already expanded or animating
 			if (this.isExpanded || this.isAnimating) return;
 
@@ -391,6 +451,11 @@
 		 */
 		handleExpandKeydown(event) {
 			if (this.isExpanded || this.isAnimating) return;
+
+			// Enter/Space on the focused close button must dismiss, not expand.
+			// This listener is on the popup root, so it would otherwise swallow the
+			// button's own activation via preventDefault(). SMASH-1820.
+			if (event.target.closest('.sbr-review-alert__close')) return;
 
 			if (event.key === 'Enter' || event.key === ' ') {
 				event.preventDefault();
@@ -658,6 +723,8 @@
 					const inner = this.popup.querySelector('.sbr-review-alert__inner');
 					if (inner) {
 						inner.addEventListener('click', this.handlePopupClick);
+						inner.addEventListener('pointerdown', this.handlePopupPointerDown);
+						inner.addEventListener('pointercancel', this.handlePopupPointerCancel);
 					}
 
 					// Re-attach close button listener (cloneNode doesn't copy event listeners)
@@ -739,7 +806,7 @@
 							${hasMoreReviews ? `
 								<div class="sbr-review-alert__expanded-see-all">
 									<button type="button" class="sbr-review-alert__expanded-see-all-btn">
-										<span>See all ${totalReviews} Reviews</span>
+										<span>See all ${this.formatCount(totalReviews)} Reviews</span>
 										<span class="sbr-review-alert__chevron">
 											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
 												<polyline points="9 18 15 12 9 6"></polyline>
@@ -813,16 +880,28 @@
 			const showAuthor = settings.showAuthor !== false;
 			const showDate = settings.showDate !== false;
 
+			const prov = typeof review.provider === 'object' ? (review.provider?.name || '') : (review.provider || '');
+			const bkScore = prov === 'booking' ? this.bookingReviewScore(review) : NaN;
+			const bkWord = prov === 'booking' ? this.bookingScoreWord(review) : '';
 			const rating = review.rating || 5;
-			const starsHTML = showStars ? `
-				<div class="sbr-review-alert__expanded-stars">
-					${this.renderStarsHTML(rating)}
-				</div>
-			` : '';
+			// SMASH-782: Booking shows its native 0-10 score badge + word (e.g.
+			// "8.5 Very good"), matching the single feed; others show stars.
+			let ratingHTML = '';
+			if (showStars) {
+				if (prov === 'booking' && !isNaN(bkScore) && bkScore > 0) {
+					const labelHTML = bkWord ? '<span class="sbr-review-alert__score-label">' + this.escapeHTML(bkWord) + '</span>' : '';
+					ratingHTML = '<div class="sbr-review-alert__expanded-score sbr-review-alert__score sbr-review-alert__score--booking"><span class="sbr-review-alert__score-badge sbr-review-alert__score-badge--booking">' + this.escapeHTML(bkScore.toFixed(1)) + '</span>' + labelHTML + '</div>';
+				} else {
+					ratingHTML = '<div class="sbr-review-alert__expanded-stars">' + this.renderStarsHTML(rating) + '</div>';
+				}
+			}
 
 			const title = review.text ? (review.text.length > 50 ? review.text.substring(0, 50) + '...' : review.text) : '';
 			const titleHTML = showTitle && title ? `<div class="sbr-review-alert__expanded-review-title">${this.escapeHTML(title)}</div>` : '';
 			const textHTML = showText ? `<p class="sbr-review-alert__expanded-review-text">${this.escapeHTML(review.text || '')}</p>` : '';
+
+			// SMASH-782: provider metas (booking pros/cons+helpful, aliexpress flag/translated/variants, airbnb reply), like the single feed.
+			const providerMetaHTML = this.renderProviderMetaHTML(review);
 
 			// Build meta section only if author or date is shown
 			let metaHTML = '';
@@ -834,12 +913,45 @@
 
 			return `
 				<div class="sbr-review-alert__expanded-review">
-					${starsHTML}
+					${ratingHTML}
 					${titleHTML}
 					${textHTML}
+					${providerMetaHTML}
 					${metaHTML}
 				</div>
 			`;
+		}
+
+		/**
+		 * THIS reviewer's Booking score on the native 0-10 scale.
+		 *
+		 * Not metadata.review_score — that is the PROPERTY's rating and the relay stamps the
+		 * same value onto every review, so the popup showed one score no matter who was
+		 * cycled in.
+		 *
+		 * Read, not computed. SBR_Review_Alert_Frontend::format_reviews_for_frontend()
+		 * resolves the pair through sbr_booking_review_score() / sbr_booking_score_word()
+		 * and ships it on the review. Recomputing it here would mean doubling this
+		 * payload's `rating`, which is cast to int for the star renderer — a 4.5 review
+		 * would render 8.0 where the feed card and the JSON-LD both say 9.0 — and would
+		 * put an untranslated copy of the band ladder on this side.
+		 *
+		 * @param {Object} review Normalised review.
+		 * @returns {number} Score on the 0-10 scale, 0 when there is no usable rating.
+		 */
+		bookingReviewScore(review) {
+			return Number(review && review.bookingScore) || 0;
+		}
+
+		/**
+		 * Booking's band word for this review, as resolved and translated server-side.
+		 * See bookingReviewScore() for why neither value is computed here.
+		 *
+		 * @param {Object} review Normalised review.
+		 * @returns {string} Band word, or '' below the lowest named band.
+		 */
+		bookingScoreWord(review) {
+			return (review && review.bookingScoreWord) || '';
 		}
 
 		/**
@@ -916,6 +1028,17 @@
 		 */
 		static providerIconCache = {};
 
+		// Compact star glyph (mirrors DisplayElements::get_star_icon / customizer
+		// star.svg) used when the cycler rebuilds the stars row. Static trusted
+		// markup — no user data — so innerHTML is safe. (SMASH-782)
+		static COMPACT_STAR_SVG = '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M10.0001 16.0074L14.8499 18.9407C15.7381 19.4783 16.8249 18.6836 16.5912 17.6786L15.3057 12.1626L19.5946 8.44634C20.3776 7.76853 19.9569 6.48303 18.9285 6.40122L13.2839 5.92208L11.0752 0.709949C10.6779 -0.236649 9.32225 -0.236649 8.92491 0.709949L6.71618 5.91039L1.07165 6.38954C0.043251 6.47134 -0.377459 7.75685 0.405529 8.43466L4.69444 12.1509L3.40893 17.6669C3.17521 18.6719 4.26204 19.4666 5.15021 18.929L10.0001 16.0074V16.0074Z"/></svg>';
+
+		// Booking pros/cons smiley icons — byte-identical to the single feed
+		// (templates/frontend/post-elements/text-booking.php) so the expanded
+		// alert's booking notes match admin + frontend feed exactly. Static SVG. (SMASH-782)
+		static PROS_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16px" height="16px" style="flex-shrink:0;margin-right:8px;"><path fill="#008234" d="M22.5 12c0 5.799-4.701 10.5-10.5 10.5S1.5 17.799 1.5 12 6.201 1.5 12 1.5 22.5 6.201 22.5 12m1.5 0c0-6.627-5.373-12-12-12S0 5.373 0 12s5.373 12 12 12 12-5.373 12-12M5.634 13.5a1.5 1.5 0 0 0-1.414 2 8.25 8.25 0 0 0 15.56 0 1.5 1.5 0 0 0-1.414-2zm0 1.5h12.732a6.75 6.75 0 0 1-12.732 0M16.5 8.625a.375.375 0 1 1 0-.75.375.375 0 0 1 0 .75.75.75 0 0 0 0-1.5 1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25.75.75 0 0 0 0 1.5m-9 0a.375.375 0 1 1 0-.75.375.375 0 0 1 0 .75.75.75 0 0 0 0-1.5 1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25.75.75 0 0 0 0 1.5"/></svg>';
+		static CONS_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16px" height="16px" style="flex-shrink:0;margin-right:8px;"><path fill="#1a1a1a" d="M22.5 12c0 5.799-4.701 10.5-10.5 10.5S1.5 17.799 1.5 12 6.201 1.5 12 1.5 22.5 6.201 22.5 12m1.5 0c0-6.627-5.373-12-12-12S0 5.373 0 12s5.373 12 12 12 12-5.373 12-12m-5.28 5.667a7.502 7.502 0 0 0-13.444 0 .75.75 0 1 0 1.344.666 6.002 6.002 0 0 1 10.756 0 .75.75 0 0 0 1.344-.666M8.25 9.375a.375.375 0 1 1 0-.75.375.375 0 0 1 0 .75.75.75 0 0 0 0-1.5 1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25.75.75 0 0 0 0 1.5m7.5 0a.375.375 0 1 1 0-.75.375.375 0 0 1 0 .75.75.75 0 0 0 0-1.5 1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25.75.75 0 0 0 0 1.5"/></svg>';
+
 		/**
 		 * Fetch provider icon SVG content
 		 *
@@ -933,7 +1056,11 @@
 				return SBRReviewAlert.providerIconCache[providerName];
 			}
 
-			const iconUrl = this.config.pluginUrl + 'assets/icons/' + providerName + '-provider.svg';
+			// Fold the dot: the data slug is 'wordpress.org' but the shipped file
+			// is wordpressorg-provider.svg. PHP does this in
+			// DisplayElements::provider_asset_slug() (SMASH-2106).
+			const assetSlug = String(providerName).replace(/\./g, '');
+			const iconUrl = this.config.pluginUrl + 'assets/icons/' + assetSlug + '-provider.svg';
 
 			try {
 				const response = await fetch(iconUrl);
@@ -1093,12 +1220,22 @@
 			if (this.config.content.showAvatar) {
 				const avatar = reviewElement.querySelector('.sbr-review-alert__avatar');
 				if (avatar) {
+					// SMASH-1785: the markup's inline onerror disarms itself after the
+					// first failure (this.onerror = null), so an avatar rotated in later
+					// had no handler left and simply stayed broken. Re-arm on every swap.
+					const fallbackAvatar = this.config.defaultAvatar || '';
+					avatar.onerror = function () {
+						this.onerror = null;
+						if (fallbackAvatar && this.src !== fallbackAvatar) {
+							this.src = fallbackAvatar;
+						}
+					};
 					if (review.reviewer && review.reviewer.avatar) {
 						avatar.src = review.reviewer.avatar;
 						avatar.alt = review.reviewer.name || 'Reviewer';
 					} else {
-						// Use placeholder when no avatar available to prevent stale data
-						avatar.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><rect fill="%23e4e4e7" width="56" height="56"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="24" fill="%2371717a">?</text></svg>';
+						// SMASH-782: fall back to the default avatar image (same as the single feed), not a "?".
+						avatar.src = fallbackAvatar;
 						avatar.alt = review.reviewer?.name || 'Reviewer';
 					}
 				}
@@ -1136,20 +1273,11 @@
 				}
 			}
 
-			// Update star ratings
+			// Update rating: Booking shows its native 0-10 score badge, other
+			// providers show 0-5 stars. Swap in place as the cycler advances so a
+			// mixed-source recent alert renders the right rating per review. (SMASH-782)
 			if (this.config.content.showRating) {
-				const starsContainer = reviewElement.querySelector('.sbr-review-alert__stars');
-				if (starsContainer) {
-					const stars = starsContainer.querySelectorAll('.sbr-review-alert__star');
-					const rating = review.rating || 5;
-					stars.forEach((star, index) => {
-						if (index < rating) {
-							star.classList.remove('sbr-review-alert__star--empty');
-						} else {
-							star.classList.add('sbr-review-alert__star--empty');
-						}
-					});
-				}
+				this.updateCompactRating(reviewElement, review);
 			}
 
 			// Update provider badge (using inline SVG to match admin preview)
@@ -1169,6 +1297,163 @@
 					}
 				}
 			}
+
+			// SMASH-782: provider-specific body elements (pros/cons, variants, flag,
+			// reply) are intentionally NOT shown in the compact/minified card — they
+			// render only in the expanded view (renderExpandedReview).
+		}
+
+		/**
+		 * Update the compact card rating in place: Booking shows its native 0-10
+		 * score on a blue badge, all other providers show 0-5 stars. Swaps the
+		 * element type as the cycler advances so a mixed-provider recent alert
+		 * renders the right rating per review. (SMASH-782)
+		 *
+		 * @param {HTMLElement} reviewElement
+		 * @param {Object} review
+		 */
+		updateCompactRating(reviewElement, review) {
+			const content = reviewElement.querySelector('.sbr-review-alert__content');
+			if (!content) return;
+			const prov = typeof review.provider === 'object' ? (review.provider?.name || '') : (review.provider || '');
+			const bkScore = prov === 'booking' ? this.bookingReviewScore(review) : NaN;
+			const bkWord = prov === 'booking' ? this.bookingScoreWord(review) : '';
+			let stars = content.querySelector('.sbr-review-alert__stars');
+			let score = content.querySelector('.sbr-review-alert__score');
+
+			if (prov === 'booking' && !isNaN(bkScore) && bkScore > 0) {
+				// Booking: 0-10 score badge + word label (e.g. "8.5 Very good"), matching the feed.
+				if (!score) {
+					score = document.createElement('div');
+					score.className = 'sbr-review-alert__score sbr-review-alert__score--booking';
+					const badge = document.createElement('span');
+					badge.className = 'sbr-review-alert__score-badge sbr-review-alert__score-badge--booking';
+					const label = document.createElement('span');
+					label.className = 'sbr-review-alert__score-label';
+					score.appendChild(badge);
+					score.appendChild(label);
+					content.insertBefore(score, stars || content.firstChild);
+				}
+				score.querySelector('.sbr-review-alert__score-badge').textContent = bkScore.toFixed(1);
+				let label = score.querySelector('.sbr-review-alert__score-label');
+				if (!label) {
+					label = document.createElement('span');
+					label.className = 'sbr-review-alert__score-label';
+					score.appendChild(label);
+				}
+				label.textContent = bkWord;
+				label.style.display = bkWord ? '' : 'none';
+				if (stars) stars.remove();
+			} else {
+				if (score) score.remove();
+				const rating = review.rating || 5;
+				if (!stars) {
+					stars = document.createElement('div');
+					stars.className = 'sbr-review-alert__stars';
+					for (let i = 1; i <= 5; i++) {
+						const s = document.createElement('span');
+						s.className = 'sbr-review-alert__star' + (i <= rating ? '' : ' sbr-review-alert__star--empty');
+						s.innerHTML = SBRReviewAlert.COMPACT_STAR_SVG; // trusted static markup, no user data
+						stars.appendChild(s);
+					}
+					content.insertBefore(stars, content.firstChild);
+				} else {
+					stars.querySelectorAll('.sbr-review-alert__star').forEach((s, i) => {
+						s.classList.toggle('sbr-review-alert__star--empty', i >= rating);
+					});
+				}
+			}
+		}
+
+		/**
+		 * Build the provider-specific meta HTML for the EXPANDED view, mirroring
+		 * the single feed: Booking pros/cons + helpful, AliExpress buyer flag /
+		 * translated / variant pills, Airbnb host reply. All review data is passed
+		 * through escapeHTML; flag emoji + variant parsing reuse shared helpers.
+		 * (SMASH-782)
+		 *
+		 * @param {Object} review
+		 * @returns {string} HTML string (safe: review data escaped)
+		 */
+		renderProviderMetaHTML(review) {
+			const md = review.metadata || {};
+			const prov = typeof review.provider === 'object' ? (review.provider?.name || '') : (review.provider || '');
+			const i18n = this.config.i18n || {};
+			const esc = (s) => this.escapeHTML(String(s == null ? '' : s));
+			let html = '';
+
+			if (prov === 'booking') {
+				const pros = String(md.pros || '').trim();
+				const cons = String(md.cons || '').trim();
+				const helpful = parseInt(md.helpful_vote_count || 0, 10) || 0;
+				if (pros || cons) {
+					// Match the single feed exactly (text-booking.php): smiley/sad icons + flex rows.
+					html += '<div class="sbr-review-alert__pros-cons sb-item-pros-cons">';
+					if (pros) html += '<div class="sbr-review-alert__pc sbr-review-alert__pc--pro sb-item-pros" style="display:flex;align-items:flex-start;margin-bottom:8px;"><span class="sb-item-pros-icon" style="display:inline-flex;align-items:center;flex-shrink:0;">' + SBRReviewAlert.PROS_ICON_SVG + '</span><span class="sb-pros-text">' + esc(pros) + '</span></div>';
+					if (cons) html += '<div class="sbr-review-alert__pc sbr-review-alert__pc--con sb-item-cons" style="display:flex;align-items:flex-start;margin-bottom:8px;"><span class="sb-item-cons-icon" style="display:inline-flex;align-items:center;flex-shrink:0;">' + SBRReviewAlert.CONS_ICON_SVG + '</span><span class="sb-cons-text">' + esc(cons) + '</span></div>';
+					html += '</div>';
+				}
+				if (helpful > 0) {
+					const tpl = helpful === 1
+						? (i18n.helpfulSingular || '%d person found this helpful')
+						: (i18n.helpfulPlural || '%d people found this helpful');
+					html += '<div class="sbr-review-alert__helpful">' + esc(tpl.replace('%d', helpful)) + '</div>';
+				}
+			} else if (prov === 'aliexpress') {
+				const translated = !!md.translated;
+				const country = String(md.buyer_country || '').trim();
+				const flag = this.countryFlagEmoji(country);
+				const pills = this.parseItemSpec(String(md.item_spec || '').trim());
+				if (translated || flag) {
+					html += '<div class="sbr-review-alert__ali-meta">';
+					if (flag) html += '<span class="sbr-review-alert__buyer-flag" aria-label="' + esc(country) + '">' + esc(flag) + '</span>';
+					if (translated) html += '<span class="sbr-review-alert__translated">' + esc(i18n.translatedText || 'Translated from original') + '</span>';
+					html += '</div>';
+				}
+				if (pills.length) {
+					html += '<div class="sbr-review-alert__variants">';
+					pills.forEach((pill) => { html += '<span class="sbr-review-alert__variant-pill">' + esc(pill) + '</span>'; });
+					html += '</div>';
+				}
+			} else if (prov === 'airbnb') {
+				const replyText = String(review.response || '').trim();
+				const replyName = String((review.reply && review.reply.name) || '').trim();
+				if (replyText) {
+					html += '<div class="sbr-review-alert__reply"><span class="sbr-review-alert__reply-label">' + esc(replyName || (i18n.hostLabel || 'Host')) + '</span><span class="sbr-review-alert__reply-text">' + esc(replyText) + '</span></div>';
+				}
+			}
+			return html;
+		}
+
+		/**
+		 * ISO-3166 alpha-2 -> regional-indicator flag emoji (mirrors popup.php).
+		 *
+		 * @param {string} cc
+		 * @return {string}
+		 */
+		countryFlagEmoji(cc) {
+			if (typeof cc !== 'string' || cc.length !== 2 || !/^[A-Za-z]+$/.test(cc)) return '';
+			const up = cc.toUpperCase();
+			return String.fromCodePoint(0x1F1E6 + up.charCodeAt(0) - 65)
+				+ String.fromCodePoint(0x1F1E6 + up.charCodeAt(1) - 65);
+		}
+
+		/**
+		 * Split an AliExpress item_spec into "Key: Value" pills. Uses the SAME
+		 * match-all logic as the single feed (post-elements/extras/aliexpress.php)
+		 * so the alert and the feed produce identical variant pills.
+		 *
+		 * @param {string} spec
+		 * @return {string[]}
+		 */
+		parseItemSpec(spec) {
+			if (!spec) return [];
+			// Cap length before the match-all regex: it can backtrack catastrophically
+			// on a long malformed item_spec (ReDoS). Real specs are short. Mirrors the
+			// single-feed cap in PostText.js (cd239ad).
+			const capped = String(spec).slice(0, 500);
+			const matches = capped.match(/([A-Za-z][A-Za-z0-9 _-]*):([^\s][^\s]*(?:\s+[^\s:]+)*?)(?=\s+[A-Za-z][A-Za-z0-9 _-]*:|$)/g) || [];
+			return matches.map((v) => v.trim().replace(/^([^:]+):\s*/, '$1: '));
 		}
 
 		/**

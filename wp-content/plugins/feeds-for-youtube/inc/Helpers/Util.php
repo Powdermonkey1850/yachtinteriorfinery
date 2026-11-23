@@ -155,11 +155,11 @@ class Util {
 		);
 		// Call the custom API.
 		$request = wp_remote_get( $api_url, $args );
-		if ( is_wp_error( $request ) ) {
+		// decode the license data
+		$sby_license_data = is_wp_error($request) ? null : json_decode(wp_remote_retrieve_body($request));
+		if (!is_object($sby_license_data) || !isset($sby_license_data->license)) {
 			return;
 		}
-		// decode the license data
-		$sby_license_data = json_decode( wp_remote_retrieve_body( $request ) );
 		$sby_license_data_arr = (array) $sby_license_data;
 		//Store license data in db
 		update_option( 'sby_license_data', $sby_license_data );
@@ -354,6 +354,18 @@ class Util {
 	}
 
 
+
+	/**
+	 * Asset version that changes with the file, so a cached copy from an
+	 * older release is never served with newer PHP.
+	 *
+	 * @param string $src Asset URL inside this plugin.
+	 * @return string
+	 */
+	public static function assetVersion($src) {
+		$path = str_replace(trailingslashit(SBY_PLUGIN_URL), trailingslashit(SBY_PLUGIN_DIR), strtok($src, '?'));
+		return $path !== $src && is_file($path) ? SBYVER . '.' . filemtime($path) : SBYVER;
+	}
 
 	/**
 	 * Get the path or URL of the plugin's asset file.

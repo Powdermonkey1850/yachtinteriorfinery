@@ -9,10 +9,12 @@
 namespace SmashBalloon\Reviews\Common\Settings;
 
 use Smashballoon\Customizer\V2\Settings_Builder;
+use SmashBalloon\Reviews\Common\Abilities\SBR_Abilities;
 use SmashBalloon\Reviews\Common\AuthorizationStatusCheck;
 use SmashBalloon\Reviews\Common\Builder\SBR_Sources;
 use SmashBalloon\Reviews\Common\Customizer\DB;
 use SmashBalloon\Reviews\Common\Services\SBR_Upgrader;
+use SmashBalloon\Reviews\Common\Services\SettingsManagerService;
 use SmashBalloon\Reviews\Common\Util;
 use SmashBalloon\Reviews\Common\Utils\EmailVerification;
 
@@ -51,22 +53,109 @@ class SBR_Settings_Builder extends Settings_Builder {
 		];
 		$this->settingspage_tabs_path       = SBR_SETTINGSPAGE_TABS_PATH;
 		$this->settingspage_tabs_namespace = SBR_SETTINGSPAGE_TABS_NAMESPACE;
-		$this->tabs_order                   = [ 'sb-general-tab', 'sb-feeds-tab', 'sb-advanced-tab', 'sb-translation-tab' ];
+		$this->tabs_order                   = [ 'sb-general-tab', 'sb-feeds-tab', 'sb-data-controls-tab', 'sb-advanced-tab', 'sb-translation-tab' ];
 
 		$this->db = new DB();
 		$this->add_to_menu = !Util::sbr_is_pro() ? true : check_license_valid();
 		$this->plugin_status = new AuthorizationStatusCheck();
 	}
 
+	/**
+	 * Extend the vendored customizer's settings-page enqueue with the AI
+	 * Agents card's own progressive-enhancement script/style.
+	 *
+	 * Kept out of the shared smashballoon/customizer package on purpose --
+	 * see the 'aiagents_section' comment in SBR_General_Tab -- so this
+	 * overrides (rather than edits) the parent's hook, which only fires on
+	 * the Reviews Feed settings page (`load-{$hook_suffix}`).
+	 *
+	 * @since SBR-499
+	 *
+	 * @return void
+	 */
+	public function settings_enqueue_admin_scripts()
+	{
+		parent::settings_enqueue_admin_scripts();
+
+		// SBR-499 / SBR-577 (AgDR-9005) — the AI Agents card renders in both
+		// editions whenever the Abilities API can register (see the matching
+		// guard in SBR_General_Tab::tab_sections()); enqueue its assets
+		// under the same condition so no page loads CSS/JS for a card it
+		// never renders (WordPress < 6.9).
+		if (SBR_Abilities::is_available()) {
+			wp_enqueue_style(
+				'sbr-ai-agents',
+				SBR_PLUGIN_URL . 'assets/admin/css/ai-agents.css',
+				[],
+				SBRVER
+			);
+
+			wp_enqueue_script(
+				'sbr-ai-agents',
+				SBR_PLUGIN_URL . 'assets/admin/js/ai-agents.js',
+				['sb-customizer-app'],
+				SBRVER,
+				true
+			);
+
+			wp_localize_script(
+				'sbr-ai-agents',
+				'sbrAiAgentsL10n',
+				[
+					'installing' => __('Installing…', 'reviews-feed'),
+					'activating' => __('Activating…', 'reviews-feed'),
+				]
+			);
+		}
+	}
+
+	/**
+	 * Build the settings-page tab data, then drop the Data Sharing tab when any
+	 * Smash Balloon Pro plugin is active. Pro forces data-sharing consent +
+	 * in-plugin notifications on and governs them centrally, so the tab is hidden.
+	 *
+	 * The parent builder auto-instantiates every tab class on disk and keys each
+	 * by its tabs_order position, so we filter the assembled result here rather
+	 * than via tabs_order (where a missing id would make array_search() return
+	 * false and collapse onto index 0). The React app reads this list with
+	 * Object.values(), which returns values in ascending key order and tolerates a
+	 * key gap, so removing the entry preserves the remaining tab order.
+	 *
+	 * @return array
+	 */
+	public function settingspage_builder_data()
+	{
+		$data = parent::settingspage_builder_data();
+
+		if (
+			class_exists('\SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager')
+			&& \SmashBalloon\Reviews\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::is_locked_by_pro()
+		) {
+			foreach ($data as $key => $tab) {
+				if (is_array($tab) && isset($tab['id']) && 'sb-data-controls-tab' === $tab['id']) {
+					unset($data[ $key ]);
+				}
+			}
+		}
+
+		return $data;
+	}
+
 	public function custom_settings_data()
 	{
 		$verification_result = EmailVerification::catch_email_verification();
+
+		$plugin_settings = sbr_recursive_parse_args(get_option('sbr_settings', []), sbr_plugin_settings_defaults());
+		// What this page load saw for MCP Write Access; posted back with the rest of
+		// pluginSettings so a stale tab cannot overwrite the stored toggle (see
+		// SettingsManagerService::reconcile_ai_write_toggle()).
+		$plugin_settings[SettingsManagerService::AI_WRITE_LOADED_KEY] = !empty($plugin_settings[SettingsManagerService::AI_WRITE_KEY]);
 
 		$settings_data = [
 			'nonce' => wp_create_nonce('sbr-admin'),
 			'apiKeys' => get_option('sbr_apikeys', []),
 			'apiKeyLimits' => get_option('sbr_apikeys_limit', []),
-			'pluginSettings' => sbr_recursive_parse_args(get_option('sbr_settings', []), sbr_plugin_settings_defaults()),
+			'pluginSettings' => $plugin_settings,
 			'currentTab' => 'sb-general-tab',
 			'sourcesList' => SBR_Sources::get_sources_list(),
 			'sourcesCount' => SBR_Sources::get_sources_count(),

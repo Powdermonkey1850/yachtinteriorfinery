@@ -15,6 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 
 	use WPConsent_Banner_Preview;
+	use WPConsent_Analytics_Report;
 
 	/**
 	 * Cached basic compliance items.
@@ -62,6 +63,25 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 	}
 
 	/**
+	 * Format a translated string, falling back to the untranslated format
+	 * if the active translation contains an invalid format specifier (a
+	 * malformed community translation would otherwise throw a fatal
+	 * ValueError on PHP 8+ and take down the whole dashboard).
+	 *
+	 * @param string $translated Translated format string.
+	 * @param string $fallback   Untranslated (English) format string.
+	 * @param mixed  ...$args    sprintf() arguments.
+	 * @return string
+	 */
+	protected function safe_sprintf( $translated, $fallback, ...$args ) {
+		try {
+			return vsprintf( $translated, $args );
+		} catch ( \ValueError $e ) {
+			return vsprintf( $fallback, $args );
+		}
+	}
+
+	/**
 	 * Page content — prototype with placeholder data.
 	 *
 	 * @return void
@@ -90,6 +110,7 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 				<?php endif; ?>
 			</div>
 			<div class="wpconsent-dashboard-grid-col">
+				<?php $this->analytics_widget(); ?>
 				<?php wpconsent()->recommended_plugins->recommended_plugins_widget(); ?>
 				<?php $this->blog_feed_widget(); ?>
 				<?php $this->banner_preview_box(); ?>
@@ -129,7 +150,7 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 				<div class="wpconsent-alert-bar-overflow">
 					<?php
 					/* translators: %d: number of additional alerts. */
-					printf( esc_html__( 'and %d more...', 'wpconsent-cookies-banner-privacy-suite' ), $overflow );
+					printf( esc_html__( 'and %d more...', 'wpconsent-cookies-banner-privacy-suite' ), (int) $overflow );
 					?>
 				</div>
 			<?php endif; ?>
@@ -154,7 +175,7 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 			$alerts[] = array(
 				'key'     => 'inspector_pending',
 				/* translators: %d: number of cookies awaiting review. */
-				'message' => sprintf( __( 'Inspector found %d cookies awaiting review.', 'wpconsent-cookies-banner-privacy-suite' ), count( $pending ) ),
+				'message' => $this->safe_sprintf( __( 'Inspector found %d cookies awaiting review.', 'wpconsent-cookies-banner-privacy-suite' ), 'Inspector found %d cookies awaiting review.', count( $pending ) ),
 				'action'  => __( 'Review', 'wpconsent-cookies-banner-privacy-suite' ),
 				'url'     => admin_url( 'admin.php?page=wpconsent-scanner&view=inspector' ),
 			);
@@ -168,7 +189,7 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 				$alerts[] = array(
 					'key'     => 'scan_overdue',
 					/* translators: %d: number of days since last scan. */
-					'message' => sprintf( __( 'Your last scan was %d days ago. Your site may have changed.', 'wpconsent-cookies-banner-privacy-suite' ), $days_ago ),
+					'message' => $this->safe_sprintf( __( 'Your last scan was %d days ago. Your site may have changed.', 'wpconsent-cookies-banner-privacy-suite' ), 'Your last scan was %d days ago. Your site may have changed.', $days_ago ),
 					'action'  => __( 'Scan Now', 'wpconsent-cookies-banner-privacy-suite' ),
 					'url'     => admin_url( 'admin.php?page=wpconsent-scanner' ),
 				);
@@ -199,9 +220,11 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 			$scripts_count += count( $scripts );
 		}
 
-		// Cookie policy configured (10 pts).
-		$policy_page_id = (int) wpconsent()->settings->get_option( 'cookie_policy_page' );
-		$policy_exists  = $policy_page_id > 0 && 'publish' === get_post_status( $policy_page_id );
+		// Cookie policy configured (10 pts). Entitled licences generate it under Legal Documents.
+		$policy_page_id  = (int) wpconsent()->settings->get_option( 'cookie_policy_page' );
+		$policy_exists   = $policy_page_id > 0 && 'publish' === get_post_status( $policy_page_id );
+		$policy_action   = $this->get_cookie_policy_action();
+		$legal_documents = class_exists( 'WPConsent_Legal_Documents_Entitlement' ) && WPConsent_Legal_Documents_Entitlement::allowed();
 
 		// Cookie categories configured (10 pts).
 		// Count user-configured cookies, excluding the auto-created wpconsent_preferences cookie.
@@ -210,7 +233,7 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 			'post_status'    => 'publish',
 			'posts_per_page' => 1,
 			'fields'         => 'ids',
-			'meta_query'     => array(
+			'meta_query'     => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Filtering cookie posts by meta is required; admin-only, runs once per dashboard load.
 				'relation' => 'OR',
 				array(
 					'key'     => 'wpconsent_cookie_id',
@@ -252,6 +275,43 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 		$has_embeddable_services = $this->has_embeddable_services();
 		$content_blocking        = (bool) wpconsent()->settings->get_option( 'enable_content_blocking' );
 
+		$policy_item = array(
+			'label'       => __( 'Cookie policy configured', 'wpconsent-cookies-banner-privacy-suite' ),
+			'points'      => 10,
+			'earned'      => $policy_exists,
+			'detail'      => $policy_exists
+				/* translators: %s: the cookie policy page title. */
+				? $this->safe_sprintf( __( 'Linked to "%s".', 'wpconsent-cookies-banner-privacy-suite' ), 'Linked to "%s".', get_the_title( $policy_page_id ) )
+				: __( 'Set a cookie policy page so visitors can learn more.', 'wpconsent-cookies-banner-privacy-suite' ),
+			'url'         => $policy_action['url'],
+			'link_label'  => $policy_action['label'],
+			'action_type' => 'generate_policy',
+			'action_key'  => 'cookie_policy',
+		);
+		if ( $legal_documents ) {
+			// Entitled sites write both policies under Legal Documents: that card replaces the cookie-policy one.
+			// A policy counts once visitors can read it: published, on a page that is there and still shows it.
+			$published = 0;
+			$states    = class_exists( 'WPConsent_Legal_Documents_State' ) ? WPConsent_Legal_Documents_State::stored() : null;
+			foreach ( array( 'privacy_policy', 'cookie_policy' ) as $type ) {
+				if ( $states && $states->is_live( $type ) ) {
+					++$published;
+				}
+			}
+			$policy_item = array(
+				'label'       => __( 'Privacy Policy and Cookie Policy published', 'wpconsent-cookies-banner-privacy-suite' ),
+				'points'      => 10,
+				'earned'      => 2 === $published,
+				'detail'      => 2 === $published
+					? __( 'Both are published under Legal Documents.', 'wpconsent-cookies-banner-privacy-suite' )
+					: ( $published ? __( 'One of the two is published. Finish the other under Legal Documents.', 'wpconsent-cookies-banner-privacy-suite' ) : __( 'Create both from a short questionnaire and your site scan.', 'wpconsent-cookies-banner-privacy-suite' ) ),
+				'url'         => admin_url( 'admin.php?page=wpconsent-legal-documents' ),
+				'link_label'  => __( 'Legal Documents', 'wpconsent-cookies-banner-privacy-suite' ),
+				'action_type' => 'link',
+				'action_key'  => 'legal_documents',
+			);
+		}
+
 		$items = array(
 			array(
 				'label'       => __( 'Consent banner enabled', 'wpconsent-cookies-banner-privacy-suite' ),
@@ -270,31 +330,20 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 				'earned'      => $script_blocking,
 				'detail'      => $script_blocking
 					/* translators: %d: number of scripts being managed. */
-					? sprintf( __( '%d scripts managed.', 'wpconsent-cookies-banner-privacy-suite' ), $scripts_count )
+					? $this->safe_sprintf( __( '%d scripts managed.', 'wpconsent-cookies-banner-privacy-suite' ), '%d scripts managed.', $scripts_count )
 					: __( 'Block tracking scripts until visitors give consent.', 'wpconsent-cookies-banner-privacy-suite' ),
 				'url'         => admin_url( 'admin.php?page=wpconsent-cookies' ),
 				'action_type' => 'toggle',
 				'action_key'  => 'enable_script_blocking',
 			),
-			array(
-				'label'       => __( 'Cookie policy configured', 'wpconsent-cookies-banner-privacy-suite' ),
-				'points'      => 10,
-				'earned'      => $policy_exists,
-				'detail'      => $policy_exists
-					/* translators: %s: the cookie policy page title. */
-					? sprintf( __( 'Linked to "%s".', 'wpconsent-cookies-banner-privacy-suite' ), get_the_title( $policy_page_id ) )
-					: __( 'Set a cookie policy page so visitors can learn more.', 'wpconsent-cookies-banner-privacy-suite' ),
-				'url'         => admin_url( 'admin.php?page=wpconsent-cookies' ) . '#cookie-policy-input',
-				'action_type' => 'generate_policy',
-				'action_key'  => 'cookie_policy',
-			),
+			$policy_item,
 			array(
 				'label'       => __( 'Cookie categories configured', 'wpconsent-cookies-banner-privacy-suite' ),
 				'points'      => 10,
 				'earned'      => $has_categories,
 				'detail'      => $has_categories
 					/* translators: %d: number of cookies documented. */
-					? sprintf( __( '%d cookies documented.', 'wpconsent-cookies-banner-privacy-suite' ), $cookie_count )
+					? $this->safe_sprintf( __( '%d cookies documented.', 'wpconsent-cookies-banner-privacy-suite' ), '%d cookies documented.', $cookie_count )
 					: __( 'Document cookies so visitors know what data is collected.', 'wpconsent-cookies-banner-privacy-suite' ),
 				'url'         => admin_url( 'admin.php?page=wpconsent-cookies&view=cookies' ),
 				'action_type' => 'configure_cookies',
@@ -307,10 +356,10 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 				'earned'      => $scan_recent,
 				'detail'      => $scan_recent
 					/* translators: %s: formatted date of last scan. */
-					? sprintf( __( 'Last scan: %s.', 'wpconsent-cookies-banner-privacy-suite' ), date_i18n( get_option( 'date_format' ), $scan_time ) )
+					? $this->safe_sprintf( __( 'Last scan: %s.', 'wpconsent-cookies-banner-privacy-suite' ), 'Last scan: %s.', date_i18n( get_option( 'date_format' ), $scan_time ) )
 					: ( ! empty( $scan_data['date'] )
 						/* translators: %d: days since last scan. */
-						? sprintf( __( 'Last scan was %d days ago. Run a new scan to check for changes.', 'wpconsent-cookies-banner-privacy-suite' ), $scan_days )
+						? $this->safe_sprintf( __( 'Last scan was %d days ago. Run a new scan to check for changes.', 'wpconsent-cookies-banner-privacy-suite' ), 'Last scan was %d days ago. Run a new scan to check for changes.', $scan_days )
 						: __( 'Scan your website to detect cookies and tracking scripts.', 'wpconsent-cookies-banner-privacy-suite' )
 					),
 				'url'         => admin_url( 'admin.php?page=wpconsent-scanner' ),
@@ -335,7 +384,7 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 				'detail'      => $all_reviewed
 					? __( 'No pending findings to review.', 'wpconsent-cookies-banner-privacy-suite' )
 					/* translators: %d: number of cookies pending review. */
-					: sprintf( __( '%d cookies need categorization.', 'wpconsent-cookies-banner-privacy-suite' ), count( $pending_cookies ) ),
+					: $this->safe_sprintf( __( '%d cookies need categorization.', 'wpconsent-cookies-banner-privacy-suite' ), '%d cookies need categorization.', count( $pending_cookies ) ),
 				'url'         => admin_url( 'admin.php?page=wpconsent-scanner&view=inspector' ),
 				'action_type' => 'link',
 				'action_key'  => '',
@@ -375,6 +424,23 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 		$this->cached_basic_items = $items;
 
 		return $items;
+	}
+
+	/**
+	 * The cookie policy item's secondary link, labelled for where it goes:
+	 * the Legal Documents page, which lists the Cookie Policy with the same
+	 * generator. Entitled licences keep the "Choose page" link to the Cookies
+	 * settings until the engine ships, because their Legal Documents page is
+	 * hidden.
+	 *
+	 * @return array{url: string, label: string}
+	 */
+	protected function get_cookie_policy_action() {
+		// Every licence has a Legal Documents page: the free documents list, or the generated documents for entitled sites.
+		return array(
+			'url'   => $this->get_page_url( 'wpconsent-legal-documents' ),
+			'label' => __( 'Legal Documents', 'wpconsent-cookies-banner-privacy-suite' ),
+		);
 	}
 
 	/**
@@ -477,12 +543,12 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 
 		$stats = array(
 			/* translators: %d: number of cookies documented. */
-			sprintf( __( '%d cookies documented', 'wpconsent-cookies-banner-privacy-suite' ), $total_cookies ),
+			$this->safe_sprintf( __( '%d cookies documented', 'wpconsent-cookies-banner-privacy-suite' ), '%d cookies documented', $total_cookies ),
 		);
 
 		if ( $days > 0 ) {
 			/* translators: %d: number of days since plugin activation. */
-			$stats[] = sprintf( __( 'Active for %d days', 'wpconsent-cookies-banner-privacy-suite' ), $days );
+			$stats[] = $this->safe_sprintf( __( 'Active for %d days', 'wpconsent-cookies-banner-privacy-suite' ), 'Active for %d days', $days );
 		}
 
 		return $stats;
@@ -654,9 +720,9 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 				<?php if ( $has_details ) : ?>
 					<?php
 					/* translators: %1$d: earned count, %2$d: total count. */
-					$show_text = sprintf( esc_html__( '%1$d of %2$d items complete · Show details', 'wpconsent-cookies-banner-privacy-suite' ), $earned_count, $total_count );
+					$show_text = $this->safe_sprintf( esc_html__( '%1$d of %2$d items complete · Show details', 'wpconsent-cookies-banner-privacy-suite' ), '%1$d of %2$d items complete · Show details', $earned_count, $total_count );
 					/* translators: %1$d: earned count, %2$d: total count. */
-					$hide_text = sprintf( esc_html__( '%1$d of %2$d items complete · Hide details', 'wpconsent-cookies-banner-privacy-suite' ), $earned_count, $total_count );
+					$hide_text = $this->safe_sprintf( esc_html__( '%1$d of %2$d items complete · Hide details', 'wpconsent-cookies-banner-privacy-suite' ), '%1$d of %2$d items complete · Hide details', $earned_count, $total_count );
 					?>
 					<div class="wpconsent-score-earned-toggle">
 						<button type="button" class="wpconsent-score-toggle-btn" data-show-text="<?php echo esc_attr( $show_text ); ?>" data-hide-text="<?php echo esc_attr( $hide_text ); ?>">
@@ -837,7 +903,7 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 								<?php esc_html_e( 'Generate page', 'wpconsent-cookies-banner-privacy-suite' ); ?>
 							</button>
 							<a href="<?php echo esc_url( $item['url'] ); ?>" class="wpconsent-score-item-action">
-								<?php esc_html_e( 'Choose page', 'wpconsent-cookies-banner-privacy-suite' ); ?> &rarr;
+								<?php echo esc_html( $item['link_label'] ); ?> &rarr;
 							</a>
 						<?php elseif ( 'configure_cookies' === $action_type ) : ?>
 							<?php if ( ! empty( $item['has_scan'] ) ) : ?>
@@ -853,6 +919,9 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 								<?php
 								if ( $is_upsell ) {
 									esc_html_e( 'Upgrade to Pro', 'wpconsent-cookies-banner-privacy-suite' );
+								} elseif ( ! empty( $item['link_label'] ) ) {
+									// An item that names where its link goes (Legal Documents) says so instead of "Set up".
+									echo esc_html( $item['link_label'] );
 								} else {
 									esc_html_e( 'Set up', 'wpconsent-cookies-banner-privacy-suite' );
 								}
@@ -896,6 +965,106 @@ class WPConsent_Admin_Page_Dashboard extends WPConsent_Admin_Page {
 			</div>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Banner analytics widget. Pro overrides get_analytics_widget_state() to
+	 * supply real numbers; the markup lives here only.
+	 *
+	 * @return void
+	 */
+	public function analytics_widget() {
+		$state = wp_parse_args(
+			$this->get_analytics_widget_state(),
+			array(
+				'title'      => '',
+				'pill'       => '',
+				'pill_class' => 'wpconsent-analytics-pill',
+				'message'    => '',
+				'stats'      => '',
+				'funnel'     => '',
+				'button'     => array(),
+			)
+		);
+		?>
+		<div class="wpconsent-dashboard-box wpconsent-analytics-widget">
+			<div class="wpconsent-dashboard-box-title">
+				<h2><?php esc_html_e( 'Banner Analytics', 'wpconsent-cookies-banner-privacy-suite' ); ?></h2>
+			</div>
+			<div class="wpconsent-dashboard-box-content">
+				<?php if ( ! empty( $state['title'] ) ) : ?>
+					<div class="wpconsent-analytics-widget-heading">
+						<span class="wpconsent-analytics-widget-title"><?php echo esc_html( $state['title'] ); ?></span>
+						<?php if ( ! empty( $state['pill'] ) ) : ?>
+							<span class="<?php echo esc_attr( $state['pill_class'] ); ?>"><?php echo esc_html( $state['pill'] ); ?></span>
+						<?php endif; ?>
+					</div>
+				<?php endif; ?>
+
+				<?php if ( ! empty( $state['message'] ) ) : ?>
+					<p><?php echo esc_html( $state['message'] ); ?></p>
+				<?php endif; ?>
+
+				<?php
+				// Both are pre-escaped markup from WPConsent_Analytics_Report.
+				echo $state['stats']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				echo $state['funnel']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				?>
+
+			</div>
+			<?php if ( ! empty( $state['button'] ) ) : ?>
+				<div class="wpconsent-dashboard-box-actions">
+					<a href="<?php echo esc_url( $state['button']['url'] ); ?>" class="wpconsent-button wpconsent-button-<?php echo esc_attr( isset( $state['button']['variant'] ) ? $state['button']['variant'] : 'primary' ); ?>" <?php echo empty( $state['button']['external'] ) ? '' : 'target="_blank" rel="noopener noreferrer"'; ?>>
+						<?php echo esc_html( $state['button']['label'] ); ?>
+					</a>
+				</div>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Describe what the analytics widget should show.
+	 *
+	 * Lite has no collection, so it describes the feature and shows dashes where
+	 * the counters go.
+	 *
+	 * @return array
+	 */
+	protected function get_analytics_widget_state() {
+		return array(
+			'title'      => __( 'Not Collecting Yet', 'wpconsent-cookies-banner-privacy-suite' ),
+			'pill'       => 'PRO',
+			'pill_class' => 'wpconsent-pro-pill',
+			'message'    => __( 'Analytics tells you how many visitors see your banner, how many accept, how many decline and how many ignore it. Data is collected on your own server, with no new cookies before a visitor decides.', 'wpconsent-cookies-banner-privacy-suite' ),
+			'stats'      => $this->get_analytics_placeholder_row(),
+			'button'     => array(
+				'label'    => __( 'Upgrade to Pro', 'wpconsent-cookies-banner-privacy-suite' ),
+				'url'      => wpconsent_utm_url( 'https://wpconsent.com/lite/', 'dashboard', 'analytics-widget' ),
+				'external' => true,
+				'variant'  => 'orange',
+			),
+		);
+	}
+
+	/**
+	 * Dashed counters for the states with nothing to show.
+	 *
+	 * @return string
+	 */
+	protected function get_analytics_placeholder_row() {
+		$labels = array(
+			__( 'Banner Views', 'wpconsent-cookies-banner-privacy-suite' ),
+			__( 'Decisions', 'wpconsent-cookies-banner-privacy-suite' ),
+			__( 'Acceptance Rate', 'wpconsent-cookies-banner-privacy-suite' ),
+		);
+
+		$stats = array();
+		foreach ( $labels as $label ) {
+			$stats[] = $this->analytics_stat( $label, '—' );
+		}
+
+		return $this->analytics_stats_row( $stats, 'empty' );
 	}
 
 	/**

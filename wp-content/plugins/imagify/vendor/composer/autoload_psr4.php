@@ -6,6 +6,7 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'WPMedia\\MCP\\OAuth\\' => array($vendorDir . '/wp-media/mcp-oauth/inc'),
     'Imagify\\ThirdParty\\WPRocket\\' => array($baseDir . '/inc/3rd-party/wp-rocket/classes'),
     'Imagify\\ThirdParty\\RegenerateThumbnails\\' => array($baseDir . '/inc/3rd-party/regenerate-thumbnails/classes'),
     'Imagify\\ThirdParty\\NGG\\' => array($baseDir . '/inc/3rd-party/nextgen-gallery/classes'),
@@ -14,6 +15,7 @@ return array(
     'Imagify\\ThirdParty\\AS3CF\\' => array($baseDir . '/inc/3rd-party/amazon-s3-and-cloudfront/classes'),
     'Imagify\\Deprecated\\Traits\\' => array($baseDir . '/inc/deprecated/Traits'),
     'Imagify\\Dependencies\\WPMedia\\PluginFamily\\' => array($vendorDir . '/wp-media/plugin-family/src'),
+    'Imagify\\Dependencies\\WPMedia\\Mixpanel\\' => array($vendorDir . '/wp-media/wp-mixpanel/src'),
     'Imagify\\Dependencies\\Psr\\Container\\' => array($vendorDir . '/psr/container/src'),
     'Imagify\\Dependencies\\League\\Container\\' => array($vendorDir . '/league/container/src'),
     'Imagify\\' => array($baseDir . '/classes'),

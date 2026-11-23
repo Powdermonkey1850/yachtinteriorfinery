@@ -57,7 +57,7 @@ class DeactivationSurvey
     {
         $asset_dir = dirname(__FILE__) . '/assets/';
         // Try to resolve URL from wp-content.
-        $content_dir = wp_normalize_path(WP_CONTENT_DIR);
+        $content_dir = wp_normalize_path(\WP_CONTENT_DIR);
         $asset_path = wp_normalize_path($asset_dir);
         if (strpos($asset_path, $content_dir) === 0) {
             $relative = substr($asset_path, strlen($content_dir));
@@ -183,6 +183,9 @@ class DeactivationSurvey
 							class="sb-deactivation-textarea"
 							rows="4"
 							placeholder=""
+							aria-label="<?php 
+        esc_attr_e('Additional feedback', 'sb-common');
+        ?>"
 						></textarea>
 					</div>
 
@@ -234,7 +237,10 @@ class DeactivationSurvey
         $details = isset($_POST['details']) ? sanitize_textarea_field($_POST['details']) : '';
         $config = FeedbackManager::get_config($slug);
         if (!$config) {
-            wp_send_json_error('Unknown plugin', 400);
+            // Not a slug this plugin's copy registered. Another active Smash
+            // Balloon plugin's copy of this handler owns it — bail without
+            // ending the request so that handler gets to run.
+            return;
         }
         // Data for the sb-feedback-api REST endpoint.
         // Field mapping: reason_id -> reason, details -> comment.

@@ -97,7 +97,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 
 		$posts_json = CFF_Utils::cff_get_set_cache($cff_posts_json_url, $transient_name, $cff_cache_time, $cache_seconds, $data_att_html, false, $this->access_token, true);
 
-		return json_decode($posts_json);
+		return CFF_Utils::cff_json_decode($posts_json);
 	}
 
 
@@ -266,7 +266,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 				$cff_connected_accounts = str_replace('\"', '"', $cff_connected_accounts);
 				$cff_connected_accounts = str_replace("\'", "'", $cff_connected_accounts);
 
-				$cff_connected_accounts = json_decode($cff_connected_accounts);
+				$cff_connected_accounts = CFF_Utils::cff_json_decode($cff_connected_accounts);
 
 				if (isset($cff_account) && is_object($cff_connected_accounts)) {
 					// Grab the ID and token from the connected accounts setting
@@ -281,7 +281,10 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 
 		$cff_connected_accounts = get_option('cff_connected_accounts');
 		if (!empty($cff_connected_accounts)) {
-			$connected_accounts = (array)json_decode(stripcslashes($cff_connected_accounts));
+			if (is_string($cff_connected_accounts)) {
+				$cff_connected_accounts = stripcslashes($cff_connected_accounts);
+			}
+			$connected_accounts = (array)CFF_Utils::cff_json_decode($cff_connected_accounts);
 			if (array_key_exists($feed_options['id'], $connected_accounts)) {
 				$feed_options['pagetype'] = $connected_accounts[$feed_options['id']]->pagetype;
 			}
@@ -441,7 +444,10 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 		}
 
 		// See Less text
-		$cff_posttext_link_color = str_replace('#', '', $this->atts['textlinkcolor']);
+		// Constrain to a hex colour at the source — this value feeds multiple
+		// style="..." attributes below.
+		$cff_posttext_link_color_raw = ltrim( (string) $this->atts['textlinkcolor'], '#' );
+		$cff_posttext_link_color     = preg_match( '/^[0-9a-fA-F]{3,8}$/', $cff_posttext_link_color_raw ) ? $cff_posttext_link_color_raw : '';
 		$cff_title_link = CFF_Utils::check_if_on($this->atts['textlink']);
 
 		// Description Style
@@ -569,7 +575,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 		$custom_wrp_class = !empty($cff_feed_height) ? ' cff-wrapper-fixed-height' : '';
 
 		$cff_content .= '<div class="cff-wrapper-ctn ' . $custom_wrp_class . '" ' . $cff_insider_style . '>';
-		$cff_content .= '<div id="cff" ' . $cff_style_class['cff_custom_class'] . ' ' . $cff_style_class['cff_feed_styles'] . ' ' . $cff_style_class['cff_feed_attributes'] . '>';
+		$cff_content .= '<div id="cff" role="region" aria-label="' . esc_attr__('Facebook feed', 'custom-facebook-feed') . '" ' . $cff_style_class['cff_custom_class'] . ' ' . $cff_style_class['cff_feed_styles'] . ' ' . $cff_style_class['cff_feed_attributes'] . '>';
 
 		// Add the page header to the inside of the top of feed
 		if ($cff_show_header && !$cff_header_outside) {
@@ -608,16 +614,34 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 
 
 		$posts_wrap_box_shadow_class = $cff_box_shadow && $this->atts['feedlayout'] === 'list' ? ' cff-posts-wrap-box-shadow' : '';
-		$cff_content .= '<div class="cff-posts-wrap' . $posts_wrap_box_shadow_class . '">';
+		$cff_content .= '<div class="cff-posts-wrap' . $posts_wrap_box_shadow_class . '" role="list">';
 
 			// ***STARTS POSTS LOOP***
 		if (isset($FBdata->data)) {
+			// The site-wide gate is this loop's only success guard, and has to
+			// stay: the loop runs on any render carrying ->data -- including the
+			// one right after the fetch that RECORDED an error, and every warm
+			// cache hit -- and it sees only the merged blob, so it cannot tell
+			// which of atts['sources'] produced it. Clearing from here wiped a
+			// dead-token 190 in the request that stored it.
+			//
+			// It is no longer half of a deadlock, because recovery does not run
+			// through here any more: CFF_API_Connect::connect() clears
+			// errors['accounts'][id] on a successful fetch, where the success and
+			// the page it belongs to are both known. Once that has run the gate
+			// opens on its own and this loop clears the source-error column.
 			if (
 				! \cff_main()->cff_error_reporter->are_critical_errors()
 				 && isset($this->atts['sources'])
 					&& is_array($this->atts['sources'])
 			) {
 				foreach ($this->atts['sources'] as $source) {
+					// A pure-legacy atts['sources'] can be an array of bare id
+					// strings, where empty($string['account_id']) is true on PHP 8 --
+					// so this also keeps the call below off a string offset.
+					if (empty($source['account_id'])) {
+						continue;
+					}
 					if (! empty($source['error'])) {
 						\CustomFacebookFeed\Builder\CFF_Source::clear_error($source['account_id']);
 					}
@@ -797,7 +821,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 									}
 
 									$tag_name = $message_tag->name;
-									$tag_link = '<a href="https://facebook.com/' . $message_tag->id . '">' . $message_tag->name . '</a>';
+									$tag_link = CFF_Utils::cff_tag_link($message_tag->id, $message_tag->name);
 
 									$post_text_story = str_replace($tag_name, $tag_link, $post_text_story);
 								}
@@ -849,7 +873,11 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 												// Don't use the story tag in this case otherwise it changes '__ created an event' to '__ created an Name Of Event'
 												// Don't use the story tag if it's a page as it causes an issue when sharing a page: Smash Balloon Dev shared a Smash Balloon.
 										} else {
-											$b = '<a href="https://facebook.com/' . $message_tags_arr[$tag]['id'] . '" target="_blank">' . $message_tags_arr[$tag]['name'] . '</a>';
+											$b = CFF_Utils::cff_tag_link(
+												$message_tags_arr[$tag]['id'],
+												$message_tags_arr[$tag]['name'],
+												' target="_blank"'
+											);
 											$c = $message_tags_arr[$tag]['offset'];
 											$d = $message_tags_arr[$tag]['length'];
 											$post_text_story = CFF_Utils::cff_mb_substr_replace($post_text_story, $b, $c, $d);
@@ -887,7 +915,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 									}
 
 									$tag_name = $message_tag->name;
-									$tag_link = '<a href="https://facebook.com/' . $message_tag->id . '">' . $message_tag->name . '</a>';
+									$tag_link = CFF_Utils::cff_tag_link($message_tag->id, $message_tag->name);
 
 									$post_text_message = str_replace($tag_name, $tag_link, $post_text_message);
 								}
@@ -939,7 +967,10 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 										if ($message_tags_arr[$tag]['offset'] == $cff_msg_duplicate_offset) {
 											// If it has the same offset as another tag then don't display it
 										} else {
-											$b = '<a href="https://facebook.com/' . $message_tags_arr[$tag]['id'] . '">' . $message_tags_arr[$tag]['name'] . '</a>';
+											$b = CFF_Utils::cff_tag_link(
+												$message_tags_arr[$tag]['id'],
+												$message_tags_arr[$tag]['name']
+											);
 											$c = $message_tags_arr[$tag]['offset'];
 											$d = $message_tags_arr[$tag]['length'];
 											$post_text_message = CFF_Utils::cff_mb_substr_replace($post_text_message, $b, $c, $d);
@@ -1005,8 +1036,10 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 							if ($cff_title_link) {
 								$cff_description_tagged = CFF_Utils::cff_wrap_span(htmlspecialchars($description_text));
 							} else {
-								$cff_description_text = CFF_Autolink::cff_autolink(htmlspecialchars($description_text), $link_color = $cff_posttext_link_color);
-								$cff_description_tagged = CFF_Utils::cff_desc_tags($cff_description_text);
+								$cff_description_tagged = CFF_Utils::cff_desc_tags_autolink(
+									$description_text,
+									$cff_posttext_link_color
+								);
 							}
 
 							$cff_description .= $cff_description_tagged;
@@ -1056,7 +1089,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 
 						// Change the linebreak element if the text issue setting is enabled
 						$cff_format_issue = CFF_Utils::check_if_on($this->atts['textissue']);
-						$cff_linebreak_el = ( $cff_format_issue ) ?  '<br />' : '<img class="cff-linebreak" />';
+						$cff_linebreak_el = ( $cff_format_issue ) ?  '<br />' : '<img class="cff-linebreak" alt="" aria-hidden="true" />';
 
 						// EVENT
 						$cff_event_has_cover_photo = false;
@@ -1146,7 +1179,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 			$cff_content .= CFF_Utils::print_template_part('credit', get_defined_vars());
 
 		// End the feed
-			$cff_content .= '<input class="cff-pag-url" type="hidden" data-locatornonce="' . esc_attr(wp_create_nonce('cff-locator-nonce-' . get_the_ID())) . '" data-cff-shortcode="' . $data_att_html . '" data-post-id="' . get_the_ID() . '" data-feed-id="' . $atts['id'] . '">';
+			$cff_content .= '<input class="cff-pag-url" type="hidden" data-locatornonce="' . esc_attr( wp_create_nonce( 'cff-locator-nonce-' . get_the_ID() ) ) . '" data-cff-shortcode="' . $data_att_html . '" data-post-id="' . get_the_ID() . '" data-feed-id="' . esc_attr( $atts['id'] ) . '">';
 			$cff_content .= '</div></div><div class="cff-clear"></div>';
 
 			// Add the Like Box outside
@@ -1920,10 +1953,61 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 			// Are there more posts to get for this ID?
 			$graph_data = new CFF_Graph_Data($page_id, $page_ids, $feed_id, $feed_options, $data_att_html, $next_urls_arr_safe, $is_customizer, $FBdata_arr);
 			$feed_data = $graph_data->get_feed_data();
-			$FBdata = $feed_data !== 'no_more_posts' ? json_decode($feed_data) : $feed_data;
+			// The customizer path can return an already-decoded array (API error with
+			// no backup cache); json_decode() on a non-string is a TypeError on PHP 8.
+			$FBdata = $feed_data !== 'no_more_posts' ? CFF_Utils::cff_json_decode($feed_data) : $feed_data;
+
+			// Sanitize Facebook content on ingestion, before it reaches any renderer.
+			// cff_get_json_data() is the single chokepoint shared by the front-end shortcode
+			// render and the admin builder preview (CFF_Feed_Pro::add_remote_posts() -> this
+			// same method), so stripping markup here covers every downstream sink regardless
+			// of the output-side escaping each one does on its own.
+			if (is_object($FBdata) || is_array($FBdata)) {
+				self::cff_sanitize_untrusted_post_fields($FBdata);
+			}
 			$FBdata_arr[$page_id] = $FBdata;
 		} //End page_id loop
 		return $FBdata_arr;
+	}
+
+	/**
+	 * Recursively strips HTML tags/attributes from the free-text fields anywhere in a decoded
+	 * Facebook API response: post message and story, author/event/page name, shared-link or
+	 * video title, description, caption and domain -- and, because comment objects use the
+	 * same field names, comment message and commenter name. These fields carry content that
+	 * anyone with a Facebook account can influence and are rendered by several downstream sinks
+	 * (the front-end feed and the admin builder preview). CFF_Utils::strip_untrusted_html() removes
+	 * only real markup and leaves ordinary text -- including "<3", "a < b" and a bare "&" -- intact,
+	 * so the values still read correctly when bound as text.
+	 *
+	 * Public so the builder's comment fetch (CFF_Post_Set::fetch_comments()), which bypasses
+	 * cff_get_json_data(), can run the same sanitizer.
+	 *
+	 * @param mixed $data Decoded JSON (stdClass|array), modified in place.
+	 * @return void
+	 *
+	 * @since 4.13.1
+	 */
+	public static function cff_sanitize_untrusted_post_fields( &$data )
+	{
+		if (is_object($data)) {
+			foreach (array( 'message', 'name', 'title', 'description', 'caption', 'domain', 'story' ) as $field) {
+				if (isset($data->$field) && is_string($data->$field)) {
+					$data->$field = CFF_Utils::strip_untrusted_html($data->$field);
+				}
+			}
+			foreach ($data as $key => $value) {
+				if (is_object($value) || is_array($value)) {
+					self::cff_sanitize_untrusted_post_fields($data->$key);
+				}
+			}
+		} elseif (is_array($data)) {
+			foreach ($data as $key => $value) {
+				if (is_object($value) || is_array($value)) {
+					self::cff_sanitize_untrusted_post_fields($data[$key]);
+				}
+			}
+		}
 	}
 
 
@@ -1972,7 +2056,7 @@ class CFF_Shortcode extends CFF_Shortcode_Display
 		}
 
 		// Interpret data with JSON
-		$event_object = json_decode($event_json);
+		$event_object = CFF_Utils::cff_json_decode($event_json);
 
 		$description_text = '';
 		if (isset($event_object->name)) {

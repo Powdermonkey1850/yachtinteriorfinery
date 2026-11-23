@@ -1,14 +1,14 @@
 <div class="sbc-license-learn-more sbc-popup-blur-background sb-fs-boss sbc-center-boss" v-if="viewsActive.licenseLearnMore != null && viewsActive.licenseLearnMore != false">
-	<div class="sbc-extensions-popup sbc-popup-inside" v-if="viewsActive.licenseLearnMore != null && viewsActive.licenseLearnMore != false">
-        <div class="sbc-popup-cls" @click.prevent.default="activateView('licenseLearnMore')">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+	<div class="sbc-extensions-popup sbc-popup-inside" v-if="viewsActive.licenseLearnMore != null && viewsActive.licenseLearnMore != false" role="dialog" aria-modal="true" aria-labelledby="sbc-llm-heading" tabindex="-1">
+        <button type="button" class="sbc-popup-cls" aria-label="<?php esc_attr_e('Close', 'feeds-for-youtube'); ?>" @click.prevent.default="activateView('licenseLearnMore')">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
                 <path d="M14 1.41L12.59 0L7 5.59L1.41 0L0 1.41L5.59 7L0 12.59L1.41 14L7 8.41L12.59 14L14 12.59L8.41 7L14 1.41Z" fill="#141B38"/>
             </svg>
-        </div>
+        </button>
         <div>
             <div class="sb-llm-header">
-                <h2 v-if="sbyLicenseNoticeActive && !sbyLicenseInactiveState">Your YouTube Feed Pro License is expired</h2>
-                <h2 v-if="sbyLicenseInactiveState">Your YouTube Feed Pro License is inactive</h2>
+                <h2 id="sbc-llm-heading" v-if="sbyLicenseNoticeActive && !sbyLicenseInactiveState">Your YouTube Feed Pro License is expired</h2>
+                <h2 id="sbc-llm-heading" v-if="sbyLicenseInactiveState">Your YouTube Feed Pro License is inactive</h2>
                 <p>No license key detected. With a license key you can: </p>
             </div>
             <div class="sb-llm-upgrade-benefits">
@@ -44,7 +44,7 @@
                     </div>
                     <div class="sb-right">
                         <div class="sb-modal-license-key-form">
-                            <input type="password" placeholder="<?php esc_attr_e('Paste license key here', 'feeds-for-youtube') ?>" class="sb-input" v-model="licenseKey">
+                            <input type="password" aria-label="<?php esc_attr_e('License key', 'feeds-for-youtube') ?>" placeholder="<?php esc_attr_e('Paste license key here', 'feeds-for-youtube') ?>" class="sb-input" v-model="licenseKey">
                             <button @click="activateLicense()" class="sb-btn-default sb-btn-blue sb-btn-license-activate">
                                 <span v-html="svgIcons.loader" v-if="licenseBtnClicked"></span>
                                 Activate
@@ -55,7 +55,7 @@
                 <div class="sb-llm-lk-footer">
                     <p>
                         <span>Need a New License? </span>
-                        <a href="<?php echo "https://smashballoon.com/pricing/youtube-feed/"; ?>" target="_blank">
+                        <a href="<?php echo "https://smashballoon.com/youtube-feed/youtube-lite-upgrade/?utm_campaign=youtube-free&utm_source=license-popup&utm_medium=buy-license&utm_content=BuyALicense"; ?>" target="_blank">
                             Buy a License
                             <svg width="7" height="10" viewBox="0 0 7 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.8332 0L0.658203 1.175L4.47487 5L0.658203 8.825L1.8332 10L6.8332 5L1.8332 0Z" fill="#0068A0"/></svg>
                         </a>

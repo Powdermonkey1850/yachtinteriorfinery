@@ -21,10 +21,39 @@ class UpdraftPlus_BackupModule_googledrive extends UpdraftPlus_BackupModule {
 	private $registered_prune = array();
 
 	/**
+	 * Input and option field mappings with default values and supported contexts.
+	 *
+	 * "parentid" is deprecated since April 2014; it should not be in the default options
+	 * (its presence is used to detect an upgraded-from-previous-SDK situation).
+	 * For the same reason, 'folder' is also unset;
+	 * which enables us to know whether new-style settings have ever been set.
+	 *
+	 * @var array
+	 */
+	protected $input_option_field_mappings = array(
+		'clientid' => array(
+			'default_value' => '',
+			'contexts' => array('option'),
+		),
+		'secret' => array(
+			'default_value' => '',
+			'contexts' => array('option'),
+		),
+		'token' => array(
+			'default_value' => '',
+			'contexts' => array('option'),
+		),
+		'folder' => array(
+			'default_value' => 'UpdraftPlus',
+			'contexts' => array('input'),
+		),
+	);
+
+	/**
 	 * Constructor
 	 */
 	public function __construct() {
-		$this->client_id = defined('UPDRAFTPLUS_GOOGLEDRIVE_CLIENT_ID') ? UPDRAFTPLUS_GOOGLEDRIVE_CLIENT_ID : '916618189494-u3ehb1fl7u3meb63nb2b4fqi0r9pcfe2.apps.googleusercontent.com';
+		$this->client_id = defined('UPDRAFTPLUS_GOOGLEDRIVE_CLIENT_ID') ? UPDRAFTPLUS_GOOGLEDRIVE_CLIENT_ID : '916618189494-u3ehb1fl7u3meb63nb2b4fqi0r9pcfe2.apps.googleusercontent.com'; // phpcs:ignore PluginCheck.CodeAnalysis.Offloading.OffloadedContent -- Default Google OAuth client ID for the Google Drive integration, not an offloaded asset URL.
 		$this->callback_url = defined('UPDRAFTPLUS_GOOGLEDRIVE_CALLBACK_URL') ? UPDRAFTPLUS_GOOGLEDRIVE_CALLBACK_URL : 'https://auth.updraftplus.com/auth/googledrive';
 
 		if (class_exists('UpdraftPlus_Addon_Google_Enhanced')) {
@@ -87,20 +116,6 @@ class UpdraftPlus_BackupModule_googledrive extends UpdraftPlus_BackupModule {
 	public function get_supported_features() {
 		// This options format is handled via only accessing options via $this->get_options()
 		return array('multi_options', 'config_templates', 'multi_storage', 'conditional_logic', 'manual_authentication');
-	}
-
-	/**
-	 * Retrieve default options for this remote storage module.
-	 *
-	 * @return Array - an array of options
-	 */
-	public function get_default_options() {
-		// parentid is deprecated since April 2014; it should not be in the default options (its presence is used to detect an upgraded-from-previous-SDK situation). For the same reason, 'folder' is also unset; which enables us to know whether new-style settings have ever been set.
-		return array(
-			'clientid' => '',
-			'secret' => '',
-			'token' => '',
-		);
 	}
 
 	/**
@@ -498,13 +513,15 @@ class UpdraftPlus_BackupModule_googledrive extends UpdraftPlus_BackupModule {
 			'response_type' => 'code',
 			'client_id' => $client_id,
 			'redirect_uri' => $this->redirect_uri($use_master),
-			// Nov 2024 - https://www.googleapis.com/auth/drive.readonly temporarily removed for annual re-verification (for which we received no notification)
-			'scope' => apply_filters('updraft_googledrive_scope', 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile'),
+			// Nov 2024 - https://www.googleapis.com/auth/drive.readonly temporarily removed for annual re-verification (for which we received no notification) (1.24.10/11)
+			// Nov 2026 - https://www.googleapis.com/auth/drive.readonly restored following CASA review approval
+			'scope' => apply_filters('updraft_googledrive_scope', 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.profile'),
 			'state' => $token,
 			'access_type' => 'offline',
 			// 'approval_prompt' => 'force', // legacy and has been deprected. It can lead to conflicts when specified along with "prompt" param
 			// Nov 2024 - changed from `true` for the same reason as a few lines earlier
-			'include_granted_scopes' => 'false',
+			// Nov 2026 - changed back from 'false' to true, same reason as a few lines earlier
+			'include_granted_scopes' => 'true',
 			'enable_granular_consent' => 'true',
 			'prompt' => 'select_account consent', // new option param as the replacement to 'approval_prompt'
 		);
@@ -548,6 +565,7 @@ class UpdraftPlus_BackupModule_googledrive extends UpdraftPlus_BackupModule {
 			// remove our flag so we know this authentication is complete
 			if (isset($opts['auth_in_progress'])) unset($opts['auth_in_progress']);
 			$this->set_options($opts, true);
+			$this->set_connection_status(true);
 		}
 
 		if ($return_instead_of_echo) {
@@ -1140,7 +1158,7 @@ class UpdraftPlus_BackupModule_googledrive extends UpdraftPlus_BackupModule {
 			if ('recursion' !== $opts->get_error_code()) {
 				$msg = "(".$opts->get_error_code()."): ".$opts->get_error_message();
 				$this->log($msg);
-				error_log("UpdraftPlus: Google Drive: $msg");
+				UpdraftPlus_Manipulation_Functions::error_log("UpdraftPlus: Google Drive: $msg");
 			}
 			// The saved options had a problem; so, return the new ones
 			return $google;
@@ -1631,6 +1649,8 @@ class UpdraftPlus_BackupModule_googledrive extends UpdraftPlus_BackupModule {
 			'deauthentication_link_text' => sprintf(__("Follow this link to remove these settings for %s.", 'updraftplus'), $updraftplus->backup_methods[$this->get_id()]),
 			'deauthorise_use_master_label' => __('To de-authorize UpdraftPlus (all sites) from accessing your Google Drive, follow this link to your Google account settings.', 'updraftplus'),
 			'account_name_label' => __("Account holder's name", 'updraftplus'),
+			'input_folder_placeholder' => __('Enter your folder name', 'updraftplus'),
+			'input_folder_title' => __('The folder in your Google Drive where the backups will be stored.', 'updraftplus'),
 		);
 		if (preg_match('#^(https?://(\d+)\.(\d+)\.(\d+)\.(\d+))/#i', apply_filters('updraftplus_gdrive_admin_page_url', UpdraftPlus_Options::admin_page_url()), $matches)) $properties['ip_address'] = $matches[1];
 		if (isset($properties['ip_address'])) {
@@ -1815,5 +1835,29 @@ class UpdraftPlus_BackupModule_googledrive extends UpdraftPlus_BackupModule {
 
 		/* translators: %s: Service name */
 		return '<p>'. $text .'</p><br><a data-pretext="'.$text.'" class="button-ud-google updraft_authlink" href="'.UpdraftPlus_Options::admin_page_url().'?&action=updraftmethod-'.$id.'-auth&page=updraftplus&updraftplus_'.$id.'auth=doit&nonce='.wp_create_nonce('storage_auth_nonce').'&updraftplus_instance='.esc_attr($instance_id).'" data-instance_id="'.esc_attr($instance_id).'" data-remote_method="'.$id.'">'.sprintf(__('Sign in with %s', 'updraftplus'), 'Google').'</a>';
+	}
+
+	/**
+	 * Customize generated field data using legacy mapping values.
+	 *
+	 * Used by transform_template_properties_to_fields_structure()
+	 * to allow child classes to adjust the generated field structure
+	 * based on legacy data and field mapping requirements.
+	 *
+	 * @param array  $field               Field data.
+	 * @param array  $template_properties Template properties.
+	 * @param string $field_name          Field name.
+	 * @param array  $option              Field mapping option.
+	 *
+	 * @return array
+	 */
+	public function configure_field_from_legacy($field, $template_properties, $field_name, $option) {
+		if (!class_exists('UpdraftPlus_Addon_Google_Enhanced') && 'folder' === $field_name) return array();
+
+		$prefix = 'input_'.$option['template_property_input_mapping'].'_';
+
+		if (empty($field['tooltip']) && isset($template_properties[$prefix.'title'])) $field['tooltip'] = array('text' => $template_properties[$prefix.'title']);
+
+		return $field;
 	}
 }

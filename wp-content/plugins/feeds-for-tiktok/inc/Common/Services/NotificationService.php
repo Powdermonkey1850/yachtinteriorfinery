@@ -158,13 +158,37 @@ class NotificationService extends ServiceProvider
 			return [];
 		}
 
-		$option = $this->getOptionValue();
-		if (empty($option['update']) || time() > $option['update'] + DAY_IN_SECONDS) {
-			$this->updateNotifications();
+		// Honour the consent source switch so local <-> remote is an exclusive
+		// swap rather than additive. 'none' hides everything; 'local' serves the
+		// Consent package's bundled fallback; 'remote' uses the fetched feed.
+		$source = class_exists('\TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager')
+			? \TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+
+		if ('none' === $source) {
+			return [];
 		}
 
-		$events = !empty($option['events']) ? $this->verifyActiveNotifications($option['events']) : [];
-		$feed = !empty($option['feed']) ? $this->verifyActiveNotifications($option['feed']) : [];
+		$option = $this->getOptionValue();
+
+		if ('local' === $source) {
+			$feed = class_exists('\TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications')
+				? \TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications::load_local_fallback(self::PLUGIN, Utils::sbtt_is_pro())
+				: [];
+			// Cached remote events ($option['events']) must not leak into 'local'
+			// mode — the swap is exclusive, so local serves only the fallback feed.
+			$events = [];
+		} else {
+			if (empty($option['update']) || time() > $option['update'] + DAY_IN_SECONDS) {
+				$this->updateNotifications();
+				// updateNotifications() writes fresh data to the DB but leaves the
+				// cached $option stale; re-read (bypassing cache) so the freshly
+				// fetched feed renders on the first load rather than the next one.
+				$option = $this->getOptionValue(false);
+			}
+			$feed = !empty($option['feed']) ? $this->verifyActiveNotifications($option['feed']) : [];
+			$events = !empty($option['events']) ? $this->verifyActiveNotifications($option['events']) : [];
+		}
 
 		$new_user = new NewUserService();
 		$new_user_notifications = $new_user->getNotifications();
@@ -219,6 +243,17 @@ class NotificationService extends ServiceProvider
 	 */
 	public function updateNotifications()
 	{
+		// The Consent package owns the source-switch + local-fallback path. Only
+		// fire the remote fetch when consent resolves to 'remote'; 'local' and
+		// 'none' are no-ops here.
+		$source = class_exists('\TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager')
+			? \TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+
+		if ('remote' !== $source) {
+			return;
+		}
+
 		$notifications = $this->fetchNotifications();
 		$option = $this->getOptionValue();
 
@@ -286,6 +321,11 @@ class NotificationService extends ServiceProvider
 			return null;
 		}
 
+		// Keep the consent marketing store reconciled with what is rendered.
+		if (class_exists('\TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications')) {
+			\TikTokFeeds\Vendor\Smashballoon\Framework\Packages\Consent\ConsentNotifications::reconcile_from_notifications('tiktok-feeds', $notifications);
+		}
+
 		$wrapper_class = $this->getWrapperClass($notifications[0]['id']);
 		$dismiss_button = $this->getDismissButtonHtml($notifications[0]['id']);
 		$navigation_buttons = $this->getNavigationButtonsHtml(count($notifications));
@@ -296,7 +336,7 @@ class NotificationService extends ServiceProvider
 		$notifications_content = sprintf('<div class="messages">%s</div>', implode('', $notifications_html));
 
 		return sprintf(
-			'<div class="sbtt-notifications-wrap%s" id="sbtt-notifications">%s%s%s</div>',
+			'<div class="sbtt-notifications-wrap%s" id="sbtt-notifications" role="status" aria-live="polite" aria-atomic="true">%s%s%s</div>',
 			esc_attr($wrapper_class),
 			wp_kses_post($dismiss_button),
 			wp_kses_post($navigation_buttons),
@@ -654,7 +694,7 @@ class NotificationService extends ServiceProvider
 		if (empty($notification['image'])) {
 			return [
 				'src'  => SBTT_PLUGIN_URL . 'assets/images/sbtt-bell.svg',
-				'alt'  => 'notice',
+				'alt'  => '',
 				'wrap' => '<div class="bell"><img src="{src}" alt="{alt}"></div>',
 			];
 		}
@@ -662,7 +702,7 @@ class NotificationService extends ServiceProvider
 		if ($notification['image'] === 'balloon') {
 			return [
 				'src'  => SBTT_PLUGIN_URL . 'assets/images/balloon.svg',
-				'alt'  => 'notice',
+				'alt'  => '',
 				'wrap' => '<div class="bell"><img src="{src}" alt="{alt}"></div>',
 			];
 		}
@@ -670,7 +710,7 @@ class NotificationService extends ServiceProvider
 		$image_filename = sanitize_text_field(str_replace('sbi', 'sbtt', $notification['image']));
 		$image = [
 			'src'  => SBTT_PLUGIN_URL . 'assets/images/' . $image_filename,
-			'alt'  => 'notice',
+			'alt'  => '',
 		];
 
 		if (in_array($notification['id'], ['review', 'discount'], true)) {
@@ -784,7 +824,12 @@ class NotificationService extends ServiceProvider
 			return '';
 		}
 
-		$button_template = '<a class="%s disabled" title="%s"><img src="%s" alt="%s"></a>';
+		// Real <button> elements so the carousel controls are keyboard-operable.
+		// The `disabled` class is retained for CSS; admin-notifications.js keeps the
+		// native disabled state in sync as the user navigates. Native `disabled`
+		// conveys the state to assistive tech, so no aria-disabled is needed.
+		$button_template = '<button type="button" class="%s disabled" aria-label="%s" disabled>'
+			. '<img src="%s" alt="" aria-hidden="true"></button>';
 		$buttons = [
 			'prev' => [
 				'title' => __('Previous message', 'feeds-for-tiktok'),
@@ -800,10 +845,9 @@ class NotificationService extends ServiceProvider
 		foreach ($buttons as $class => $data) {
 			$html .= sprintf(
 				$button_template,
-				$class,
+				esc_attr($class),
 				esc_attr($data['title']),
-				esc_url(SBTT_PLUGIN_URL . 'assets/images/' . $data['image']),
-				esc_attr($data['title'])
+				esc_url(SBTT_PLUGIN_URL . 'assets/images/' . $data['image'])
 			);
 		}
 		$html .= '</div>';
@@ -820,7 +864,6 @@ class NotificationService extends ServiceProvider
 	protected function getDismissButtonHtml($type)
 	{
 		$dismiss_text = __('Dismiss this message', 'feeds-for-tiktok');
-		$dismiss_alt = __('Dismiss', 'feeds-for-tiktok');
 		$icon_url = SBTT_PLUGIN_URL . 'assets/images/sbtt-dismiss-icon.svg';
 
 		$dismiss_url = '';
@@ -828,16 +871,27 @@ class NotificationService extends ServiceProvider
 			$dismiss_url = wp_nonce_url(add_query_arg(array('sbtt_dismiss' => $type)), 'sbtt-' . $type, 'sbtt_nonce');
 		}
 
-		$href_attr = $dismiss_url ? sprintf(' href="%s"', esc_url($dismiss_url)) : '';
+		// review/discount dismiss navigates to a nonced URL — a real <a> is already
+		// keyboard-operable, so keep it as a link (just label it and hide the icon).
+		if ($dismiss_url) {
+			return sprintf(
+				'<a class="dismiss" href="%s" aria-label="%s">
+					<img src="%s" alt="" aria-hidden="true">
+				</a>',
+				esc_url($dismiss_url),
+				esc_attr($dismiss_text),
+				esc_url($icon_url)
+			);
+		}
 
+		// All other notices dismiss via AJAX (no href). A bare <a> with no href is
+		// not keyboard-focusable, so render a real <button> for keyboard users.
 		return sprintf(
-			'<a class="dismiss" title="%s"%s>
-				<img src="%s" alt="%s">
-			</a>',
+			'<button type="button" class="dismiss" aria-label="%s">
+				<img src="%s" alt="" aria-hidden="true">
+			</button>',
 			esc_attr($dismiss_text),
-			$href_attr,
-			esc_url($icon_url),
-			esc_attr($dismiss_alt)
+			esc_url($icon_url)
 		);
 	}
 }

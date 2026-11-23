@@ -8,9 +8,16 @@ class AboutPage extends BaseSettingPage {
 	protected $menu_slug = 'about';
 	protected $menu_title = 'About Us';
 	protected $page_title = 'About Us';
-	protected $has_menu = true;
+	// The About Us menu is now owned by the shared AboutUs package
+	// (AboutUsManager). This page is still registered for its pluginInfo
+	// localisation and addon install/activate ajax handlers, but must not
+	// render its own duplicate menu item.
+	protected $has_menu = false;
 	protected $template_file = 'settings.index';
-	protected $has_assets = true;
+	// AboutUsManager now renders this page, so the legacy settings bundle has
+	// nothing to mount into here. Keeping assets on would enqueue it (and run
+	// its get_settings_object() option reads) on youtube-feed-about for nothing.
+	protected $has_assets = false;
 	protected $menu_position = 4;
 	protected $menu_position_free_version = 4;
 
@@ -88,7 +95,7 @@ class AboutPage extends BaseSettingPage {
 			)
 		);
 
-		$creds = request_filesystem_credentials( $url, '', false, false, null );
+		$creds = request_filesystem_credentials( $url, '', false, '', null );
 
 		// Check for file system permissions.
 		if ( false === $creds ) {
@@ -112,8 +119,12 @@ class AboutPage extends BaseSettingPage {
 			include_once ABSPATH . 'wp-admin/includes/class-wp-upgrader-skin.php';
 		}
 
-		// Create the plugin upgrader with our custom skin.
-		$installer = new \Plugin_Upgrader( new \WP_Upgrader_Skin() );
+		require_once trailingslashit( SBY_PLUGIN_DIR ) . 'inc/PluginSilentUpgrader.php';
+		require_once trailingslashit( SBY_PLUGIN_DIR ) . 'inc/PluginSilentUpgraderSkin.php';
+		require_once SBY_PLUGIN_DIR . 'inc/class-install-skin.php';
+
+		// Create the plugin upgrader with our silent skin, so no upgrader output precedes the JSON response.
+		$installer = new \SmashBalloon\YouTubeFeed\PluginSilentUpgrader( new \SmashBalloon\YouTubeFeed\SBY_Install_Skin() );
 
 		// Error check.
 		if ( empty( $_POST['plugin'] ) ) {
@@ -330,6 +341,16 @@ class AboutPage extends BaseSettingPage {
 	                'icon' =>  'plugin-push.png',
 	                'installed' => isset( $installed_plugins['pushengage/main.php'] ) ? true : false,
 	                'activated' => is_plugin_active('pushengage/main.php'),
+					'installs_number' => __('10 Thousand+ Installs', 'feeds-for-youtube')
+                ),
+                'wpconsent'  => array(
+	                'plugin' => 'wpconsent-cookies-banner-privacy-suite/wpconsent.php',
+	                'download_plugin' => 'https://downloads.wordpress.org/plugin/wpconsent-cookies-banner-privacy-suite.zip',
+	                'title' => __('WPConsent', 'feeds-for-youtube'),
+	                'description' => __('Detect all the plugins that use cookies and sets a consent banner in just a few clicks. Works well with Smash Balloon plugins.', 'feeds-for-youtube'),
+	                'icon' =>  'plugin-wpconsent.png',
+	                'installed' => isset( $installed_plugins['wpconsent-cookies-banner-privacy-suite/wpconsent.php'] ) ? true : false,
+	                'activated' => is_plugin_active('wpconsent-cookies-banner-privacy-suite/wpconsent.php'),
 					'installs_number' => __('10 Thousand+ Installs', 'feeds-for-youtube')
                 )
 			),

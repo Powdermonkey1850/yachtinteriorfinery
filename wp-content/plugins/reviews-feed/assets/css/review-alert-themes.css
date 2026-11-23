@@ -228,6 +228,44 @@
     --sbr-popup-close-bg-hover: var(--sbr-popup-accent-700);
 }
 
+/* ==========================================================================
+   Exact accent (SMASH-2220)
+   A HEX typed in the customizer is used as entered instead of being reduced to
+   a hue: the palette is mixed from it, and 600/700 (stars, border, footer bar,
+   link hover) are the colour itself. Presets and the hue slider never set
+   --exact-accent, so they keep the OKLCH palette above.
+   --sbr-popup-accent-exact / -contrast / -ink come from the popup's inline style
+   (SBR_Review_Alert_Service::exact_accent() and its JS twin). Browsers without
+   color-mix() fall back to --sbr-popup-accent-fallback, which is the same hex.
+   ========================================================================== */
+@supports (color: color-mix(in oklch, red, blue)) {
+    .sbr-review-alert.sbr-review-alert--exact-accent {
+        --sbr-popup-accent-50: color-mix(in oklch, var(--sbr-popup-accent-exact) 6%, white);
+        --sbr-popup-accent-100: color-mix(in oklch, var(--sbr-popup-accent-exact) 14%, white);
+        --sbr-popup-accent-200: color-mix(in oklch, var(--sbr-popup-accent-exact) 28%, white);
+        --sbr-popup-accent-300: color-mix(in oklch, var(--sbr-popup-accent-exact) 45%, white);
+        --sbr-popup-accent-400: color-mix(in oklch, var(--sbr-popup-accent-exact) 65%, white);
+        --sbr-popup-accent-500: color-mix(in oklch, var(--sbr-popup-accent-exact) 85%, white);
+        --sbr-popup-accent-600: var(--sbr-popup-accent-exact);
+        --sbr-popup-accent-700: var(--sbr-popup-accent-exact);
+        --sbr-popup-accent-800: color-mix(in oklch, var(--sbr-popup-accent-exact) 75%, black);
+        --sbr-popup-accent-900: color-mix(in oklch, var(--sbr-popup-accent-exact) 45%, black);
+        --sbr-popup-accent-950: color-mix(in oklch, var(--sbr-popup-accent-exact) 25%, black);
+
+        --sbr-popup-accent-muted-50: color-mix(in oklch, var(--sbr-popup-accent-50) 40%, var(--sbr-popup-zinc-50));
+        --sbr-popup-accent-muted-100: color-mix(in oklch, var(--sbr-popup-accent-100) 40%, var(--sbr-popup-zinc-100));
+        --sbr-popup-accent-muted-200: color-mix(in oklch, var(--sbr-popup-accent-200) 40%, var(--sbr-popup-zinc-200));
+        --sbr-popup-accent-muted-300: color-mix(in oklch, var(--sbr-popup-accent-300) 40%, var(--sbr-popup-zinc-300));
+        --sbr-popup-accent-muted-400: color-mix(in oklch, var(--sbr-popup-accent-400) 40%, var(--sbr-popup-zinc-400));
+        --sbr-popup-accent-muted-500: color-mix(in oklch, var(--sbr-popup-accent-500) 40%, var(--sbr-popup-zinc-500));
+        --sbr-popup-accent-muted-600: color-mix(in oklch, var(--sbr-popup-accent-600) 40%, var(--sbr-popup-zinc-600));
+        --sbr-popup-accent-muted-700: color-mix(in oklch, var(--sbr-popup-accent-700) 40%, var(--sbr-popup-zinc-700));
+        --sbr-popup-accent-muted-800: color-mix(in oklch, var(--sbr-popup-accent-800) 40%, var(--sbr-popup-zinc-800));
+        --sbr-popup-accent-muted-900: color-mix(in oklch, var(--sbr-popup-accent-900) 40%, var(--sbr-popup-zinc-900));
+        --sbr-popup-accent-muted-950: color-mix(in oklch, var(--sbr-popup-accent-950) 40%, var(--sbr-popup-zinc-950));
+    }
+}
+
 .sbr-review-alert *,
 .sbr-review-alert *::before,
 .sbr-review-alert *::after {
@@ -320,6 +358,9 @@
     box-shadow: var(--sbr-popup-shadow);
     padding: 4px;
     overflow: hidden;
+    /* Explicit containing block for the absolutely-positioned close button —
+       it otherwise relies on the backdrop-filter below to establish one. */
+    position: relative;
     /* Note: Avoid "transition: all" here - it animates width changes during
        expand/collapse state switches, causing a left-shift glitch */
     transition: background-color var(--sbr-popup-transition), box-shadow var(--sbr-popup-transition);
@@ -348,14 +389,19 @@
 
 .sbr-review-alert__close {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    /* Inset far enough to clear the card's 12px rounded corner — at 8px the
+       button straddles the edge and the accent border shows behind it. */
+    top: 12px;
+    right: 12px;
     width: 24px;
     height: 24px;
     padding: 0;
     border: none;
     border-radius: 9999px;
     background-color: transparent;
+    /* Themes that style every <button> (Kadence et al. ship an offset shadow)
+       otherwise draw it around this one too. */
+    box-shadow: none;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -363,6 +409,14 @@
     opacity: 0;
     transition: opacity 200ms, background-color 200ms, transform 200ms;
     z-index: 10;
+}
+
+/* Hit area larger than the 24px glyph, so a slightly-off tap still lands. */
+.sbr-review-alert__close::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: inherit;
 }
 
 .sbr-review-alert__close svg {
@@ -376,6 +430,14 @@
 .sbr-review-alert:focus-within .sbr-review-alert__close,
 .sbr-review-alert__close:focus {
     opacity: 1;
+}
+
+/* Touch has no hover, so the reveal above never fires and visitors see no way
+   to dismiss the popup. Show it outright. SMASH-1820. */
+@media (hover: none), (pointer: coarse) {
+    .sbr-review-alert__close {
+        opacity: 1;
+    }
 }
 
 .sbr-review-alert__close:hover {
@@ -420,7 +482,9 @@
 .sbr-review-alert__date {
     position: absolute;
     top: 20px;
-    right: 20px;
+    /* Clears the close button, which reaches 32px in from the card's right
+       edge (12px inset on .__inner + 24px wide, less .__inner's 4px padding). */
+    right: 40px;
     font-weight: 600;
     font-size: 14px;
     line-height: 20px;
@@ -476,6 +540,48 @@
     font-weight: 600; /* semibold - matches prototype */
     line-height: 1;
     color: var(--sbr-popup-text);
+}
+
+/* SMASH-782: Booking native 0-10 score — shown INSTEAD of stars for Booking
+   reviews in the compact card and expanded view. Byte-for-byte the same look as
+   the single feed's per-card score (.sb-item-rating-score / -badge / -label):
+   blue badge + grey word label, with Booking's signature square-bottom-left
+   badge corner. Blue is Booking's brand (not the theme accent) so it reads as a
+   Booking score across Light/Dark/Minimal. */
+.sbr-review-alert__score {
+    display: flex;
+    align-self: flex-start; /* hug content in the flex-column layout, don't stretch */
+    align-items: center;
+    gap: 8px;
+}
+
+.sbr-review-alert__score-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 4px;
+    border-radius: 6px 6px 6px 0; /* Booking signature: square bottom-left */
+    font-family: var(--sbr-popup-font);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 14px;
+    color: #fff;
+}
+
+.sbr-review-alert__score-badge--booking {
+    background-color: #003580; /* Booking.com brand blue */
+}
+
+.sbr-review-alert__score-label {
+    font-family: var(--sbr-popup-font);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.3;
+    color: #8c8f9a; /* matches feed .sb-item-rating-score-label */
+}
+
+.sbr-review-alert__expanded-score {
+    margin-bottom: 6px;
 }
 
 /* Dark theme rating value - now handled by semantic tokens */
@@ -598,6 +704,7 @@
     align-items: center;
     justify-content: center;
     border: 2px solid var(--sbr-popup-badge-border);
+    overflow: hidden; /* clip full-color square logos (Booking/AliExpress) to the round badge */
 }
 
 .sbr-review-alert__provider-badge img,
@@ -623,34 +730,34 @@
    Background elements (rects, circles) are hidden to ensure single-color icons
    work properly across all themes. This prevents multi-layer icons (e.g., WooCommerce,
    Facebook, TripAdvisor, Zomato) from having invisible foregrounds when both
-   background and foreground are forced to the same color. */
-.sbr-review-alert__provider-badge svg,
-.sbr-review-alert__provider-badge svg path,
-.sbr-review-alert__provider-badge svg g {
+   background and foreground are forced to the same color.
+
+   Exception: providers whose icon is a full-color brand TILE (colored background
+   + contrasting foreground) must keep their original colors and NOT have their
+   background stripped — the flatten collapses bg+fg to one color, hiding the
+   logo:
+   - Booking.com — <path> blue tile + white "B".
+   - AliExpress — single <rect> filled with an embedded image pattern.
+   - Facebook — blue circle + white "f" (was a solid blue blob on light).
+   - Zomato — red <rect> tile + white wordmark (was faint/invisible).
+   All excluded so their real logos render (matching the feed), clipped to the
+   round badge via overflow:hidden above. Monochrome/line icons (google, yelp,
+   tripadvisor, trustpilot, woocommerce, edd, wordpress.org, airbnb) still get
+   the theme-aware single-color treatment. */
+.sbr-review-alert__provider-badge:not([data-provider="booking"]):not([data-provider="aliexpress"]):not([data-provider="facebook"]):not([data-provider="zomato"]) svg,
+.sbr-review-alert__provider-badge:not([data-provider="booking"]):not([data-provider="aliexpress"]):not([data-provider="facebook"]):not([data-provider="zomato"]) svg path,
+.sbr-review-alert__provider-badge:not([data-provider="booking"]):not([data-provider="aliexpress"]):not([data-provider="facebook"]):not([data-provider="zomato"]) svg g {
     fill: var(--sbr-popup-badge-icon) !important;
 }
 
 /* Hide background elements in provider badges - many icons have colored
-   backgrounds (rects, circles) that conflict with single-color theming */
-.sbr-review-alert__provider-badge svg > rect,
-.sbr-review-alert__provider-badge svg > circle,
-.sbr-review-alert__provider-badge svg g > rect:first-child,
-.sbr-review-alert__provider-badge svg g > circle:first-child {
+   backgrounds (rects, circles) that conflict with single-color theming.
+   Booking / AliExpress / Facebook / Zomato excluded (full-color logos kept). */
+.sbr-review-alert__provider-badge:not([data-provider="booking"]):not([data-provider="aliexpress"]):not([data-provider="facebook"]):not([data-provider="zomato"]) svg > rect,
+.sbr-review-alert__provider-badge:not([data-provider="booking"]):not([data-provider="aliexpress"]):not([data-provider="facebook"]):not([data-provider="zomato"]) svg > circle,
+.sbr-review-alert__provider-badge:not([data-provider="booking"]):not([data-provider="aliexpress"]):not([data-provider="facebook"]):not([data-provider="zomato"]) svg g > rect:first-child,
+.sbr-review-alert__provider-badge:not([data-provider="booking"]):not([data-provider="aliexpress"]):not([data-provider="facebook"]):not([data-provider="zomato"]) svg g > circle:first-child {
     fill: transparent !important;
-}
-
-/* Facebook icon fix for dark themes:
-   Facebook SVG has two paths (circle background + "f" letter) instead of rect/circle + path.
-   On dark themes, we need the circle path white and the "f" path dark for contrast.
-   Use data-provider attribute to target ONLY Facebook, not other providers like Google. */
-.sbr-review-alert--dark .sbr-review-alert__provider-badge[data-provider="facebook"] svg > g > path:first-child,
-.sbr-review-alert--minimal-dark .sbr-review-alert__provider-badge[data-provider="facebook"] svg > g > path:first-child {
-    fill: var(--sbr-popup-white) !important;
-}
-
-.sbr-review-alert--dark .sbr-review-alert__provider-badge[data-provider="facebook"] svg > g > path:last-child,
-.sbr-review-alert--minimal-dark .sbr-review-alert__provider-badge[data-provider="facebook"] svg > g > path:last-child {
-    fill: var(--sbr-popup-badge-bg) !important;
 }
 
 /* ==========================================================================
@@ -708,6 +815,23 @@
 
 .sbr-review-alert__star--empty {
     color: var(--sbr-popup-star-empty);
+}
+
+/* Half star (e.g. 4.5): base star empty-coloured, left 50% overlaid with fill. */
+.sbr-review-alert__star--half {
+    position: relative;
+    color: var(--sbr-popup-star-empty);
+}
+
+.sbr-review-alert__star--half .sbr-review-alert__star-half {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    color: var(--sbr-popup-star-fill);
+    /* Reveal the left half of a FULL-SIZE star (mirrors the feed header's
+       half-star — a full star clipped to 50%, not a shrunk one). Full-size
+       overlay so the inner icon never gets flex-shrunk; clip shows the half. */
+    clip-path: inset(0 50% 0 0);
 }
 
 /* ==========================================================================
@@ -1068,6 +1192,21 @@
     color: var(--sbr-popup-star-empty);
 }
 
+/* Minimal Dark - half star: dim the empty BASE the same way --empty above does
+   (the global `--minimal-dark svg path` white rule otherwise paints the whole star),
+   then re-assert the left-half fill overlay so 4.5/4.7 shows a real half, not 5 full. */
+.sbr-review-alert--minimal-dark .sbr-review-alert__star--half,
+.sbr-review-alert--minimal-dark .sbr-review-alert__star--half svg,
+.sbr-review-alert--minimal-dark .sbr-review-alert__star--half svg path {
+    color: var(--sbr-popup-star-empty);
+}
+
+.sbr-review-alert--minimal-dark .sbr-review-alert__star--half .sbr-review-alert__star-half,
+.sbr-review-alert--minimal-dark .sbr-review-alert__star--half .sbr-review-alert__star-half svg,
+.sbr-review-alert--minimal-dark .sbr-review-alert__star--half .sbr-review-alert__star-half svg path {
+    color: var(--sbr-popup-star-fill);
+}
+
 /* Minimal Dark - Chevron uses stroke, not fill */
 /* Override global SVG white rule - chevron should inherit text color */
 .sbr-review-alert--minimal-dark .sbr-review-alert__chevron svg,
@@ -1151,6 +1290,21 @@
     color: var(--sbr-popup-star-empty);
 }
 
+/* Dark - half star: dim the empty BASE the same way --empty above does
+   (the global `--dark svg path` white rule otherwise paints the whole star),
+   then re-assert the left-half fill overlay so 4.5/4.7 shows a real half, not 5 full. */
+.sbr-review-alert--dark .sbr-review-alert__star--half,
+.sbr-review-alert--dark .sbr-review-alert__star--half svg,
+.sbr-review-alert--dark .sbr-review-alert__star--half svg path {
+    color: var(--sbr-popup-star-empty);
+}
+
+.sbr-review-alert--dark .sbr-review-alert__star--half .sbr-review-alert__star-half,
+.sbr-review-alert--dark .sbr-review-alert__star--half .sbr-review-alert__star-half svg,
+.sbr-review-alert--dark .sbr-review-alert__star--half .sbr-review-alert__star-half svg path {
+    color: var(--sbr-popup-star-fill);
+}
+
 /* Chevron uses stroke, not fill - reset fill and set stroke for dark mode */
 .sbr-review-alert--dark .sbr-review-alert__chevron svg {
     fill: none;
@@ -1205,9 +1359,10 @@
     font-size: 12px;
 }
 
-/* Compact mode - card becomes flex row to align date inline */
+/* Compact mode - card becomes flex row to align date inline. Right padding
+   keeps that inline date clear of the close button. SMASH-1820. */
 .sbr-review-alert--compact .sbr-review-alert__card {
-    padding: 12px;
+    padding: 12px 40px 12px 12px;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -2187,7 +2342,8 @@
     .sbr-review-alert__date {
         font-size: 12px;
         top: 12px;
-        right: 12px;
+        /* Same close-button clearance as the default layout. SMASH-1820. */
+        right: 40px;
     }
 
     .sbr-review-alert__stars {
@@ -2226,5 +2382,159 @@
 
     .sbr-review-alert__card {
         border: 1px solid CanvasText;
+    }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SMASH-782 — new-source provider body elements in the popup.
+   Styled with the semantic --sbr-popup-* vars (remapped per theme) so Light /
+   Dark / Minimal all inherit without per-theme blocks.
+   ───────────────────────────────────────────────────────────────────────── */
+.sbr-review-alert__pros-cons {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--sbr-popup-text);
+}
+.sbr-review-alert__pc {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+.sbr-review-alert__pc-mark {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 11px;
+    line-height: 1;
+    margin-top: 2px;
+}
+.sbr-review-alert__pc--pro .sbr-review-alert__pc-mark { background: rgba(0, 130, 52, 0.14); color: #12a150; }
+.sbr-review-alert__pc--con .sbr-review-alert__pc-mark { background: var(--sbr-popup-bg-inner); color: var(--sbr-popup-text-muted); }
+.sbr-review-alert__helpful {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--sbr-popup-text-muted);
+}
+
+/* SMASH-782: On dark + minimal-dark themes the booking pros/cons smiley icons
+   (green "pro" + near-black "con") are hard to read on the dark card. Recolor
+   both to a soft light gray so they stay visible. Shared CSS, so this covers
+   the frontend popup AND the admin React preview.
+   NOTE: target the __pc--pro/--con row classes (real JSX classNames) rather
+   than the sb-item-*-icon classes — the latter live only inside inline-SVG
+   strings and get tree-shaken out of the customizer bundle. */
+.sbr-review-alert--dark .sbr-review-alert__pc--pro svg path,
+.sbr-review-alert--dark .sbr-review-alert__pc--con svg path,
+.sbr-review-alert--minimal-dark .sbr-review-alert__pc--pro svg path,
+.sbr-review-alert--minimal-dark .sbr-review-alert__pc--con svg path {
+    fill: #c9ccd6 !important;
+}
+.sbr-review-alert__ali-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+.sbr-review-alert__buyer-flag { font-size: 14px; line-height: 1; }
+.sbr-review-alert__translated {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--sbr-popup-text-muted);
+}
+.sbr-review-alert__variants {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    margin-bottom: 8px;
+}
+/* SMASH-782: match the single-feed variant pill (.sb-item-variants-pill) so the
+   alert reads identically to the feed — an OUTLINED box (1px border, 4px radius,
+   transparent bg, muted text), not a filled rounded pill. The border/text derive
+   from the popup's muted token so it stays legible on Light / Dark / Minimal. */
+.sbr-review-alert__variant-pill {
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid color-mix(in oklch, var(--sbr-popup-text-muted) 35%, transparent);
+    background: transparent;
+    color: var(--sbr-popup-text-muted);
+}
+/* SMASH-782: match the single-feed host reply (.sb-item-reply, sb-common.css) —
+   a LEFT-BORDER block, NOT a filled box. The old filled --sbr-popup-bg-inner
+   background rendered as an unreadable accent "blob" on the accent/dark themes.
+   Same geometry/feel as the feed; only the text + left-border colors come from
+   the popup theme tokens so it stays readable on Light / Dark / Minimal. */
+.sbr-review-alert__reply {
+    clear: both;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    padding: 10px 0 10px 12px;
+    border-left: 1.5px solid color-mix(in oklch, var(--sbr-popup-text-muted) 55%, transparent);
+    background: transparent;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--sbr-popup-text);
+}
+.sbr-review-alert__reply-label {
+    display: inline-block;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--sbr-popup-text);
+    margin-bottom: 2px;
+}
+.sbr-review-alert__reply-text {
+    display: block;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--sbr-popup-text);
+}
+
+/* SMASH-782 — Booking-only aggregate header: native 0-10 score + word in place of 0-5 stars. */
+.sbr-review-alert__booking-word {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-top: 2px;
+    color: var(--sbr-popup-text);
+}
+
+/* ==========================================================================
+   Exact accent, light theme (SMASH-2220)
+   Text and icons drawn ON the accent use --contrast (black or white, whichever
+   reads better), and the accent drawn as a foreground on the white card uses
+   --ink (the colour itself, or a dark neutral when it is too light to see on
+   white, e.g. #FFFFFF). Dark and minimal themes keep their own text colours.
+   ========================================================================== */
+@supports (color: color-mix(in oklch, red, blue)) {
+    .sbr-review-alert--exact-accent:not([class*="sbr-review-alert--dark"]):not([class*="sbr-review-alert--minimal"]) {
+        --sbr-popup-star-fill: var(--sbr-popup-accent-ink);
+        --sbr-popup-badge-icon: var(--sbr-popup-accent-ink);
+        --sbr-popup-link-hover-text: var(--sbr-popup-accent-contrast);
+        --sbr-popup-powered-text: var(--sbr-popup-accent-contrast);
+    }
+
+    .sbr-review-alert--exact-accent:not([class*="sbr-review-alert--dark"]):not([class*="sbr-review-alert--minimal"]) .sbr-review-alert__logo svg path {
+        fill: var(--sbr-popup-accent-contrast);
+    }
+
+    .sbr-review-alert--exact-accent:not([class*="sbr-review-alert--dark"]):not([class*="sbr-review-alert--minimal"]) .sbr-review-alert__expanded-cta,
+    .sbr-review-alert--exact-accent:not([class*="sbr-review-alert--dark"]):not([class*="sbr-review-alert--minimal"]) .sbr-review-alert__expanded-cta:hover,
+    .sbr-review-alert--exact-accent:not([class*="sbr-review-alert--dark"]):not([class*="sbr-review-alert--minimal"]) .sbr-review-alert__expanded-star:not(.sbr-review-alert__expanded-star--empty),
+    .sbr-review-alert--exact-accent:not([class*="sbr-review-alert--dark"]):not([class*="sbr-review-alert--minimal"]) .sbr-review-alert__expanded-see-all-btn {
+        color: var(--sbr-popup-accent-ink);
+    }
+
+    .sbr-review-alert--exact-accent:not([class*="sbr-review-alert--dark"]):not([class*="sbr-review-alert--minimal"]) .sbr-review-alert__expanded-cta .sbr-review-alert__expanded-cta-icon path {
+        fill: var(--sbr-popup-accent-ink);
     }
 }

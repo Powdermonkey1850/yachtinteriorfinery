@@ -1,0 +1,46 @@
+--- a/src/Standalone/embed-modal.js
++++ b/src/Standalone/embed-modal.js
+@@ -11,7 +11,10 @@
+  *
+  * returns { close }. Anything else passed overrides the PHP-localized
+  * `sbEmbedModalConfig` (targets, shortcode, wizardArg, blockTitle, adminPostURL,
+- * siteEditorURL, widgetsURL).
++ * siteEditorURL, widgetsURL, canCreatePages).
++ *
++ * `window.SBEmbedModal.supported` is EmbedModal::is_supported() (WordPress 5.8+,
++ * where the plugin's feed block registers). Callers check it and fall back.
+  */
+ import { __ } from '@wordpress/i18n';
+ import { createRoot } from 'react-dom/client';
+@@ -35,8 +38,9 @@
+     window.sb_customizer = window.sb_customizer || {};
+     window.sb_customizer.embedContract = {
+         ...( window.sb_customizer.embedContract || {} ),
+-        feedShortcode: cfg.shortcode,
+-        feedWizardArg: cfg.wizardArg,
++        // '' not undefined, so a missing key never falls back to Reviews' values.
++        feedShortcode: cfg.shortcode ?? '',
++        feedWizardArg: cfg.wizardArg ?? '',
+     };
+ 
+     // Radix restores focus on unmount, but the host builder may have re-rendered
+@@ -86,7 +90,8 @@
+                     'noopener,noreferrer'
+                 ) }
+                 onSearch={ searchEmbedTargets }
+-                allowCreate={ !! feedId }
++                // wp_localize_script sends false as '', and other callers may omit it.
++                allowCreate={ !! feedId && ! [ false, '', '0' ].includes( cfg.canCreatePages ) }
+                 onCreatePage={ ( title ) => createPageAndOpenWizard( {
+                     title,
+                     adminPostURL: cfg.adminPostURL,
+@@ -111,4 +116,8 @@
+     return { close };
+ };
+ 
+-window.SBEmbedModal = { open };
++window.SBEmbedModal = {
++    open,
++    // wp_localize_script sends true as '1' and false as ''.
++    supported: !! window.sbEmbedModalConfig?.supported,
++};

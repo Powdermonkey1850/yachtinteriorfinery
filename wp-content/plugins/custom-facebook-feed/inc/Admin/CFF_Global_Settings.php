@@ -24,8 +24,10 @@ use CustomFacebookFeed\Builder\CFF_Feed_Saver_Manager;
 use CustomFacebookFeed\Builder\CFF_Db;
 use CustomFacebookFeed\Builder\CFF_Feed_Builder;
 use CustomFacebookFeed\Builder\CFF_Source;
+use CustomFacebookFeed\Abilities\CFF_Pro_Upsell;
 use CustomFacebookFeed\Admin\Traits\CFF_Settings;
 use CustomFacebookFeed\Helpers\Util;
+use CustomFacebookFeed\UsageTracking\Config as SmashTrackingConfig;
 
 
 class CFF_Global_Settings
@@ -156,9 +158,26 @@ class CFF_Global_Settings
 		$translation = (array) $model['translation'];
 		$advanced = (array) $model['advanced'];
 
+		/**
+		 * Debug Tab — consent toggles.
+		 *
+		 * Routed through the shared Consent package so cron reconciliation and the
+		 * 3-state notification source switch stay consistent. $dismiss_modal is left
+		 * null so a Settings save does not affect the re-prompt-modal state. The
+		 * flags live in top-level wp_options (sbc_data_sharing_consent /
+		 * sbc_in_plugin_notifications), NOT inside cff_style_settings.
+		 */
+		if ( isset( $model['debug'] ) && class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+			$debug = (array) $model['debug'];
+			\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::update(
+				! empty( $debug['sbc_data_sharing_consent'] ),
+				! empty( $debug['sbc_in_plugin_notifications'] )
+			);
+		}
+
 		// Get the values and sanitize
 		$cff_locale 							= sanitize_text_field($feeds['selectedLocale']);
-		$cff_style_settings 					= get_option('cff_style_settings');
+		$cff_style_settings = get_option( 'cff_style_settings', array() );
 		$cff_style_settings[ 'cff_timezone' ] 	= sanitize_text_field($feeds['selectedTimezone']);
 		$cff_style_settings[ 'cff_custom_css' ] = $feeds['customCSS'];
 		$cff_style_settings[ 'cff_custom_js' ] 	= $feeds['customJS'];
@@ -200,41 +219,105 @@ class CFF_Global_Settings
 		// Save advanced settings data
 		$cff_ajax = sanitize_text_field($advanced['cff_ajax']);
 
+		// What the page was loaded with for MCP Write Access; never a stored setting.
+		$ai_write_loaded = array_key_exists('cff_ai_write_enabled_loaded', $advanced)
+			? filter_var($advanced['cff_ai_write_enabled_loaded'], FILTER_VALIDATE_BOOLEAN)
+			: null;
+		unset($advanced['cff_ai_write_enabled_loaded']);
+
 		foreach ($advanced as $key => $val) {
 			if ($key == 'cff_disable_resize' || $key == 'disable_admin_notice') {
 				$cff_style_settings[ $key ] = !$val;
+			} elseif ($key == 'cff_ai_write_enabled') {
+				$cff_style_settings[ $key ] = $val === true || $val === 'true' || $val === 1 || $val === '1';
 			} else {
 				$cff_style_settings[ $key ] = $val;
 			}
 		}
 
-		$usage_tracking = get_option('cff_usage_tracking', array( 'last_send' => 0, 'enabled' => CFF_Utils::cff_is_pro_version() ));
-		if (isset($advanced['email_notification_addresses'])) {
-			$usage_tracking['enabled'] = false;
-			if (isset($advanced['usage_tracking'])) {
-				if (! is_array($usage_tracking)) {
-					$usage_tracking = array(
-						'enabled' => true,
-						'last_send' => 0,
-					);
-				} else {
-					$usage_tracking['enabled'] = true;
-				}
-			}
-			update_option('cff_usage_tracking', $usage_tracking, false);
+		/*
+		 * Fails CLOSED on a stale model (same guard as the Pro AI Agents port,
+		 * custom-facebook-feed-pro SBR-195): $cff_style_settings starts from
+		 * get_option() above, so a submitted model that OMITS this key (an old
+		 * cached JS bundle, a partial payload) skips it in the foreach above and
+		 * would otherwise leave whatever was already stored in place — silently
+		 * keeping AI write access enabled if it already was. Only an explicit
+		 * true in THIS submission turns it on.
+		 */
+		if (!array_key_exists('cff_ai_write_enabled', $advanced)) {
+			$cff_style_settings[ 'cff_ai_write_enabled' ] = false;
+		} else {
+			$cff_style_settings['cff_ai_write_enabled'] = self::reconcile_ai_write(
+				!empty($cff_style_settings['cff_ai_write_enabled']),
+				get_option('cff_style_settings', array()),
+				$ai_write_loaded
+			);
 		}
+
+		if ( isset( $advanced['usage_tracking'] ) ) {
+			$tracking_enabled = (bool) $advanced['usage_tracking'];
+			$usage_tracking   = get_option(
+				'cff_usage_tracking',
+				array(
+					'enabled'   => SmashTrackingConfig::DEFAULT_ENABLED,
+					'last_send' => 0,
+				)
+			);
+			$last_send        = is_array( $usage_tracking ) && isset( $usage_tracking['last_send'] ) ? $usage_tracking['last_send'] : 0;
+			update_option(
+				'cff_usage_tracking',
+				array(
+					'enabled'   => $tracking_enabled,
+					'last_send' => $last_send,
+				),
+				false
+			);
+			if ( ! $tracking_enabled ) {
+				wp_clear_scheduled_hook( SmashTrackingConfig::CRON_HOOK );
+			}
+		}
+
 		update_option('cff_ajax', $cff_ajax);
 
 		// Update the cff_style_settings option that contains data for translation and advanced tabs
 		update_option('cff_style_settings', $cff_style_settings);
 
-		// clear cron caches
-		$this->cff_clear_cache();
+		// clear cron caches. Not via the cff_clear_cache() AJAX handler: it sends
+		// its own reply and exits, so the reply below (aiWriteEnabled) never left.
+		$this->apply_cache_settings();
 
 		$response = new CFF_Response(true, array(
-			'cronNextCheck' => $this->get_cron_next_check()
+			'cronNextCheck' => $this->get_cron_next_check(),
+			// The stored value, so the page can resync its toggle after a refused stale ON.
+			'aiWriteEnabled' => !empty($cff_style_settings['cff_ai_write_enabled']),
 		));
 		$response->send();
+	}
+
+	/**
+	 * Decide what to store for MCP Write Access from a Settings save.
+	 *
+	 * The page posts back the WHOLE model it loaded, so a tab opened while write
+	 * access was ON would re-enable it on any unrelated save after an admin
+	 * turned it off elsewhere. ON is accepted only when the page loaded it OFF
+	 * (the user flipped the switch in that tab); otherwise the stored value
+	 * stays. OFF is always honoured. A post with no loaded marker (an older
+	 * page) can only turn it off.
+	 *
+	 * @param bool        $posted_on Value posted for the toggle.
+	 * @param mixed       $stored    Currently stored cff_style_settings.
+	 * @param bool|null   $loaded    Value the page loaded the toggle with; null when absent.
+	 * @return bool
+	 */
+	public static function reconcile_ai_write($posted_on, $stored, $loaded)
+	{
+		if (!$posted_on) {
+			return false;
+		}
+		if ($loaded === false) {
+			return true;
+		}
+		return is_array($stored) && !empty($stored['cff_ai_write_enabled']);
 	}
 
 	/**
@@ -560,7 +643,21 @@ class CFF_Global_Settings
 			wp_send_json_error(); // This auto-dies.
 		}
 
+		$this->apply_cache_settings();
 
+		$response = CFF_Utils::cff_is_pro_version()
+			? new CFF_Response(true, array('cronNextCheck' => $this->get_cron_next_check()))
+			: new CFF_Response(true, array());
+		$response->send();
+	}
+
+	/**
+	 * Apply the posted cache settings, reschedule the cache cron and clear the
+	 * stored caches. Shared by the Clear Cache and Save Settings handlers, so
+	 * it must not send a reply or exit. Callers do the nonce and capability checks.
+	 */
+	private function apply_cache_settings()
+	{
 		// Get the settings model data
 		$model = isset($_POST[ 'model' ]) ? $_POST['model'] : null;
 
@@ -593,8 +690,7 @@ class CFF_Global_Settings
 
 			$this->clear_stored_caches();
 
-			$response = new CFF_Response(true, array());
-			$response->send();
+			return;
 		}
 
 		// Get the updated cron schedule interval and time settings from user input and update the database
@@ -647,11 +743,6 @@ class CFF_Global_Settings
 
 		CFF_Group_Posts::group_reschedule_event($cff_cache_cron_time_unix, $cff_cron_schedule);
 		wp_schedule_event($cff_cache_cron_time_unix, $cff_cron_schedule, 'cff_cache_cron');
-
-		$response = new CFF_Response(true, array(
-			'cronNextCheck' => $this->get_cron_next_check()
-		));
-		$response->send();
 	}
 
 	/**
@@ -848,6 +939,45 @@ class CFF_Global_Settings
 	}
 
 	/**
+	 * Determine WPVibe's install/activation status.
+	 *
+	 * Scans the installed-plugins list for a plugin whose folder is
+	 * `vibe-ai/`, rather than assuming a specific main-file name -- a
+	 * plugin's wp.org slug and its main file are not guaranteed to match.
+	 * Ported from custom-facebook-feed-pro (SBR-510).
+	 *
+	 * @return array{status: string, basename: string|null} status is one
+	 *               of 'not_installed' | 'inactive' | 'active'.
+	 * @since 4.14
+	 */
+	private function get_wpvibe_status()
+	{
+		if (!function_exists('get_plugins')) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$wpvibe_basename = null;
+		foreach (array_keys(get_plugins()) as $plugin_file) {
+			if (strtok($plugin_file, '/') === 'vibe-ai') {
+				$wpvibe_basename = $plugin_file;
+				break;
+			}
+		}
+
+		if (null === $wpvibe_basename) {
+			return array(
+				'status' => 'not_installed',
+				'basename' => null,
+			);
+		}
+
+		return array(
+			'status' => is_plugin_active($wpvibe_basename) ? 'active' : 'inactive',
+			'basename' => $wpvibe_basename,
+		);
+	}
+
+	/**
 	 * Enqueue Builder CSS & Script.
 	 *
 	 * Loads only for builder pages
@@ -928,6 +1058,25 @@ class CFF_Global_Settings
 
 		$sources_list = CFF_Feed_Builder::get_source_list();
 
+		// AI Agents card strings render through v-html on the Settings page
+		// (admin/views/settings/tab/general.php), and on a wp.org plugin the
+		// translations behind __() are community-supplied, not reviewed the
+		// way core strings are -- wp_kses() with a minimal allowlist so a
+		// malicious/mistranslated string can't inject markup beyond the <a>/
+		// <br> this card's own copy actually uses (SBR-510 suggestion S1).
+		$wpvibe_kses_allowed = array(
+			'a'  => array('href' => array(), 'target' => array(), 'rel' => array()),
+			'br' => array(),
+		);
+
+		$wpvibe             = $this->get_wpvibe_status();
+		$wpvibe_org_url      = 'https://wordpress.org/plugins/vibe-ai/';
+		/* translators: %s: URL to the WPVibe plugin on WordPress.org */
+		$wpvibe_description = wp_kses(
+			sprintf(__('Manage Facebook Feed from your favorite AI agent.<br>Works through <a href="%s" target="_blank" rel="noopener">WPVibe</a>, a free plugin you install once.', 'custom-facebook-feed'), esc_url($wpvibe_org_url)), // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+			$wpvibe_kses_allowed
+		);
+
 		// Extract only license keys and build array for extensions license keys
 		$extensions_license_key = array();
 		foreach ($this->get_extensions_license() as $item) {
@@ -936,10 +1085,30 @@ class CFF_Global_Settings
 			}
 		}
 
+		// Settings/Debug consent links route through the shared Consent package
+		// (sb-common owns the canonical URLs + per-surface UTM tags). Empty when
+		// the package is absent rather than duplicating the URLs here.
+		$cff_consent_permissions_url = '';
+		$cff_consent_terms_url       = '';
+		$cff_consent_privacy_url     = '';
+		if ( class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) ) {
+			$cff_consent_permissions_url = \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'permissions', 'facebook' );
+			$cff_consent_terms_url       = \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'terms', 'facebook' );
+			$cff_consent_privacy_url     = \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::link_url( 'settings', 'privacy', 'facebook' );
+		}
+
 		$cff_settings = array(
 			'admin_url' 		=> admin_url(),
 			'ajax_handler'		=> admin_url('admin-ajax.php'),
 			'nonce'             => wp_create_nonce('cff_admin_nonce'),
+			// The install/activate-plugin AJAX handlers (cff_install_addon /
+			// cff_activate_addon, admin/addon-functions.php) check the 'cff-admin'
+			// nonce action, not 'cff_admin_nonce' -- localized separately so the
+			// AI Agents card's WPVibe install/activate call sends the nonce its
+			// OWN handler actually verifies (SBR-510; a straight port of Pro's
+			// installOrActivateWPVibe(), which reuses `this.nonce`, 403s on free
+			// because Free's settings-page nonce is 'cff_admin_nonce').
+			'addonNonce'        => wp_create_nonce('cff-admin'),
 			'supportPageUrl'    => admin_url('admin.php?page=cff-support'),
 			'builderUrl'		=> admin_url('admin.php?page=cff-feed-builder'),
 			'links'				=> $this->get_links_with_utm(),
@@ -985,6 +1154,51 @@ class CFF_Global_Settings
 					'title'	=> __('Manage Sources', 'custom-facebook-feed'),
 					'description'	=> __('Add or remove connected Facebook accounts', 'custom-facebook-feed'),
 				),
+				'aiAgents' => array(
+					'title' => __('AI Agents', 'custom-facebook-feed'),
+					'appsLabel' => __('Works with ChatGPT, Cursor and Claude', 'custom-facebook-feed'),
+					// "Do more with AI on Pro" strip under the MCP Write Access box (AgDR-9006).
+					// Free edition only: an empty array in Pro, which the Vue v-if hides.
+					'proUpsell' => $this->get_ai_pro_upsell(),
+					'status' => $wpvibe['status'],
+					'basename' => $wpvibe['basename'],
+					'installDownloadUrl' => 'https://downloads.wordpress.org/plugin/vibe-ai.zip',
+					'adminUrl' => admin_url('admin.php?page=vibe-ai'),
+					'states' => array(
+						'not_installed' => array(
+							'heading' => __('Use Facebook Feed with Claude, ChatGPT and more.', 'custom-facebook-feed'),
+							'description' => $wpvibe_description,
+							'button' => __('Install WPVibe for free', 'custom-facebook-feed'),
+						),
+						'inactive' => array(
+							'heading' => __('Use Facebook Feed with Claude, ChatGPT and more.', 'custom-facebook-feed'),
+							'description' => $wpvibe_description,
+							'button' => __('Activate WPVibe', 'custom-facebook-feed'),
+						),
+						'active' => array(
+							'heading' => __('WPVibe is connected to Facebook Feed.', 'custom-facebook-feed'),
+							'description' => wp_kses(
+								__('Manage Facebook Feed from your favorite AI agent.<br>Connect Claude, ChatGPT, Cursor or any MCP client in WPVibe.', 'custom-facebook-feed'), // phpcs:ignore Generic.Files.LineLength.TooLong -- single literal for make-pot
+								$wpvibe_kses_allowed
+							),
+							'button' => __('Open WPVibe', 'custom-facebook-feed'),
+						),
+						'installFailed' => array(
+							'heading' => __('Use Facebook Feed with Claude, ChatGPT and more.', 'custom-facebook-feed'),
+							'description' => $wpvibe_description,
+							'button' => __('Try again', 'custom-facebook-feed'),
+							/* translators: %s: URL to the Plugins screen */
+							'error' => wp_kses(
+								sprintf(__('Couldn\'t install WPVibe. <a href="%s">Install it from the Plugins screen</a> instead.', 'custom-facebook-feed'), esc_url(admin_url('plugins.php'))),
+								$wpvibe_kses_allowed
+							),
+						),
+					),
+				),
+				'mcpWrite' => array(
+					'title' => __('MCP Write Access', 'custom-facebook-feed'),
+					'helpText' => __('This will allow your AI agent to make changes to Facebook Feed.', 'custom-facebook-feed'),
+				),
 				'preserveBox'	=> array(
 					'title'	=> __('Preserve settings if plugin is removed', 'custom-facebook-feed'),
 					'description'	=> __('This will make sure that all of your feeds and settings are still saved even if the plugin is uninstalled', 'custom-facebook-feed'),
@@ -1003,10 +1217,12 @@ class CFF_Global_Settings
 			'feedsTab'			=> array(
 				'localizationBox' => array(
 					'title'	=> __('Localization', 'custom-facebook-feed'),
+					'localeLabel' => __('Localization language', 'custom-facebook-feed'),
 					'tooltip' => '<p>This controls the language of any predefined text strings provided by Facebook. For example, the descriptive text that accompanies some timeline posts (eg: Smash Balloon created an event) and the text in the \'Like Box\' widget. To find out how to translate the other text in the plugin see <a href="https://smashballoon.com/cff-how-does-the-plugin-handle-text-and-language-translation/?utm_campaign=facebook-free&utm_source=settings&utm_medium=docs">this FAQ</a>.</p>'
 				),
 				'timezoneBox' => array(
-					'title'	=> __('Timezone', 'custom-facebook-feed')
+					'title'	=> __('Timezone', 'custom-facebook-feed'),
+					'timezoneLabel' => __('Timezone', 'custom-facebook-feed')
 				),
 				'cachingBox' => array(
 					'title'	=> __('Caching', 'custom-facebook-feed'),
@@ -1018,23 +1234,29 @@ class CFF_Global_Settings
 						'12hours'	=> __('Every 12 hours', 'custom-facebook-feed'),
 						'24hours'	=> __('Every 24 hours', 'custom-facebook-feed'),
 					),
-					'timeUnits' => array(
-						'minutes'	=> __('Minutes', 'custom-facebook-feed'),
-						'hours'		=> __('Hours', 'custom-facebook-feed'),
-						'days'	=> __('Days', 'custom-facebook-feed'),
-					),
+					// Extracted to CFF_Settings::cache_time_units() (same trait as
+					// locales() above) so the Abilities API schema drift check can pin
+					// cff_cache_time_unit's enum against this real control definition
+					// instead of a hardcoded list.
+					'timeUnits' => self::cache_time_units(),
 					'am'		=> __('AM', 'custom-facebook-feed'),
 					'pm'		=> __('PM', 'custom-facebook-feed'),
 					'clearCache' => __('Clear All Caches', 'custom-facebook-feed'),
-					'promoText' => __('Update feeds asynchronously in the background with Facebook Feed Pro', 'custom-facebook-feed')
+					'promoText' => __('Update feeds asynchronously in the background with Facebook Feed Pro', 'custom-facebook-feed'),
+					'cachingTypeLabel' => __('Caching method', 'custom-facebook-feed'),
+					'intervalLabel' => __('Caching update interval', 'custom-facebook-feed'),
+					'cronHourLabel' => __('Caching update hour', 'custom-facebook-feed'),
+					'cronAmPmLabel' => __('Caching update AM or PM', 'custom-facebook-feed'),
+					'cacheTimeUnitLabel' => __('Cache time unit', 'custom-facebook-feed')
 				),
 				'gdprBox' => array(
 					'title'	=> __('GDPR', 'custom-facebook-feed'),
+					'gdprLabel'	=> __('GDPR image and video loading', 'custom-facebook-feed'),
 					'automatic'	=> __('Automatic', 'custom-facebook-feed'),
 					'yes'	=> __('Yes', 'custom-facebook-feed'),
 					'no'	=> __('No', 'custom-facebook-feed'),
 					'infoAuto'	=> $this->get_gdpr_auto_info(),
-					'infoYes'	=> __('No requests will be made to third-party websites. To accomodate this, some features of the plugin will be limited.', 'custom-facebook-feed'),
+					'infoYes'	=> __('No requests will be made to third-party websites. To accommodate this, some features of the plugin will be limited.', 'custom-facebook-feed'),
 					'infoNo'	=> __('The plugin will function as normal and load images and videos directly from Facebook', 'custom-facebook-feed'),
 					'someFacebook' => __('Some Facebook Feed features will be limited for visitors to ensure GDPR compliance, until they give consent.', 'custom-facebook-feed'),
 					'whatLimited' => __('What will be limited?', 'custom-facebook-feed'),
@@ -1177,7 +1399,7 @@ class CFF_Global_Settings
 				),
 				'usageBox' => array(
 					'title' => __('Usage Tracking', 'custom-facebook-feed'),
-					'helpText' => __('This helps to prevent plugin and theme conflicts by sending a report in the background once per week about your settings and relevant site stats. It does not send sensitive information like access tokens, email addresses, or user info. This will also not affect your site performace. <a href="' . $usage_tracking_url . '" target="_blank">Learn More</a>', 'custom-facebook-feed'),
+					'helpText' => sprintf( __( 'Send a weekly report to Smash Balloon to help improve the product. No sensitive data is collected. You can disable this at any time. %s', 'custom-facebook-feed' ), '<a href="' . $usage_tracking_url . '" target="_blank">' . __( 'Learn More', 'custom-facebook-feed' ) . '</a>' ),
 				),
 				'ajaxBox' => array(
 					'title' => __('AJAX theme loading fix', 'custom-facebook-feed'),
@@ -1198,8 +1420,10 @@ class CFF_Global_Settings
 					'title' => __('Feed Issue Email Reports', 'custom-facebook-feed'),
 					'helpText' => __('If the feed is down due to a critical issue, we will switch to a cached version and notify you based on these settings. <a href="' . $feed_issue_email_url . '" target="_blank">View Documentation</a>', 'custom-facebook-feed'),
 					'sendReport' => __('Send a report every', 'custom-facebook-feed'),
+					'sendReportLabel' => __('Send report on which day', 'custom-facebook-feed'),
 					'to' => __('to', 'custom-facebook-feed'),
-					'placeholder' => __('Enter one or more email address separated by comma', 'custom-facebook-feed'),
+					'placeholder' => __('Enter one or more email addresses separated by comma', 'custom-facebook-feed'),
+					'emailLabel' => __('Report recipient email addresses', 'custom-facebook-feed'),
 					'weekDays' => array(
 						array(
 							'val' => 'monday',
@@ -1237,6 +1461,21 @@ class CFF_Global_Settings
 					'clear' => __('Delete all Platform Data', 'custom-facebook-feed'),
 				),
 			),
+			'debugTab'             => array(
+				'dataSharingTitle'    => __( 'Data sharing', 'custom-facebook-feed' ),
+				'dataSharingDesc'     => __( 'We share limited, non-sensitive usage data to keep your plugins updated and improve our products. We never collect your feed content or your visitors’ personal information.', 'custom-facebook-feed' ),
+				'permissionsLinkText' => __( 'What permissions are being granted?', 'custom-facebook-feed' ),
+				'termsLinkText'       => __( 'Terms & Conditions', 'custom-facebook-feed' ),
+				'privacyLinkText'     => __( 'Privacy', 'custom-facebook-feed' ),
+				'permissionsUrl'      => $cff_consent_permissions_url,
+				'termsUrl'            => $cff_consent_terms_url,
+				'privacyUrl'          => $cff_consent_privacy_url,
+				'notificationsTitle'  => __( 'In-Plugin Notifications', 'custom-facebook-feed' ),
+				'notificationsDesc'   => __( 'We send you in-plugin notifications about updates, fixes, and new features.', 'custom-facebook-feed' ),
+				// When any Smash Balloon Pro plugin is active, consent is forced on
+				// and governed centrally — the toggles are hidden on this tab.
+				'lockedByPro'         => class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' ) && \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::is_locked_by_pro(),
+			),
 			'dialogBoxPopupScreen'  => array(
 				'deleteSource' => array(
 					'heading' =>  __('Delete "#"?', 'custom-facebook-feed'),
@@ -1247,15 +1486,15 @@ class CFF_Global_Settings
 			'selectSourceScreen' => CFF_Feed_Builder::select_source_screen_text(),
 
 			'nextCheck'	=> $this->get_cron_next_check(),
-			'loaderSVG' => '<svg version="1.1" id="loader-1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="20px" height="20px" viewBox="0 0 50 50" style="enable-background:new 0 0 50 50;" xml:space="preserve"><path fill="#fff" d="M43.935,25.145c0-10.318-8.364-18.683-18.683-18.683c-10.318,0-18.683,8.365-18.683,18.683h4.068c0-8.071,6.543-14.615,14.615-14.615c8.072,0,14.615,6.543,14.615,14.615H43.935z"><animateTransform attributeType="xml" attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.6s" repeatCount="indefinite"/></path></svg>',
-			'checkmarkSVG' => '<svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg>',
-			'uploadSVG' => '<svg class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+			'loaderSVG' => '<svg aria-hidden="true" focusable="false" version="1.1" id="loader-1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" width="20px" height="20px" viewBox="0 0 50 50" style="enable-background:new 0 0 50 50;" xml:space="preserve"><path fill="#fff" d="M43.935,25.145c0-10.318-8.364-18.683-18.683-18.683c-10.318,0-18.683,8.365-18.683,18.683h4.068c0-8.071,6.543-14.615,14.615-14.615c8.072,0,14.615,6.543,14.615,14.615H43.935z"><animateTransform attributeType="xml" attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.6s" repeatCount="indefinite"/></path></svg>',
+			'checkmarkSVG' => '<svg aria-hidden="true" focusable="false" class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg>',
+			'uploadSVG' => '<svg aria-hidden="true" focusable="false" class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 			<path d="M0.166748 14.6667H11.8334V13H0.166748V14.6667ZM0.166748 6.33333H3.50008V11.3333H8.50008V6.33333H11.8334L6.00008 0.5L0.166748 6.33333Z" fill="#141B38"/></svg>',
-			'exportSVG' => '<svg class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+			'exportSVG' => '<svg aria-hidden="true" focusable="false" class="btn-icon" width="12" height="15" viewBox="0 0 12 15" fill="none" xmlns="http://www.w3.org/2000/svg">
 			<path d="M0.166748 14.6667H11.8334V13H0.166748V14.6667ZM11.8334 5.5H8.50008V0.5H3.50008V5.5H0.166748L6.00008 11.3333L11.8334 5.5Z" fill="#141B38"/></svg>',
-			'reloadSVG' => '<svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+			'reloadSVG' => '<svg aria-hidden="true" focusable="false" width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg">
 			<path d="M15.8335 3.66667L12.5002 7H15.0002C15.0002 8.32608 14.4734 9.59785 13.5357 10.5355C12.598 11.4732 11.3262 12 10.0002 12C9.16683 12 8.3585 11.7917 7.66683 11.4167L6.45016 12.6333C7.51107 13.3085 8.74261 13.667 10.0002 13.6667C11.7683 13.6667 13.464 12.9643 14.7142 11.714C15.9644 10.4638 16.6668 8.76811 16.6668 7H19.1668L15.8335 3.66667ZM5.00016 7C5.00016 5.67392 5.52695 4.40215 6.46463 3.46447C7.40231 2.52678 8.67408 2 10.0002 2C10.8335 2 11.6418 2.20833 12.3335 2.58333L13.5502 1.36667C12.4893 0.691461 11.2577 0.332984 10.0002 0.333334C8.23205 0.333334 6.53636 1.03571 5.28612 2.28596C4.03587 3.5362 3.3335 5.23189 3.3335 7H0.833496L4.16683 10.3333L7.50016 7" fill="#141B38"/></svg>',
-			'tooltipHelpSvg' => '<svg width="20" height="21" viewBox="0 0 20 21" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.1665 8H10.8332V6.33333H9.1665V8ZM9.99984 17.1667C6.32484 17.1667 3.33317 14.175 3.33317 10.5C3.33317 6.825 6.32484 3.83333 9.99984 3.83333C13.6748 3.83333 16.6665 6.825 16.6665 10.5C16.6665 14.175 13.6748 17.1667 9.99984 17.1667ZM9.99984 2.16666C8.90549 2.16666 7.82186 2.38221 6.81081 2.801C5.79976 3.21979 4.8811 3.83362 4.10728 4.60744C2.54448 6.17024 1.6665 8.28986 1.6665 10.5C1.6665 12.7101 2.54448 14.8298 4.10728 16.3926C4.8811 17.1664 5.79976 17.7802 6.81081 18.199C7.82186 18.6178 8.90549 18.8333 9.99984 18.8333C12.21 18.8333 14.3296 17.9554 15.8924 16.3926C17.4552 14.8298 18.3332 12.7101 18.3332 10.5C18.3332 9.40565 18.1176 8.32202 17.6988 7.31097C17.28 6.29992 16.6662 5.38126 15.8924 4.60744C15.1186 3.83362 14.1999 3.21979 13.1889 2.801C12.1778 2.38221 11.0942 2.16666 9.99984 2.16666ZM9.1665 14.6667H10.8332V9.66666H9.1665V14.6667Z" fill="#434960"/></svg>',
+			'tooltipHelpSvg' => '<svg aria-hidden="true" focusable="false" width="20" height="21" viewBox="0 0 20 21" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.1665 8H10.8332V6.33333H9.1665V8ZM9.99984 17.1667C6.32484 17.1667 3.33317 14.175 3.33317 10.5C3.33317 6.825 6.32484 3.83333 9.99984 3.83333C13.6748 3.83333 16.6665 6.825 16.6665 10.5C16.6665 14.175 13.6748 17.1667 9.99984 17.1667ZM9.99984 2.16666C8.90549 2.16666 7.82186 2.38221 6.81081 2.801C5.79976 3.21979 4.8811 3.83362 4.10728 4.60744C2.54448 6.17024 1.6665 8.28986 1.6665 10.5C1.6665 12.7101 2.54448 14.8298 4.10728 16.3926C4.8811 17.1664 5.79976 17.7802 6.81081 18.199C7.82186 18.6178 8.90549 18.8333 9.99984 18.8333C12.21 18.8333 14.3296 17.9554 15.8924 16.3926C17.4552 14.8298 18.3332 12.7101 18.3332 10.5C18.3332 9.40565 18.1176 8.32202 17.6988 7.31097C17.28 6.29992 16.6662 5.38126 15.8924 4.60744C15.1186 3.83362 14.1999 3.21979 13.1889 2.801C12.1778 2.38221 11.0942 2.16666 9.99984 2.16666ZM9.1665 14.6667H10.8332V9.66666H9.1665V14.6667Z" fill="#434960"/></svg>',
 			'svgIcons' => CFF_Feed_Builder::builder_svg_icons()
 		);
 
@@ -1271,6 +1510,30 @@ class CFF_Global_Settings
 			'settings-app',
 			'cff_settings',
 			$cff_settings
+		);
+	}
+
+	/**
+	 * Data for the "Do more with AI on Pro" strip in the AI Agents card.
+	 *
+	 * Free edition only; returns an empty array in Pro. Features are picked by popup
+	 * key (CFF_Pro_Upsell::BANNER_FEATURES) from the builder's own Pro-feature copy,
+	 * so the strip never carries text of its own beyond the title and button labels.
+	 * UTM: utm_source=settings, utm_medium=ai-agents-card (see CFF_Pro_Upsell).
+	 *
+	 * @return array{title: string, features: string[], button: string, newTab: string, url: string}|array{}
+	 */
+	private function get_ai_pro_upsell()
+	{
+		if (!CFF_Pro_Upsell::is_free()) {
+			return array();
+		}
+		return array(
+			'title'    => __('Do more with AI on Pro', 'custom-facebook-feed'),
+			'features' => CFF_Pro_Upsell::banner_feature_names(),
+			'button'   => __('Upgrade to Pro', 'custom-facebook-feed'),
+			'newTab'   => __('(opens in a new tab)', 'custom-facebook-feed'),
+			'url'      => CFF_Pro_Upsell::upgrade_url('ai-agents-card', 'settings'),
 		);
 	}
 
@@ -1511,11 +1774,20 @@ class CFF_Global_Settings
 		$cff_cache_cron_interval = get_option('cff_cache_cron_interval', '12hours');
 		$cff_cache_cron_time = get_option('cff_cache_cron_time', 1);
 		$cff_cache_cron_am_pm = get_option('cff_cache_cron_am_pm', 'am');
-		$usage_tracking = get_option('cff_usage_tracking', array( 'last_send' => 0, 'enabled' => CFF_Utils::cff_is_pro_version() ));
 		$cff_ajax = get_option('cff_ajax');
 		$active_gdpr_plugin = CFF_GDPR_Integrations::gdpr_plugins_active();
 		$cff_cache_time = get_option('cff_cache_time', 1);
 		$cff_cache_time_unit = get_option('cff_cache_time_unit', 'hours');
+
+		// Seed Debug-tab toggles from the central consent flags. These flags live
+		// in top-level options (sbc_data_sharing_consent / sbc_in_plugin_notifications),
+		// not inside cff_style_settings — see ConsentManager::update().
+		$cff_consent_flags = class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' )
+			? \FacebookFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::flags()
+			: array(
+				'dsc'   => false,
+				'notif' => false,
+			);
 		$custom_js_text = ! empty($cff_style_settings['cff_custom_js']) && trim(wp_unslash($cff_style_settings['cff_custom_js'])) !== '' ? wp_unslash($cff_style_settings['cff_custom_js']) : '';
 		if (! empty($custom_js_text)) {
 			$js_wrapper_array = [
@@ -1606,15 +1878,22 @@ class CFF_Global_Settings
 			),
 			'advanced' => array(
 				'cff_disable_resize' => !$cff_style_settings['cff_disable_resize'],
-				'usage_tracking' => $usage_tracking['enabled'],
+				'usage_tracking' => SmashTrackingConfig::is_enabled(),
 				'cff_ajax' => $cff_ajax,
+				'cff_ai_write_enabled' => isset($cff_style_settings['cff_ai_write_enabled']) ? $cff_style_settings['cff_ai_write_enabled'] : false,
+				// What this page load saw; posted back so a stale tab cannot re-enable writes (see save handler).
+				'cff_ai_write_enabled_loaded' => !empty($cff_style_settings['cff_ai_write_enabled']),
 				'cff_show_credit' => $cff_style_settings['cff_show_credit'],
 				'cff_format_issue' => $cff_style_settings['cff_format_issue'],
 				'disable_admin_notice' => !$cff_style_settings['disable_admin_notice'],
 				'enable_email_report' => $cff_style_settings['enable_email_report'],
 				'email_notification' => $cff_style_settings['email_notification'],
 				'email_notification_addresses' => $cff_style_settings['email_notification_addresses'],
-			)
+			),
+			'debug'       => array(
+				'sbc_data_sharing_consent'    => ! empty( $cff_consent_flags['dsc'] ),
+				'sbc_in_plugin_notifications' => ! empty( $cff_consent_flags['notif'] ),
+			),
 		);
 	}
 
@@ -1674,6 +1953,7 @@ class CFF_Global_Settings
 			'cff_translate_years'       					=> 'years',
 			'cff_translate_ago'         					=> 'ago',
 			'cff_show_credit'		    					=> false,
+			'cff_ai_write_enabled'							=> false,
 			'cff_format_issue'		    					=> false,
 			'cff_disable_resize'		    				=> false,
 			'disable_admin_notice'		    				=> false,

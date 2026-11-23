@@ -83,8 +83,11 @@ class API_Sendinblue {
 			$message = __('The Brevo API returned an error', 'addon-gravityforms-sendinblue-free');
 			$message_details = '';
 			
-			if ($pretty_response && in_array($pretty_response->code, array('missing_parameter', 'invalid_parameter'), true)) {
+			if ($pretty_response && !empty($pretty_response->message)) {
 				$message_details = $pretty_response->message;
+				if (!empty($pretty_response->code)) {
+					$message_details = sprintf('%1$s (%2$s)', $pretty_response->message, $pretty_response->code);
+				}
 			}
 			if (!empty($message_details)) {
 				$message = $message . ': ' . $message_details;
@@ -220,7 +223,7 @@ class API_Sendinblue {
 
 		do {
 			$response = $this->request(
-				'contacts/lists/',
+				'contacts/lists',
 				array(
 					'limit'  => $limit,
 					'offset' => count( $lists ),

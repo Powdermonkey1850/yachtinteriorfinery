@@ -1,5 +1,22 @@
 <?php
 
+// phpcs:disable Generic.WhiteSpace.ScopeIndent.IncorrectExact,PSR12.Classes.OpeningBraceSpace.Found
+// phpcs:disable PSR12.ControlStructures.ControlStructureSpacing.SpaceBeforeCloseBrace
+// phpcs:disable PSR12.ControlStructures.ControlStructureSpacing.SpacingAfterOpenBrace
+// phpcs:disable PSR12.Operators.OperatorSpacing.NoSpaceAfter,PSR12.Operators.OperatorSpacing.NoSpaceBefore
+// phpcs:disable PSR1.Methods.CamelCapsMethodName.NotCamelCaps,PSR2.Classes.ClassDeclaration.CloseBraceAfterBody
+// phpcs:disable PSR2.Classes.ClassDeclaration.OpenBraceNewLine,PSR2.Methods.FunctionCallSignature.Indent
+// phpcs:disable PSR2.Methods.FunctionCallSignature.SpaceAfterOpenBracket
+// phpcs:disable PSR2.Methods.FunctionCallSignature.SpaceBeforeCloseBracket
+// phpcs:disable PSR2.Methods.FunctionClosingBrace.SpacingBeforeClose,Squiz.Classes.ValidClassName.NotCamelCaps
+// phpcs:disable Squiz.Commenting.FunctionComment.Missing,Squiz.Commenting.FunctionComment.MissingParamTag
+// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar,Squiz.Commenting.VariableComment.Missing
+// phpcs:disable Squiz.ControlStructures.ControlSignature.SpaceAfterKeyword
+// phpcs:disable Squiz.Functions.FunctionDeclarationArgumentSpacing.SpacingAfterOpen
+// phpcs:disable Squiz.Functions.FunctionDeclarationArgumentSpacing.SpacingBeforeClose
+// phpcs:disable Squiz.Functions.MultiLineFunctionDeclaration.BraceOnSameLine
+// phpcs:disable Squiz.WhiteSpace.SuperfluousWhitespace.EndLine
+
 namespace SmashBalloon\YouTubeFeed\Blocks;
 
 use Smashballoon\Customizer\DB;
@@ -7,6 +24,7 @@ use Smashballoon\Customizer\Feed_Builder;
 use SmashBalloon\YouTubeFeed\Helpers\Util;
 use SmashBalloon\YouTubeFeed\Services\AssetsService;
 use SmashBalloon\YouTubeFeed\Services\LicenseNotification;
+use SmashBalloon\YouTubeFeed\SBY_Settings;
 use SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Blocks\RecommendedBlocks;
 
 /**
@@ -44,6 +62,10 @@ class SBY_Blocks {
 	 */
 	public function load() {
 		$this->hooks();
+
+		$modern_block = new SBY_Modern_Feed_Block();
+		$modern_block->register_hooks();
+
 		$recommended_blocks = new RecommendedBlocks();
 		$recommended_blocks->setup();
 	}
@@ -55,7 +77,8 @@ class SBY_Blocks {
 	 */
 	protected function hooks() {
 		add_action( 'init', array( $this, 'register_block' ) );
-		add_action( 'enqueue_block_editor_assets', array( $this, 'enqueue_block_editor_assets' ) );
+		add_action( 'enqueue_block_editor_assets', array( $this, 'enqueue_block_editor_assets' ), SBY_Modern_Feed_Block::EDITOR_ASSETS_PRIORITY );
+		add_action( 'enqueue_block_assets', array( $this, 'enqueue_block_content_assets' ) );
 	}
 
 	/**
@@ -89,10 +112,25 @@ class SBY_Blocks {
 		register_block_type(
 			'sby/sby-feed-block',
 			array(
+				'api_version'     => 3,
 				'attributes'      => $attributes,
 				'render_callback' => array( $this, 'get_feed_html' ),
+				'supports'        => array( 'inserter' => false ),
 			)
 		);
+	}
+
+	/**
+	 * Enqueue feed frontend assets so the legacy block preview renders inside
+	 * the WP 6.7+ iframe block editor. Mirrors SB_Feed_Block::enqueue_block_content_assets().
+	 *
+	 * @since 2.7.0
+	 */
+	public function enqueue_block_content_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+		do_action( 'sby_enqueue_scripts', true );
 	}
 
 	/**
@@ -101,8 +139,6 @@ class SBY_Blocks {
 	 * @since 1.7.1
 	 */
 	public function enqueue_block_editor_assets() {
-		do_action('sby_enqueue_scripts', true);
-
 		wp_enqueue_style( 'sby-blocks-styles' );
 		wp_enqueue_script(
 			'sby-feed-block',
@@ -126,14 +162,38 @@ class SBY_Blocks {
 			$shortcode_settings = 'feed="' . (int) $_GET['sby_wizard'] . '"';
 		}
 
+		// Mirror the data that AssetsService::sby_scripts_enqueue() localizes onto
+		// the sby_scripts handle. The editor JS injects sb-youtube.js into the
+		// WP 7.0 iframe head and needs sbyOptions defined inside the iframe
+		// before that script runs.
+		$database_settings   = sby_get_database_settings();
+		$sby_global_settings = ( new SBY_Settings( [], $database_settings ) )->get_settings();
+		$sby_options         = array(
+			'isAdmin'                   => is_admin(),
+			'adminAjaxUrl'              => admin_url( 'admin-ajax.php' ),
+			'placeholder'               => trailingslashit( SBY_PLUGIN_URL ) . 'img/placeholder.png',
+			'placeholderNarrow'         => trailingslashit( SBY_PLUGIN_URL ) . 'img/placeholder-narrow.png',
+			'lightboxPlaceholder'       => trailingslashit( SBY_PLUGIN_URL ) . 'img/lightbox-placeholder.png',
+			'lightboxPlaceholderNarrow' => trailingslashit( SBY_PLUGIN_URL ) . 'img/lightbox-placeholder-narrow.png',
+			'autoplay'                  => isset( $sby_global_settings['playvideo'] ) && $sby_global_settings['playvideo'] === 'automatically',
+			'semiEagerload'             => isset( $sby_global_settings['eagerload'] ) ? $sby_global_settings['eagerload'] : false,
+			'eagerload'                 => false,
+			'nonce'                     => wp_create_nonce( 'sby_nonce' ),
+			'isPro'                     => sby_is_pro(),
+			'isCustomizer'              => \sby_doing_customizer( $sby_global_settings ),
+		);
+
 		wp_localize_script(
 			'sby-feed-block',
 			'sby_block_editor',
 			array(
-				'wpnonce'  => wp_create_nonce( 'sby-blocks' ),
-				'canShowFeed' => true,
-				'shortcodeSettings'    => $shortcode_settings,
-				'i18n'     => $i18n,
+				'wpnonce'           => wp_create_nonce( 'sby-blocks' ),
+				'canShowFeed'       => true,
+				'shortcodeSettings' => $shortcode_settings,
+				'i18n'              => $i18n,
+				'iframeScriptUrl'   => Util::getPluginAssets( 'js', 'sb-youtube' ),
+				'jqueryUrl'         => includes_url( 'js/jquery/jquery.min.js' ),
+				'sbyOptions'        => $sby_options,
 			)
 		);
 	}
@@ -169,9 +229,26 @@ class SBY_Blocks {
 			}
 		}
 
+		// Parse the free-text block attribute into real shortcode atts instead of
+		// splicing it into the tag as raw text — spliced text could carry '[' and
+		// reach do_shortcode() as arbitrary extra shortcodes. Keys are limited to
+		// att-name characters and values to bracket/quote-free text so the rebuilt
+		// string cannot break out of the [youtube-feed] tag; SBY_Settings then
+		// applies the attribute allowlist like any other shortcode (SMASH-1799).
 		$shortcode_settings = str_replace(array( '[youtube-feed', ']' ), '', $shortcode_settings );
+		$parsed_atts = shortcode_parse_atts( trim( $shortcode_settings ) );
+		$parsed_atts = is_array( $parsed_atts ) ? $parsed_atts : array();
 
-		$return .= do_shortcode( '[youtube-feed '.$shortcode_settings.']' );
+		$rebuilt_settings = '';
+		foreach ( $parsed_atts as $key => $value ) {
+			if ( ! is_string( $key ) || ! preg_match( '/^[a-zA-Z0-9_-]+$/', $key ) || ! is_scalar( $value ) ) {
+				continue;
+			}
+			$value = str_replace( array( '[', ']', '"' ), '', (string) $value );
+			$rebuilt_settings .= ' ' . $key . '="' . $value . '"';
+		}
+
+		$return .= do_shortcode( '[youtube-feed' . $rebuilt_settings . ']' );
 
 		return $return;
 

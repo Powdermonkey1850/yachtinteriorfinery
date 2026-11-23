@@ -1,9 +1,9 @@
 <?php
 /*
-Plugin Name: Smash Balloon Custom Facebook Feed
+Plugin Name: Smash Balloon Facebook Feed
 Plugin URI: https://smashballoon.com/custom-facebook-feed
 Description: Add completely customizable Facebook feeds to your WordPress site
-Version: 4.7.7
+Version: 4.16.0
 Author: Smash Balloon
 Author URI: http://smashballoon.com/
 License: GPLv2 or later
@@ -27,13 +27,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 if (! defined('ABSPATH')) {
 	exit; // Exit if accessed directly
 }
-define('CFFVER', '4.7.7');
+define( 'CFFVER', '4.16.0' );
+if ( ! defined( 'CFF_SMASH_USAGE_TRACKING_API_URL' ) ) {
+	define( 'CFF_SMASH_USAGE_TRACKING_API_URL', 'https://usage.smashballoon.com/api' );
+}
 define('WPW_SL_STORE_URL', 'https://smashballoon.com/');
 define('WPW_SL_ITEM_NAME', 'Custom Facebook Feed WordPress Plugin Personal'); // *!*Update Plugin Name at top of file*!*
 
 // Db version.
 if (! defined('CFF_DBVERSION')) {
-	define('CFF_DBVERSION', '2.5');
+	define( 'CFF_DBVERSION', '2.6' );
 }
 
 
@@ -146,11 +149,13 @@ cff_main();
 if ( class_exists( '\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Feedback\FeedbackManager' ) ) {
 	\FacebookFeed\Vendor\Smashballoon\Framework\Packages\Feedback\FeedbackManager::init(
 		[
-			'plugin_slug'    => 'custom-facebook-feed',
-			'plugin_name'    => 'Smash Balloon Custom Facebook Feed',
-			'plugin_version' => CFFVER,
-			'plugin_file'    => CFF_FILE,
-			'support_url'    => 'https://smashballoon.com/support/?utm_campaign=facebook-free&utm_source=settings&utm_medium=support',
+			'plugin_slug'        => 'custom-facebook-feed',
+			'plugin_name'        => 'Smash Balloon Custom Facebook Feed',
+			'plugin_version'     => CFFVER,
+			'plugin_file'        => CFF_FILE,
+			'support_url'        => 'https://smashballoon.com/support/?utm_campaign=facebook-free&utm_source=settings&utm_medium=support',
+			'enable_help_widget' => true,
+			'help_url'           => 'https://smashballoon.com/docs/facebook/',
 		]
 	);
 }

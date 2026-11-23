@@ -151,6 +151,20 @@ class SBY_New_User extends SBY_Notifications {
 			return array();
 		}
 
+		// SMASH-1245: new-user notices come from the remote newuser.json feed
+		// (update() only fetches on 'remote'), so they may surface only when
+		// consent resolves to 'remote'. On 'none' nothing shows. On 'local' the
+		// parent owns the bundled fallback, so this child must contribute nothing:
+		// returning empty lets the parent's local fallback through instead of
+		// short-circuiting it with stale cached remote content. output() calls
+		// this directly on admin_notices, outside the parent's gated get().
+		$source = class_exists( '\SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' )
+			? \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+		if ( 'remote' !== $source ) {
+			return array();
+		}
+
 		$option = $this->get_option();
 
 		// Only update if does not exist.
@@ -207,6 +221,16 @@ class SBY_New_User extends SBY_Notifications {
 	 * @since 2.18
 	 */
 	public function update() {
+		// SMASH-1245: gate remote new-user feed fetch on consent. notification_source()
+		// reflects the per-edition default (Pro on by default, Free off until opt-in),
+		// so the remote request only fires once the user has consented.
+		$source = class_exists( '\SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager' )
+			? \SmashBalloon\YoutubeFeed\Vendor\Smashballoon\Framework\Packages\Consent\ConsentManager::notification_source()
+			: 'remote';
+		if ( 'remote' !== $source ) {
+			return;
+		}
+
 		$feed   = $this->fetch_feed();
 		$option = $this->get_option();
 
@@ -335,7 +359,8 @@ class SBY_New_User extends SBY_Notifications {
 					<?php
 				}
 			}
-			$close_href = add_query_arg( array( 'sby_dismiss' => $type ) );
+			// Dismissal links must carry the nonce that dismiss() verifies. (SMASH-1799)
+			$close_href = wp_nonce_url( add_query_arg( array( 'sby_dismiss' => $type ) ), 'sby-newuser-dismiss' );
 
 			$title = $this->get_notice_title( $notification );
 			$content = $this->get_notice_content( $notification, $content_allowed_tags );
@@ -346,7 +371,10 @@ class SBY_New_User extends SBY_Notifications {
 					if ( ! is_array( $btn['url'] ) ) {
 						$buttons[ $btn_type ]['url'] = $this->replace_merge_fields( $btn['url'], $notification );
 					} elseif ( is_array( $btn['url'] ) ) {
-						$buttons[ $btn_type ]['url'] = add_query_arg( $btn['url'] );
+						// Array URLs are dismissal query args on the current page (e.g.
+						// sby_ignore_new_user_sale_notice), so they must carry the nonce
+						// that dismiss() verifies. (SMASH-1799)
+						$buttons[ $btn_type ]['url'] = wp_nonce_url( add_query_arg( $btn['url'] ), 'sby-newuser-dismiss' );
 					}
 
 					$buttons[ $btn_type ]['attr'] = '';
@@ -470,6 +498,32 @@ class SBY_New_User extends SBY_Notifications {
 	 * @since 2.18
 	 */
 	public function dismiss() {
+		// Bail before doing any work unless a dismissal parameter is actually present. This
+		// hook runs on every single admin_init, so the capability and nonce machinery below
+		// should not fire on the overwhelming majority of requests that are not a dismissal —
+		// including the anonymous admin-ajax.php bootstrap. (SMASH-1799)
+		if ( ! isset( $_GET['sby_ignore_rating_notice_nag'] )
+		     && ! isset( $_GET['sby_ignore_new_user_sale_notice'] )
+		     && ! isset( $_GET['sby_ignore_bfcm_sale_notice'] )
+		     && ! isset( $_GET['sby_dismiss'] ) ) {
+			return;
+		}
+
+		// admin-ajax.php fires admin_init during bootstrap before the action dispatch, so this
+		// callback is reachable unauthenticated with is_admin() returning true — the option and
+		// user meta writes below need their own capability check. (SMASH-1799)
+		if ( ! sby_current_user_can( 'manage_youtube_feed_options' ) ) {
+			return;
+		}
+
+		// The dismissal triggers are plain GET links, so without a nonce any third-party
+		// page could dismiss these notices for a logged-in admin (CSRF). The nonce is
+		// added to the links generated in output(). (SMASH-1799)
+		$nonce = isset( $_GET['_wpnonce'] ) ? sanitize_key( wp_unslash( $_GET['_wpnonce'] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce, 'sby-newuser-dismiss' ) ) {
+			return;
+		}
+
 		global $current_user;
 		$user_id = $current_user->ID;
 		$sby_statuses_option = get_option( 'sby_statuses', array() );

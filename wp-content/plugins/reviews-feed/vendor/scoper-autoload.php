@@ -29,12 +29,11 @@ if (!function_exists('humbug_phpscoper_expose_class')) {
         }
     }
 }
-humbug_phpscoper_expose_class('ComposerAutoloaderInit84e16c3d027f83f5f9e0fadd381733a6', 'SmashBalloon\Reviews\Vendor\ComposerAutoloaderInit84e16c3d027f83f5f9e0fadd381733a6');
+humbug_phpscoper_expose_class('ComposerAutoloaderInit8de83a81ea235aed350e537251c018f5', 'SmashBalloon\Reviews\Vendor\ComposerAutoloaderInit8de83a81ea235aed350e537251c018f5');
 
 // Function aliases. For more information see:
 // https://github.com/humbug/php-scoper/blob/master/docs/further-reading.md#function-aliases
-if (!function_exists('dbDelta')) { function dbDelta() { return \SmashBalloon\Reviews\Vendor\dbDelta(...func_get_args()); } }
-if (!function_exists('do_action')) { function do_action() { return \SmashBalloon\Reviews\Vendor\do_action(...func_get_args()); } }
-if (!function_exists('wp_get_environment_type')) { function wp_get_environment_type() { return \SmashBalloon\Reviews\Vendor\wp_get_environment_type(...func_get_args()); } }
+if (!function_exists('sbc_about_us_icon')) { function sbc_about_us_icon() { return \SmashBalloon\Reviews\Vendor\sbc_about_us_icon(...func_get_args()); } }
+if (!function_exists('sbc_about_us_kses')) { function sbc_about_us_kses() { return \SmashBalloon\Reviews\Vendor\sbc_about_us_kses(...func_get_args()); } }
 
 return $loader;

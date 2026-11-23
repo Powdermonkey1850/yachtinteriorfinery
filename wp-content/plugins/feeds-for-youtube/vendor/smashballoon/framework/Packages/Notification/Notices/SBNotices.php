@@ -62,26 +62,29 @@ class SBNotices
     private $notice_option;
     private $group_notice_option;
     /**
-     * The single instance of the class.
+     * One instance per plugin slug.
      *
-     * @var SBNotices
+     * @var array<string,SBNotices>
      */
-    protected static $instance = null;
+    protected static $instances = [];
     /**
-     * Main SBNotices Instance.
+     * SBNotices instance for a plugin.
      *
-     * Ensures only one instance of SBNotices is loaded or can be loaded.
+     * Keyed by slug so each plugin gets its own notice store and display
+     * hook. A single shared instance let whichever plugin loaded first own
+     * the store, so e.g. Instagram notices never rendered with Facebook active.
      *
      * @since 1.0.0
      * @static
-     * @return SBNotices - Main instance.
+     * @param string $plugin_slug Plugin slug, e.g. 'instagram-feed'.
+     * @return SBNotices
      */
     public static function instance($plugin_slug = '')
     {
-        if (is_null(self::$instance)) {
-            self::$instance = new self($plugin_slug);
+        if (!isset(self::$instances[$plugin_slug])) {
+            self::$instances[$plugin_slug] = new self($plugin_slug);
         }
-        return self::$instance;
+        return self::$instances[$plugin_slug];
     }
     /**
      * Constructor
@@ -231,6 +234,10 @@ class SBNotices
                         unset($notices[$key]);
                     }
                 }
+                // Check if current user has dismissed this notice.
+                if (isset($notices[$key]) && !empty($notice['dismissible']) && get_user_meta(get_current_user_id(), 'sb_notice_' . $key . '_dismissed', \true)) {
+                    unset($notices[$key]);
+                }
             }
             // Notices are duplicate so unset them.
             $notices = array_unique($notices, \SORT_REGULAR);
@@ -348,14 +355,14 @@ class SBNotices
     {
         if (isset($_GET['sb-dismiss-notice']) && isset($_GET['_sb_notice_nonce'])) {
             if (!wp_verify_nonce(wp_unslash($_GET['_sb_notice_nonce']), 'sb_dismiss_notice_nonce')) {
-                wp_die(esc_html__('Action failed. Please refresh the page and retry.', 'sb-notices'));
+                wp_die(esc_html__('Action failed. Please refresh the page and retry.', 'sb-common'));
             }
             $notice_id = sanitize_text_field(wp_unslash($_GET['sb-dismiss-notice']));
             $notices = $this->get_notices();
             if (isset($notices[$notice_id])) {
                 $notice = $notices[$notice_id];
                 if (!$notice['dismissible']) {
-                    wp_die(esc_html__('Notice cannot be dismissed.', 'sb-notices'));
+                    wp_die(esc_html__('Notice cannot be dismissed.', 'sb-common'));
                 }
                 if (isset($notice['capability']) && !empty($notice['capability'])) {
                     $capability = $notice['capability'];
@@ -363,7 +370,7 @@ class SBNotices
                         $capability = [$capability];
                     }
                     if (!current_user_can($capability[0])) {
-                        wp_die(esc_html__('You do not have permission to dismiss the notice.', 'sb-notices'));
+                        wp_die(esc_html__('You do not have permission to dismiss the notice.', 'sb-common'));
                     }
                 }
                 $this->remove_notice($notice_id);
